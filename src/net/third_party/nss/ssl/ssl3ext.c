@@ -494,16 +494,16 @@ ssl3_ClientSendTackXtn(sslSocket * ss, PRBool append, PRUint32 maxBytes)
     SECStatus rv;
 
     if (!ss)
-	return 0;
+        return 0;
 
     if (append && maxBytes >= 4) {
-	/* extension_type */
-	rv = ssl3_AppendHandshakeNumber(ss, ssl_tack_xtn, 2);
-	if (rv != SECSuccess) return -1;
-	/* length of extension_data */
-	rv = ssl3_AppendHandshakeNumber(ss, 0, 2);
-	if (rv != SECSuccess) return -1;
-	ss->xtnData.advertised[ss->xtnData.numAdvertised++] = ssl_tack_xtn;
+        /* extension_type */
+        rv = ssl3_AppendHandshakeNumber(ss, ssl_tack_xtn, 2);
+        if (rv != SECSuccess) return -1;
+        /* length of extension_data */
+        rv = ssl3_AppendHandshakeNumber(ss, 0, 2);
+        if (rv != SECSuccess) return -1;
+        ss->xtnData.advertised[ss->xtnData.numAdvertised++] = ssl_tack_xtn;
     }
     return 4;
 }
