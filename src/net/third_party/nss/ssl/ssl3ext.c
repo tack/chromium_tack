@@ -92,6 +92,9 @@ static PRInt32 ssl3_SendUseSRTPXtn(sslSocket *ss, PRBool append,
     PRUint32 maxBytes);
 static SECStatus ssl3_HandleUseSRTPXtn(sslSocket * ss, PRUint16 ex_type,
     SECItem *data);
+static PRInt32 ssl3_ClientSendTackXtn(sslSocket * ss, PRBool append, PRUint32 maxBytes);
+static SECStatus ssl3_ClientHandleTackXtn(sslSocket *ss,
+					  PRUint16 ex_type, SECItem *data);
 
 /*
  * Write bytes.  Using this function means the SECItem structure
@@ -265,6 +268,7 @@ static const ssl3HelloExtensionHandler serverHelloHandlersTLS[] = {
     { ssl_channel_id_xtn,          &ssl3_ClientHandleChannelIDXtn },
     { ssl_cert_status_xtn,        &ssl3_ClientHandleStatusRequestXtn },
     { ssl_use_srtp_xtn,           &ssl3_HandleUseSRTPXtn},
+    { ssl_tack_xtn,               &ssl3_ClientHandleTackXtn},
     { -1, NULL }
 };
 
@@ -291,7 +295,8 @@ ssl3HelloExtensionSender clientHelloSendersTLS[SSL_MAX_EXTENSIONS] = {
     { ssl_next_proto_nego_xtn,    &ssl3_ClientSendNextProtoNegoXtn },
     { ssl_channel_id_xtn,         &ssl3_ClientSendChannelIDXtn },
     { ssl_cert_status_xtn,        &ssl3_ClientSendStatusRequestXtn },
-    { ssl_use_srtp_xtn,           &ssl3_SendUseSRTPXtn }
+    { ssl_use_srtp_xtn,           &ssl3_SendUseSRTPXtn },
+    { ssl_tack_xtn,               &ssl3_ClientSendTackXtn},
     /* any extra entries will appear as { 0, NULL }    */
 };
 
@@ -481,6 +486,33 @@ ssl3_HandleServerNameXtn(sslSocket * ss, PRUint16 ex_type, SECItem *data)
 loser:
     PORT_Free(names);
     return SECFailure;
+}
+
+PRInt32
+ssl3_ClientSendTackXtn(sslSocket * ss, PRBool append, PRUint32 maxBytes)
+{
+    SECStatus rv;
+
+    if (!ss)
+	return 0;
+
+    if (append && maxBytes >= 4) {
+	/* extension_type */
+	rv = ssl3_AppendHandshakeNumber(ss, ssl_tack_xtn, 2);
+	if (rv != SECSuccess) return -1;
+	/* length of extension_data */
+	rv = ssl3_AppendHandshakeNumber(ss, 0, 2);
+	if (rv != SECSuccess) return -1;
+	ss->xtnData.advertised[ss->xtnData.numAdvertised++] = ssl_tack_xtn;
+    }
+    return 4;
+}
+
+static SECStatus ssl3_ClientHandleTackXtn(sslSocket *ss,
+					  PRUint16 ex_type, SECItem *data)
+{
+    ss->xtnData.negotiated[ss->xtnData.numNegotiated++] = ssl_tack_xtn;
+    return SECSuccess;
 }
         
 /* Called by both clients and servers.
