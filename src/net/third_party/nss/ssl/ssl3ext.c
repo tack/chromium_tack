@@ -517,8 +517,8 @@ static SECStatus ssl3_ClientHandleTackXtn(sslSocket *ss,
 
     /* Now ask the client application if it likes the TACK Ext... */    
     if (ss->authTackExt) {
-        rv = (SECStatus) (*ss->authTackExt)(ss->authTackExtArg, 
-                                            data->data, data->len, ss->fd);
+        rv = (SECStatus) (*ss->authTackExt)(ss->authTackExtArg, ss->fd,
+                                            data->data, data->len);
     /* Hey, it liked it. */
     if (SECSuccess == rv) 
 	goto done;
