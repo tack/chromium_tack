@@ -497,6 +497,17 @@ SSL_IMPORT SECStatus SSL_AuthCertificateHook(PRFileDesc *fd,
 SSL_IMPORT SECStatus SSL_AuthCertificate(void *arg, PRFileDesc *fd, 
 					 PRBool checkSig, PRBool isServer);
 
+/* TACK */
+typedef SECStatus (PR_CALLBACK *SSLAuthTackExt)(void *arg, 
+                                                unsigned char* data,
+                                                unsigned int len,
+                                                PRFileDesc *fd);
+
+SSL_IMPORT SECStatus SSL_AuthTackExtHook(PRFileDesc *fd, 
+					     SSLAuthTackExt f,
+				             void *arg);
+
+
 /*
  * Prototype for SSL callback to get client auth data from the application.
  *	arg - application passed argument

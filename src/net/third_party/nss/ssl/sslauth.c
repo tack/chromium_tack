@@ -232,6 +232,25 @@ SSL_AuthCertificateHook(PRFileDesc *s, SSLAuthCertificate func, void *arg)
     return SECSuccess;
 }
 
+/* NEEDS LOCKS IN HERE. */
+SECStatus
+SSL_AuthTackExtHook(PRFileDesc *s, SSLAuthTackExt func, void *arg)
+{
+    sslSocket *ss;
+
+    ss = ssl_FindSocket(s);
+    if (!ss) {
+	SSL_DBG(("%d: SSL[%d]: bad socket in AuthTackExtHook",
+		 SSL_GETPID(), s));
+	return SECFailure;
+    }
+
+    ss->authTackExt = func;
+    ss->authTackExtArg = arg;
+
+    return SECSuccess;
+}
+
 /* NEED LOCKS IN HERE.  */
 SECStatus 
 SSL_GetClientAuthDataHook(PRFileDesc *s, SSLGetClientAuthData func,

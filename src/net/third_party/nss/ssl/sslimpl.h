@@ -1193,6 +1193,8 @@ const unsigned char *  preferredCipher;
     /* Callbacks */
     SSLAuthCertificate        authCertificate;
     void                     *authCertificateArg;
+    SSLAuthTackExt            authTackExt;
+    void                     *authTackExtArg;
     SSLGetClientAuthData      getClientAuthData;
     void                     *getClientAuthDataArg;
 #ifdef NSS_PLATFORM_CLIENT_AUTH

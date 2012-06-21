@@ -365,6 +365,8 @@ ssl_DupSocket(sslSocket *os)
  */
 	    ss->authCertificate       = os->authCertificate;
 	    ss->authCertificateArg    = os->authCertificateArg;
+            ss->authTackExt           = os->authTackExt;
+            ss->authTackExtArg        = os->authTackExtArg;
 	    ss->getClientAuthData     = os->getClientAuthData;
 	    ss->getClientAuthDataArg  = os->getClientAuthDataArg;
 #ifdef NSS_PLATFORM_CLIENT_AUTH
@@ -1742,6 +1744,10 @@ SSL_ReconfigFD(PRFileDesc *model, PRFileDesc *fd)
         ss->authCertificate       = sm->authCertificate;
     if (sm->authCertificateArg)
         ss->authCertificateArg    = sm->authCertificateArg;
+    if (sm->authTackExt)
+        ss->authTackExt       = sm->authTackExt;
+    if (sm->authTackExtArg)
+        ss->authTackExtArg    = sm->authTackExtArg;
     if (sm->getClientAuthData)
         ss->getClientAuthData     = sm->getClientAuthData;
     if (sm->getClientAuthDataArg)
@@ -1760,7 +1766,7 @@ SSL_ReconfigFD(PRFileDesc *model, PRFileDesc *fd)
         ss->handleBadCert         = sm->handleBadCert;
     if (sm->badCertArg)
         ss->badCertArg            = sm->badCertArg;
-    if (sm->handshakeCallback)
+    if (sm->handshakeCallback)oto
         ss->handshakeCallback     = sm->handshakeCallback;
     if (sm->handshakeCallbackData)
         ss->handshakeCallbackData = sm->handshakeCallbackData;
@@ -3010,6 +3016,8 @@ ssl_NewSocket(PRBool makeLocks, SSLProtocolVariant protocolVariant)
 	/* Provide default implementation of hooks */
 	ss->authCertificate    = SSL_AuthCertificate;
 	ss->authCertificateArg = (void *)ss->dbHandle;
+        ss->authTackExt        = NULL;
+        ss->authTackExtArg     = NULL;  
         ss->sniSocketConfig    = NULL;
         ss->sniSocketConfigArg = NULL;
 	ss->getClientAuthData  = NULL;
