@@ -787,6 +787,15 @@ class SSLClientSocketNSS::Core : public base::RefCountedThreadSafe<Core> {
                                       PRBool checksig,
                                       PRBool is_server);
 
+  // Called by NSS during full handshakes to allow the application to 
+  // verify the TACK extension.  Instead of verifying the TACK extension
+  // in the midst of the handshake, SECSuccess is always returned and the
+  // TACK_Extension is verified afterwards.
+  static SECStatus OwnAuthTackExtHandler(void* arg,
+                                      PRFileDesc* socket,
+                                      unsigned char* data,
+                                      unsigned int len);
+
   // Callbacks called by NSS when the peer requests client certificate
   // authentication.
   // See the documentation in third_party/nss/ssl/ssl.h for the meanings of
@@ -1057,6 +1066,13 @@ bool SSLClientSocketNSS::Core::Init(PRFileDesc* socket,
     return false;
   }
 
+  rv = SSL_AuthTackExtHook(
+      nss_fd_, SSLClientSocketNSS::Core::OwnAuthTackExtHandler, this);
+  if (rv != SECSuccess) {
+    LogFailedNSSFunction(*weak_net_log_, "SSL_AuthTackExtHook", "");
+    return false;
+  }
+
 #if defined(NSS_PLATFORM_CLIENT_AUTH)
   rv = SSL_GetPlatformClientAuthDataHook(
       nss_fd_, SSLClientSocketNSS::Core::PlatformClientAuthHandler,
@@ -1298,6 +1314,17 @@ SECStatus SSLClientSocketNSS::Core::OwnAuthCertHandler(
   // Tell NSS to not verify the certificate.
   return SECSuccess;
 }
+
+
+// static
+SECStatus SSLClientSocketNSS::Core::OwnAuthTackExtHandler(
+    void* arg,
+    PRFileDesc* socket,
+    unsigned char* data,
+    unsigned int len) {
+  return SECSuccess;
+}
+
 
 #if defined(NSS_PLATFORM_CLIENT_AUTH)
 // static
