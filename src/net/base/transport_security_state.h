@@ -145,6 +145,9 @@ class NET_EXPORT TransportSecurityState
     // certificate chain.
     FingerprintVector bad_static_spki_hashes;
 
+    std::string tackKeyFingerprint;
+    uint8 tackMinGeneration;
+
     // The following members are not valid when stored in |enabled_hosts_|:
 
     // The domain which matched during a search for this DomainState entry.

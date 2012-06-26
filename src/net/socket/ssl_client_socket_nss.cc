@@ -3581,6 +3581,8 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
   completed_handshake_ = true;
 
+#define OFFICIAL_BUILD
+
 #if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
   // Take care of any mandates for public key pinning.
   //
@@ -3603,23 +3605,29 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
     TransportSecurityState::DomainState domain_state;
     if (transport_security_state_->GetDomainState(host, sni_available,
-                                                  &domain_state) &&
-        domain_state.HasPins()) {
-      if (!domain_state.IsChainOfPublicKeysPermitted(
-               server_cert_verify_result_->public_key_hashes)) {
-        const base::Time build_time = base::GetBuildTime();
-        // Pins are not enforced if the build is sufficiently old. Chrome
-        // users should get updates every six weeks or so, but it's possible
-        // that some users will stop getting updates for some reason. We
-        // don't want those users building up as a pool of people with bad
-        // pins.
-        if ((base::Time::Now() - build_time).InDays() < 70 /* 10 weeks */) {
-          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-          UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
-          TransportSecurityState::ReportUMAOnPinFailure(host);
+                                                  &domain_state)) {
+      if (domain_state.HasPins()) {
+        if (!domain_state.IsChainOfPublicKeysPermitted(
+              server_cert_verify_result_->public_key_hashes)) {
+          const base::Time build_time = base::GetBuildTime();
+          // Pins are not enforced if the build is sufficiently old. Chrome
+          // users should get updates every six weeks or so, but it's possible
+          // that some users will stop getting updates for some reason. We
+          // don't want those users building up as a pool of people with bad
+          // pins.
+          if ((base::Time::Now() - build_time).InDays() < 70 /* 10 weeks */) {
+            result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+            UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
+            TransportSecurityState::ReportUMAOnPinFailure(host);
+          }
+        } else {
+          UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);
         }
-      } else {
-        UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);
+      }
+
+      if (domain_state.tackKeyFingerprint.size() > 0) {
+        LOG(WARNING) << "TACK DOMAIN_STATE" << domain_state.tackKeyFingerprint;
+
       }
     }
   }

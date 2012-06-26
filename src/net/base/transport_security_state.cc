@@ -566,6 +566,8 @@ enum SecondLevelDomainName {
 
   DOMAIN_TOR2WEB_ORG,
 
+  DOMAIN_TEST_COM,
+
   // Boundary value for UMA_HISTOGRAM_ENUMERATION:
   DOMAIN_NUM_EVENTS
 };
@@ -576,6 +578,8 @@ enum SecondLevelDomainName {
 struct PublicKeyPins {
   const char* const* required_hashes;
   const char* const* excluded_hashes;
+  char tackKeyFingerprint[30];
+  uint8 tackMinGeneration;
 };
 
 struct HSTSPreload {
@@ -617,6 +621,8 @@ static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
             hash++;
           }
         }
+        out->tackKeyFingerprint = entries[j].pins.tackKeyFingerprint;
+        out->tackMinGeneration = entries[j].pins.tackMinGeneration;
       }
       return true;
     }
@@ -800,6 +806,7 @@ bool TransportSecurityState::DomainState::HasPins() const {
   return static_spki_hashes.size() > 0 ||
          bad_static_spki_hashes.size() > 0 ||
          dynamic_spki_hashes.size() > 0;
+  
 }
 
 }  // namespace
