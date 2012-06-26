@@ -105,6 +105,8 @@
 #include "net/socket/ssl_error_params.h"
 #include "net/socket/ssl_host_info.h"
 
+#include "net/third_party/tackc/src/TackExtension.h"
+
 #if defined(OS_WIN)
 #include <windows.h>
 #include <wincrypt.h>
@@ -530,6 +532,7 @@ struct HandshakeState {
     predicted_cert_chain_correct = false;
     resumed_handshake = false;
     ssl_connection_status = 0;
+    memset(&tackExt, 0, sizeof(TackExtension));
   }
 
   // Set to kNextProtoNegotiated if NPN was successfully negotiated, with the
@@ -570,6 +573,8 @@ struct HandshakeState {
   // The negotiated security parameters (TLS version, cipher, extensions) of
   // the SSL connection.
   int ssl_connection_status;
+
+    TackExtension tackExt;
 };
 
 // Client-side error mapping functions.
@@ -1322,7 +1327,21 @@ SECStatus SSLClientSocketNSS::Core::OwnAuthTackExtHandler(
     PRFileDesc* socket,
     unsigned char* data,
     unsigned int len) {
-  return SECSuccess;
+    
+    LOG(WARNING) << "OwnAuthTackExtHandler";
+
+    Core* core = reinterpret_cast<Core*>(arg);
+    TackExtension* tackExt = &(core->network_handshake_state_.tackExt);
+
+    TACK_RETVAL retval;
+    if ((retval=tackExtensionInit(tackExt, data, len))<0) {
+        LOG(WARNING) << "TACKINIT FAILURE " << len << tackRetvalString(retval); 
+        return SECFailure;
+    }
+    else
+        LOG(WARNING) << "TACKINIT SUCCESS";
+    
+    return SECSuccess;
 }
 
 
