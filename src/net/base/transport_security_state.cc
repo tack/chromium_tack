@@ -566,7 +566,7 @@ enum SecondLevelDomainName {
 
   DOMAIN_TOR2WEB_ORG,
 
-  DOMAIN_TEST_COM,
+  DOMAIN_TACK_IO,
 
   // Boundary value for UMA_HISTOGRAM_ENUMERATION:
   DOMAIN_NUM_EVENTS

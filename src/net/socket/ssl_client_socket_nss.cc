@@ -106,6 +106,7 @@
 #include "net/socket/ssl_host_info.h"
 
 #include "net/third_party/tackc/src/TackExtension.h"
+#include "net/third_party/tackc/src/TackRetval.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -118,6 +119,7 @@
 #elif defined(USE_NSS)
 #include <dlfcn.h>
 #endif
+
 
 static const int kRecvBufferSize = 4096;
 
@@ -519,7 +521,7 @@ PeerCertificateChain::AsStringPieceVector() const {
 // that the network task runner can safely make a copy, which avoids the need
 // for locking.
 struct HandshakeState {
-  HandshakeState() { Reset(); }
+  HandshakeState():tackExt(0) { Reset(); }
 
   void Reset() {
     next_proto_status = SSLClientSocket::kNextProtoUnsupported;
@@ -532,8 +534,13 @@ struct HandshakeState {
     predicted_cert_chain_correct = false;
     resumed_handshake = false;
     ssl_connection_status = 0;
-    memset(&tackExt, 0, sizeof(TackExtension));
+    if (tackExt) {
+      delete tackExt;
+      tackExt = 0;
+    }
   }
+
+  ~HandshakeState() { Reset(); }
 
   // Set to kNextProtoNegotiated if NPN was successfully negotiated, with the
   // negotiated protocol stored in |next_proto|.
@@ -574,7 +581,7 @@ struct HandshakeState {
   // the SSL connection.
   int ssl_connection_status;
 
-    TackExtension tackExt;
+  TackExtension* tackExt;
 };
 
 // Client-side error mapping functions.
@@ -1323,25 +1330,26 @@ SECStatus SSLClientSocketNSS::Core::OwnAuthCertHandler(
 
 // static
 SECStatus SSLClientSocketNSS::Core::OwnAuthTackExtHandler(
-    void* arg,
-    PRFileDesc* socket,
-    unsigned char* data,
-    unsigned int len) {
-    
-    LOG(WARNING) << "OwnAuthTackExtHandler";
+  void* arg,
+  PRFileDesc* socket,
+  unsigned char* data,
+  unsigned int len) {
+  
+  LOG(WARNING) << "OwnAuthTackExtHandler";
+  
+  TackExtension* tackExt = new TackExtension();
+  Core* core = reinterpret_cast<Core*>(arg);
+  core->network_handshake_state_.tackExt = tackExt;
+  
+  TACK_RETVAL retval;
+  if ((retval=tackExtensionInit(tackExt, data, len))<0) {
+    LOG(WARNING) << "TACKINIT FAILURE " << len << tackRetvalString(retval); 
+    return SECFailure;
+  }
+  else
+    LOG(WARNING) << "TACKINIT SUCCESS";
 
-    Core* core = reinterpret_cast<Core*>(arg);
-    TackExtension* tackExt = &(core->network_handshake_state_.tackExt);
-
-    TACK_RETVAL retval;
-    if ((retval=tackExtensionInit(tackExt, data, len))<0) {
-        LOG(WARNING) << "TACKINIT FAILURE " << len << tackRetvalString(retval); 
-        return SECFailure;
-    }
-    else
-        LOG(WARNING) << "TACKINIT SUCCESS";
-    
-    return SECSuccess;
+  return SECSuccess;
 }
 
 
@@ -3626,7 +3634,32 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
       }
 
       if (domain_state.tackKeyFingerprint.size() > 0) {
-        LOG(WARNING) << "TACK DOMAIN_STATE" << domain_state.tackKeyFingerprint;
+
+        LOG(WARNING) << "TACK DVCC DOMAIN_STATE" << domain_state.tackKeyFingerprint;
+
+        TackExtension* tackExt = core_->state().tackExt;
+        //char tackExtFingerprint[30];
+
+        /* Error if no Tack */
+        if (!tackExt || (tackExt->tackCount == 0)) {
+          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+        }
+
+        /* Verify signature with OpenSSL */
+        //TACK_RETVAL retval;
+        //retval = tackTackVerifySignature(&tackExt->tack, tackOpenSSLVerifyFunc);
+        //printf("OPENSSL RESULT: %s\n", tackRetvalString(retval));      
+
+        //tackKeyFingerprint(tackExt->tack, tackExtFingerprint);
+        //LOG(WARNING) << "TACK DVCC TACK_EXTENSION" << tackExtFingerprint;
+
+        
+
+        // Check break signatures
+
+        // Check target_hash against public key
+
+        // Check generation against min_generation
 
       }
     }
