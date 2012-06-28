@@ -1760,7 +1760,7 @@ SSL_ReconfigFD(PRFileDesc *model, PRFileDesc *fd)
         ss->handleBadCert         = sm->handleBadCert;
     if (sm->badCertArg)
         ss->badCertArg            = sm->badCertArg;
-    if (sm->handshakeCallback)oto
+    if (sm->handshakeCallback)
         ss->handshakeCallback     = sm->handshakeCallback;
     if (sm->handshakeCallbackData)
         ss->handshakeCallbackData = sm->handshakeCallbackData;

@@ -538,8 +538,6 @@ struct HandshakeState {
     ssl_connection_status = 0;
   }
 
-  ~HandshakeState() { Reset(); }
-
   // Set to kNextProtoNegotiated if NPN was successfully negotiated, with the
   // negotiated protocol stored in |next_proto|.
   SSLClientSocket::NextProtoStatus next_proto_status;
@@ -1306,9 +1304,6 @@ SECStatus SSLClientSocketNSS::Core::OwnAuthCertHandler(
   // Tell NSS to not verify the certificate.
   return SECSuccess;
 }
-
-
-// static
 
 #if defined(NSS_PLATFORM_CLIENT_AUTH)
 // static
