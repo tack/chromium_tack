@@ -3591,25 +3591,27 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
       }
 
       /* Is there a TACK? */
-      uint8_t* tackExt;
-      uint32_t tackExtLen;
       TACK_RETVAL retval;
-      
-      SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen); // check retval
+      uint8_t* tackExt = NULL;
+      uint32_t tackExtLen = 0;
+
+      if (SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen) != SECSuccess)
+        tackExt = NULL;
+
       if (tackExt) {
-        retval=tackExtensionSyntaxCheck(tackExt, tackExtLen);
+        retval = tackExtensionSyntaxCheck(tackExt, tackExtLen);
         if (retval != TACK_OK) {
-          LOG(WARNING) << "TACKINIT FAILURE " << tackExtLen << tackRetvalString(retval); 
-          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+          LOG(WARNING) << "TACKEXT SYNTAX FAILURE " << tackRetvalString(retval); 
+          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN; // !!! TODO BETTER ERR MSG
           goto end;
         }
-        LOG(WARNING) << "TACKINIT SUCCESS";
+        LOG(WARNING) << "TACKEXT SYNTAX SUCCESS";
         
         uint8_t* tack = tackExtensionGetTack(tackExt);
         if (tack) {
-          LOG(WARNING) << "TACK DVCC BETA";
+          LOG(WARNING) << "TACK- TACK PRESENT IN EXTENSION";
           char tackKeyFingerprint[TACK_KEY_FINGERPRINT_TEXT_LENGTH+1];
-          retval = tackGetKeyFingerprint(tackTackGetPublicKey(tack), 
+          retval = tackTackGetKeyFingerprint(tack, 
                                          tackKeyFingerprint,
                                          tackNssHashFunc);
           if (retval != TACK_OK) {
