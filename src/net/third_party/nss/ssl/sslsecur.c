@@ -884,6 +884,8 @@ ssl_CreateSecurityInfo(sslSocket *ss)
     ss->sec.blockSize  = 1;
     ss->sec.blockShift = 0;
 
+    ss->sec.tackExtLen = 0;
+
     ssl_GetXmitBufLock(ss); 
     status = sslBuffer_Grow(&ss->sec.writeBuf, 4096);
     ssl_ReleaseXmitBufLock(ss); 
@@ -902,6 +904,9 @@ ssl_CopySecurityInfo(sslSocket *ss, sslSocket *os)
     ss->sec.peerCert   		= CERT_DupCertificate(os->sec.peerCert);
     if (os->sec.peerCert && !ss->sec.peerCert)
     	goto loser;
+
+    ss->sec.tackExtLen = os->sec.tackExtLen;
+    memcpy(ss->sec.tackExtData, os->sec.tackExtData, 2048);
 
     ss->sec.cache      		= os->sec.cache;
     ss->sec.uncache    		= os->sec.uncache;
@@ -987,6 +992,8 @@ ssl_ResetSecurityInfo(sslSecurityInfo *sec, PRBool doMemset)
 	SECKEY_DestroyPublicKey(sec->peerKey);
 	sec->peerKey = NULL;
     }
+
+    sec->tackExtLen = 0;
 
     /* cleanup the ci */
     if (sec->ci.sid != NULL) {

@@ -536,7 +536,6 @@ struct HandshakeState {
     predicted_cert_chain_correct = false;
     resumed_handshake = false;
     ssl_connection_status = 0;
-    tackExtCount = 0;
   }
 
   ~HandshakeState() { Reset(); }
@@ -579,9 +578,6 @@ struct HandshakeState {
   // The negotiated security parameters (TLS version, cipher, extensions) of
   // the SSL connection.
   int ssl_connection_status;
-
-  uint8_t tackExtCount;
-  TackExtension tackExt;
 };
 
 // Client-side error mapping functions.
@@ -798,15 +794,6 @@ class SSLClientSocketNSS::Core : public base::RefCountedThreadSafe<Core> {
                                       PRFileDesc* socket,
                                       PRBool checksig,
                                       PRBool is_server);
-
-  // Called by NSS during full handshakes to allow the application to 
-  // verify the TACK extension.  Instead of verifying the TACK extension
-  // in the midst of the handshake, SECSuccess is always returned and the
-  // TACK_Extension is verified afterwards.
-  static SECStatus OwnAuthTackExtHandler(void* arg,
-                                      PRFileDesc* socket,
-                                      unsigned char* data,
-                                      unsigned int len);
 
   // Callbacks called by NSS when the peer requests client certificate
   // authentication.
@@ -1078,13 +1065,6 @@ bool SSLClientSocketNSS::Core::Init(PRFileDesc* socket,
     return false;
   }
 
-  rv = SSL_AuthTackExtHook(
-      nss_fd_, SSLClientSocketNSS::Core::OwnAuthTackExtHandler, this);
-  if (rv != SECSuccess) {
-    LogFailedNSSFunction(*weak_net_log_, "SSL_AuthTackExtHook", "");
-    return false;
-  }
-
 #if defined(NSS_PLATFORM_CLIENT_AUTH)
   rv = SSL_GetPlatformClientAuthDataHook(
       nss_fd_, SSLClientSocketNSS::Core::PlatformClientAuthHandler,
@@ -1329,29 +1309,6 @@ SECStatus SSLClientSocketNSS::Core::OwnAuthCertHandler(
 
 
 // static
-SECStatus SSLClientSocketNSS::Core::OwnAuthTackExtHandler(
-  void* arg,
-  PRFileDesc* socket,
-  unsigned char* data,
-  unsigned int len) {
-  
-  LOG(WARNING) << "OwnAuthTackExtHandler";
-
-  Core* core = reinterpret_cast<Core*>(arg);  
-  TackExtension* tackExt = &(core->nss_handshake_state_.tackExt);
-  
-  TACK_RETVAL retval;
-  if ((retval=tackExtensionInit(tackExt, data, len))<0) {
-    LOG(WARNING) << "TACKINIT FAILURE " << len << tackRetvalString(retval); 
-    return SECFailure;
-  }
-  else
-    LOG(WARNING) << "TACKINIT SUCCESS";
-
-  core->nss_handshake_state_.tackExtCount = 1;
-  return SECSuccess;
-}
-
 
 #if defined(NSS_PLATFORM_CLIENT_AUTH)
 // static
@@ -3634,66 +3591,44 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
       }
 
       /* Is there a TACK? */
-      TackExtension* tackExt = const_cast<TackExtension*>(
-        &(core_->state().tackExt));
-      uint8_t tackExtCount = core_->state().tackExtCount;
+      uint8_t tackExtData[2048];
+      uint32_t tackExtLen;
+      TackExtension tackExt;
       TACK_RETVAL retval;
-      LOG(WARNING) << "TACK DVCC ALPHA";
-      if (tackExtCount == 1) {
-
-        LOG(WARNING) << "TACK DVCC BETA";
-        Tack* tack = &tackExt->tack;
-        char tackKeyFingerprint[TACK_KEY_FINGERPRINT_TEXT_LENGTH+1];
-        retval = tackGetKeyFingerprint(tack->publicKey, 
-                                       tackKeyFingerprint,
-                                       tackNssHashFunc);
+      
+      SSL_TackExtension(nss_fd_, tackExtData, &tackExtLen); // check retval
+      if (tackExtLen > 0) {
+        retval=tackExtensionInit(&tackExt, tackExtData, tackExtLen);
         if (retval != TACK_OK) {
-          LOG(WARNING) << "TACK DVCC BAD FINGERPRINT CALL?!";
+          LOG(WARNING) << "TACKINIT FAILURE " << tackExtLen << tackRetvalString(retval); 
+          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+          goto end;
         }
-        LOG(WARNING) << "TACK DVCC TACK FP " << tackKeyFingerprint;
+        LOG(WARNING) << "TACKINIT SUCCESS";
         
-        // Verify signature
-        //retval = tackTackVerifySignature(tack, tackNssVerifyFunc);
-        //if (retval < 0) {
-        //  result = ???;
-        //  goto end;
-        //}domain_state.tackKeyFingerprint;
-        
-        // Check tack's target_hash matches public key
-/*
-        if (memcmp(server_cert_verify_result_->public_key_sha256, tack->targetHash, 32)!=0) {
-          char s1[1000], s2[1000];
-          sprintf(s1, "%02x %02x", 
-                  server_cert_verify_result_->public_key_sha256[0], 
-                  server_cert_verify_result_->public_key_sha256[1]);  
-          sprintf(s2, "%02x %02x", 
-                  tack->targetHash[0], 
-                  tack->targetHash[1]); 
-          LOG(WARNING) << "TACK DVCC BAD TARGET HASH" << s1 << "xxx" << s2; 
-        }
-        else {
-          LOG(WARNING) << "TACK DVCC GOOD TARGET HASH";
-          }        */
+        if (tackExt.tackCount == 1) {
+          LOG(WARNING) << "TACK DVCC BETA";
+          Tack* tack = &tackExt.tack;          
+          char tackKeyFingerprint[TACK_KEY_FINGERPRINT_TEXT_LENGTH+1];
+          retval = tackGetKeyFingerprint(tack->publicKey, 
+                                         tackKeyFingerprint,
+                                         tackNssHashFunc);
+          if (retval != TACK_OK) {
+            LOG(WARNING) << "TACK DVCC BAD FINGERPRINT CALL?!";
+          }
+          LOG(WARNING) << "TACK DVCC TACK FP " << tackKeyFingerprint;
+        }        
       }
 
       LOG(WARNING) << "TACK DVCC DELTA";
       if (domain_state.tackKeyFingerprint.size() > 0) {
         LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprint;
-
-        /* Error if no Tack */
-
-        // Check break signatures
-
-
-        // Check generation against min_generation
-
-        // Check key is referenced
-
       }
     }
   }
 #endif
 
+end:
   // Exit DoHandshakeLoop and return the result to the caller to Connect.
   DCHECK_EQ(STATE_NONE, next_handshake_state_);
   return result;

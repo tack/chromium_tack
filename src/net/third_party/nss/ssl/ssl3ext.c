@@ -511,20 +511,10 @@ ssl3_ClientSendTackXtn(sslSocket * ss, PRBool append, PRUint32 maxBytes)
 static SECStatus ssl3_ClientHandleTackXtn(sslSocket *ss,
 					  PRUint16 ex_type, SECItem *data)
 {
-    SECStatus        rv		= SECFailure;
-
     ss->xtnData.negotiated[ss->xtnData.numNegotiated++] = ssl_tack_xtn;
-
-    /* Now ask the client application if it likes the TACK Ext... */    
-    if (ss->authTackExt) {
-
-        rv = (SECStatus) (*ss->authTackExt)(ss->authTackExtArg, ss->fd,
-                                            data->data, data->len);
-    }
-    else
-      rv = SECSuccess;
-
-    return rv;
+    ss->sec.tackExtLen = data->len;
+    memcpy(ss->sec.tackExtData, data->data, data->len);
+    return SECSuccess;
 }
         
 /* Called by both clients and servers.

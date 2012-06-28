@@ -59,6 +59,23 @@ SSL_PeerCertificate(PRFileDesc *fd)
     return 0;
 }
 
+SSL_IMPORT SECStatus SSL_TackExtension(PRFileDesc *fd,
+                                      uint8_t* tackExtData,
+                                      uint32_t* tackExtLen)
+{
+    sslSocket *ss;
+
+    ss = ssl_FindSocket(fd);
+    if (!ss) {
+	SSL_DBG(("%d: SSL[%d]: bad socket in TackExtension",
+		 SSL_GETPID(), fd));
+	return SECFailure;
+    }
+    memcpy(tackExtData, ss->sec.tackExtData, ss->sec.tackExtLen);
+    *tackExtLen = ss->sec.tackExtLen;
+    return SECSuccess;
+}
+
 /* NEED LOCKS IN HERE.  */
 SECStatus
 SSL_PeerCertificateChain(PRFileDesc *fd, CERTCertificate **certs,
@@ -228,25 +245,6 @@ SSL_AuthCertificateHook(PRFileDesc *s, SSLAuthCertificate func, void *arg)
 
     ss->authCertificate = func;
     ss->authCertificateArg = arg;
-
-    return SECSuccess;
-}
-
-/* NEEDS LOCKS IN HERE. */
-SECStatus
-SSL_AuthTackExtHook(PRFileDesc *s, SSLAuthTackExt func, void *arg)
-{
-    sslSocket *ss;
-
-    ss = ssl_FindSocket(s);
-    if (!ss) {
-	SSL_DBG(("%d: SSL[%d]: bad socket in AuthTackExtHook",
-		 SSL_GETPID(), s));
-	return SECFailure;
-    }
-
-    ss->authTackExt = func;
-    ss->authTackExtArg = arg;
 
     return SECSuccess;
 }

@@ -435,6 +435,10 @@ SSL_IMPORT SECStatus SSL_SecurityStatus(PRFileDesc *fd, int *on, char **cipher,
 */
 SSL_IMPORT CERTCertificate *SSL_PeerCertificate(PRFileDesc *fd);
 
+SSL_IMPORT SECStatus SSL_TackExtension(PRFileDesc *fd,
+                                       uint8_t* tackExtData,
+                                       uint32_t* tackExtLen);
+
 /*
 ** Return references to the certificates presented by the SSL peer.
 ** |maxNumCerts| must contain the size of the |certs| array. On successful
@@ -496,16 +500,6 @@ SSL_IMPORT SECStatus SSL_AuthCertificateHook(PRFileDesc *fd,
 /* An implementation of the certificate authentication hook */
 SSL_IMPORT SECStatus SSL_AuthCertificate(void *arg, PRFileDesc *fd, 
 					 PRBool checkSig, PRBool isServer);
-
-/* TACK */
-typedef SECStatus (PR_CALLBACK *SSLAuthTackExt)(void *arg, PRFileDesc *fd,
-                                                unsigned char* data,
-                                                unsigned int len);
-
-SSL_IMPORT SECStatus SSL_AuthTackExtHook(PRFileDesc *fd, 
-					     SSLAuthTackExt f,
-				             void *arg);
-
 
 /*
  * Prototype for SSL callback to get client auth data from the application.

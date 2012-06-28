@@ -1093,6 +1093,9 @@ struct sslSecurityInfoStr {
     CERTCertificate *peerCert;					/* ssl 2 & 3 */
     SECKEYPublicKey *peerKey;					/* ssl3 only */
 
+    uint8_t          tackExtLen;
+    uint8_t          tackExtData[2048];
+
     SSLSignType      authAlgorithm;
     PRUint32         authKeyBits;
     SSLKEAType       keaType;
@@ -1193,8 +1196,6 @@ const unsigned char *  preferredCipher;
     /* Callbacks */
     SSLAuthCertificate        authCertificate;
     void                     *authCertificateArg;
-    SSLAuthTackExt            authTackExt;
-    void                     *authTackExtArg;
     SSLGetClientAuthData      getClientAuthData;
     void                     *getClientAuthDataArg;
 #ifdef NSS_PLATFORM_CLIENT_AUTH
@@ -1266,7 +1267,7 @@ const unsigned char *  preferredCipher;
 
     ssl3CipherSuiteCfg cipherSuites[ssl_V3_SUITES_IMPLEMENTED];
     ssl3KeyPair *         ephemeralECDHKeyPair; /* for ECDHE-* handshake */
-
+  
     /* SSL3 state info.  Formerly was a pointer */
     ssl3State        ssl3;
 
