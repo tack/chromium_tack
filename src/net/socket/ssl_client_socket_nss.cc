@@ -3591,14 +3591,13 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
       }
 
       /* Is there a TACK? */
-      uint8_t tackExtData[2048];
+      uint8_t tackExt[2048];
       uint32_t tackExtLen;
-      TackExtension tackExt;
       TACK_RETVAL retval;
       
-      SSL_TackExtension(nss_fd_, tackExtData, &tackExtLen); // check retval
+      SSL_TackExtension(nss_fd_, tackExt, &tackExtLen); // check retval
       if (tackExtLen > 0) {
-        retval=tackExtensionInit(&tackExt, tackExtData, tackExtLen);
+        retval=tackExtensionSyntaxCheck(tackExt, tackExtLen);
         if (retval != TACK_OK) {
           LOG(WARNING) << "TACKINIT FAILURE " << tackExtLen << tackRetvalString(retval); 
           result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
@@ -3606,11 +3605,11 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         }
         LOG(WARNING) << "TACKINIT SUCCESS";
         
-        if (tackExt.tackCount == 1) {
+        uint8_t* tack = tackExtensionGetTack(tackExt);
+        if (tack) {
           LOG(WARNING) << "TACK DVCC BETA";
-          Tack* tack = &tackExt.tack;          
           char tackKeyFingerprint[TACK_KEY_FINGERPRINT_TEXT_LENGTH+1];
-          retval = tackGetKeyFingerprint(tack->publicKey, 
+          retval = tackGetKeyFingerprint(tackTackGetPublicKey(tack), 
                                          tackKeyFingerprint,
                                          tackNssHashFunc);
           if (retval != TACK_OK) {
@@ -3625,14 +3624,14 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
                                       cert->derPublicKey.data, cert->derPublicKey.len);
           DCHECK_EQ(rv, SECSuccess);
 
-          if (memcmp(hashValue, tack->targetHash, 32)!=0) {
+          if (memcmp(hashValue, tackTackGetTargetHash(tack), 32)!=0) {
             char s1[1000], s2[1000];
             sprintf(s1, "%02x %02x", 
                     hashValue[0], 
                     hashValue[1]);  
             sprintf(s2, "%02x %02x", 
-                    tack->targetHash[0], 
-                    tack->targetHash[1]); 
+                    tackTackGetTargetHash(tack)[0], 
+                    tackTackGetTargetHash(tack)[1]); 
             LOG(WARNING) << "TACK DVCC BAD TARGET HASH" << s1 << "xxx" << s2; 
           }
           else {
