@@ -3617,6 +3617,27 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
             LOG(WARNING) << "TACK DVCC BAD FINGERPRINT CALL?!";
           }
           LOG(WARNING) << "TACK DVCC TACK FP " << tackKeyFingerprint;
+
+          /* Hash the public key */
+          CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
+          uint8 hashValue[32];
+          SECStatus rv = HASH_HashBuf(HASH_AlgSHA256, hashValue,
+                                      cert->derPublicKey.data, cert->derPublicKey.len);
+          DCHECK_EQ(rv, SECSuccess);
+
+          if (memcmp(hashValue, tack->targetHash, 32)!=0) {
+            char s1[1000], s2[1000];
+            sprintf(s1, "%02x %02x", 
+                    hashValue[0], 
+                    hashValue[1]);  
+            sprintf(s2, "%02x %02x", 
+                    tack->targetHash[0], 
+                    tack->targetHash[1]); 
+            LOG(WARNING) << "TACK DVCC BAD TARGET HASH" << s1 << "xxx" << s2; 
+          }
+          else {
+            LOG(WARNING) << "TACK DVCC GOOD TARGET HASH";
+          } 
         }        
       }
 
