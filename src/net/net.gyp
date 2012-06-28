@@ -794,6 +794,8 @@
         'third_party/tackc/src/TackCryptoFuncs.h',
         'third_party/tackc/src/TackExtension.h',
         'third_party/tackc/src/TackExtension.c',
+        'third_party/tackc/src/TackFingerprints.h',
+        'third_party/tackc/src/TackFingerprints.c',
         'third_party/tackc/src/TackNss.h',
         'third_party/tackc/src/TackNss.c',
         'third_party/tackc/src/TackRetval.h',
