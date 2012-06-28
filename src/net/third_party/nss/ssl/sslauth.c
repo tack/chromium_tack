@@ -60,7 +60,7 @@ SSL_PeerCertificate(PRFileDesc *fd)
 }
 
 SSL_IMPORT SECStatus SSL_TackExtension(PRFileDesc *fd,
-                                      uint8_t* tackExtData,
+                                      uint8_t** tackExt,
                                       uint32_t* tackExtLen)
 {
     sslSocket *ss;
@@ -71,8 +71,14 @@ SSL_IMPORT SECStatus SSL_TackExtension(PRFileDesc *fd,
 		 SSL_GETPID(), fd));
 	return SECFailure;
     }
-    memcpy(tackExtData, ss->sec.tackExtData, ss->sec.tackExtLen);
-    *tackExtLen = ss->sec.tackExtLen;
+
+    /* If tackExtLen is non-zero then populate tackExt, else NULL */
+    if ((*tackExtLen = ss->sec.tackExtLen) > 0) {
+      *tackExt = ss->sec.tackExt;
+    }
+    else
+      *tackExt = 0;
+
     return SECSuccess;
 }
 

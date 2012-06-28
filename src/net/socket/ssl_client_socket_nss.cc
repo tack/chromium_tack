@@ -3591,12 +3591,12 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
       }
 
       /* Is there a TACK? */
-      uint8_t tackExt[2048];
+      uint8_t* tackExt;
       uint32_t tackExtLen;
       TACK_RETVAL retval;
       
-      SSL_TackExtension(nss_fd_, tackExt, &tackExtLen); // check retval
-      if (tackExtLen > 0) {
+      SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen); // check retval
+      if (tackExt) {
         retval=tackExtensionSyntaxCheck(tackExt, tackExtLen);
         if (retval != TACK_OK) {
           LOG(WARNING) << "TACKINIT FAILURE " << tackExtLen << tackRetvalString(retval); 

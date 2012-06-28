@@ -906,7 +906,7 @@ ssl_CopySecurityInfo(sslSocket *ss, sslSocket *os)
     	goto loser;
 
     ss->sec.tackExtLen = os->sec.tackExtLen;
-    memcpy(ss->sec.tackExtData, os->sec.tackExtData, 2048);
+    memcpy(ss->sec.tackExt, os->sec.tackExt, 2048);
 
     ss->sec.cache      		= os->sec.cache;
     ss->sec.uncache    		= os->sec.uncache;

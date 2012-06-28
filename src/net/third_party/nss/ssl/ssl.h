@@ -436,7 +436,7 @@ SSL_IMPORT SECStatus SSL_SecurityStatus(PRFileDesc *fd, int *on, char **cipher,
 SSL_IMPORT CERTCertificate *SSL_PeerCertificate(PRFileDesc *fd);
 
 SSL_IMPORT SECStatus SSL_TackExtension(PRFileDesc *fd,
-                                       uint8_t* tackExtData,
+                                       uint8_t** tackExt,
                                        uint32_t* tackExtLen);
 
 /*

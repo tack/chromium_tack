@@ -1094,7 +1094,7 @@ struct sslSecurityInfoStr {
     SECKEYPublicKey *peerKey;					/* ssl3 only */
 
     uint8_t          tackExtLen;
-    uint8_t          tackExtData[2048];
+    uint8_t          tackExt[2048];
 
     SSLSignType      authAlgorithm;
     PRUint32         authKeyBits;

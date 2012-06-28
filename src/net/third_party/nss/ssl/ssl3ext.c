@@ -513,7 +513,7 @@ static SECStatus ssl3_ClientHandleTackXtn(sslSocket *ss,
 {
     ss->xtnData.negotiated[ss->xtnData.numNegotiated++] = ssl_tack_xtn;
     ss->sec.tackExtLen = data->len;
-    memcpy(ss->sec.tackExtData, data->data, data->len);
+    memcpy(ss->sec.tackExt, data->data, data->len);
     return SECSuccess;
 }
         
