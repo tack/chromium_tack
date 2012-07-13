@@ -105,10 +105,8 @@
 #include "net/socket/ssl_error_params.h"
 #include "net/socket/ssl_host_info.h"
 
-#include "net/third_party/tackc/src/TackExtension.h"
-#include "net/third_party/tackc/src/TackFingerprints.h"
+#include "net/third_party/tackc/src/TackStoreDefault.h"
 #include "net/third_party/tackc/src/TackNss.h"
-#include "net/third_party/tackc/src/TackRetval.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -3585,67 +3583,35 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         }
       }
 
-      /* Is there a TACK? */
       TACK_RETVAL retval;
       uint8_t* tackExt = NULL;
       uint32_t tackExtLen = 0;
 
-      if (SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen) != SECSuccess)
-        tackExt = NULL;
+      // Get TACK Extension (Check return value?)
+      SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
 
-      if (tackExt) {
-        retval = tackExtensionSyntaxCheck(tackExt, tackExtLen);
-        if (retval != TACK_OK) {
-          LOG(WARNING) << "TACKEXT SYNTAX FAILURE " << tackRetvalString(retval); 
-          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN; // !!! TODO BETTER ERR MSG
-          goto end;
-        }
-        LOG(WARNING) << "TACKEXT SYNTAX SUCCESS";
-        
-        uint8_t* tack = tackExtensionGetTack(tackExt);
-        if (tack) {
-          LOG(WARNING) << "TACK- TACK PRESENT IN EXTENSION";
-          char tackKeyFingerprint[TACK_KEY_FINGERPRINT_TEXT_LENGTH+1];
-          retval = tackTackGetKeyFingerprint(tack, 
-                                         tackKeyFingerprint,
-                                         tackNssHashFunc);
-          if (retval != TACK_OK) {
-            LOG(WARNING) << "TACK DVCC BAD FINGERPRINT CALL?!";
-          }
-          LOG(WARNING) << "TACK DVCC TACK FP " << tackKeyFingerprint;
+      // Get key hash
+      CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
+      uint8 keyHash[32];
+      SECStatus rv = HASH_HashBuf(HASH_AlgSHA256, keyHash,
+                                  cert->derPublicKey.data, cert->derPublicKey.len);
+      DCHECK_EQ(rv, SECSuccess);
 
-          /* Hash the public key */
-          CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
-          uint8 hashValue[32];
-          SECStatus rv = HASH_HashBuf(HASH_AlgSHA256, hashValue,
-                                      cert->derPublicKey.data, cert->derPublicKey.len);
-          DCHECK_EQ(rv, SECSuccess);
+      TackStoreDefault store;
 
-          if (memcmp(hashValue, tackTackGetTargetHash(tack), 32)!=0) {
-            char s1[1000], s2[1000];
-            sprintf(s1, "%02x %02x", 
-                    hashValue[0], 
-                    hashValue[1]);  
-            sprintf(s2, "%02x %02x", 
-                    tackTackGetTargetHash(tack)[0], 
-                    tackTackGetTargetHash(tack)[1]); 
-            LOG(WARNING) << "TACK DVCC BAD TARGET HASH" << s1 << "xxx" << s2; 
-          }
-          else {
-            LOG(WARNING) << "TACK DVCC GOOD TARGET HASH";
-          } 
-        }        
-      }
+      uint32 currentTime = 0;
+      LOG(WARNING) << "TACK ABOUT-TO-PROCESS";
+      retval = store.process(tackExt, tackExtLen, host, keyHash, currentTime, 1, tackNss);
 
-      LOG(WARNING) << "TACK DVCC DELTA";
+      LOG(WARNING) << "TACK PROCESS = "<< std::string(tackRetvalString(retval));
       if (domain_state.tackKeyFingerprint.size() > 0) {
         LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprint;
       }
+
     }
   }
 #endif
 
-end:
   // Exit DoHandshakeLoop and return the result to the caller to Connect.
   DCHECK_EQ(STATE_NONE, next_handshake_state_);
   return result;
