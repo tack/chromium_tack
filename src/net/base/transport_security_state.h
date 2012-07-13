@@ -19,6 +19,8 @@
 #include "net/base/x509_certificate.h"
 #include "net/base/x509_cert_types.h"
 
+#include "net/third_party/tackc/src/TackStoreDefault.h"
+
 namespace net {
 
 class SSLInfo;
@@ -279,6 +281,8 @@ class NET_EXPORT TransportSecurityState
   // to the caller with |GetStaticDomainState|.
   static void ReportUMAOnPinFailure(const std::string& host);
 
+  TackStore* GetTackStore() {return &store;}
+
  private:
   // If a Delegate is present, notify it that the internal state has
   // changed.
@@ -292,6 +296,8 @@ class NET_EXPORT TransportSecurityState
   std::map<std::string, DomainState> forced_hosts_;
 
   Delegate* delegate_;
+
+  TackStoreDefault store;
 
   DISALLOW_COPY_AND_ASSIGN(TransportSecurityState);
 };

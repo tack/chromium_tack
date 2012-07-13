@@ -3596,14 +3596,19 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
       SECStatus rv = HASH_HashBuf(HASH_AlgSHA256, keyHash,
                                   cert->derPublicKey.data, cert->derPublicKey.len);
       DCHECK_EQ(rv, SECSuccess);
+      
+      uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
 
-      TackStoreDefault store;
-
-      uint32 currentTime = 0;
       LOG(WARNING) << "TACK ABOUT-TO-PROCESS";
-      retval = store.process(tackExt, tackExtLen, host, keyHash, currentTime, 1, tackNss);
-
+      TackStore* store = transport_security_state_->GetTackStore();
+      retval = store->process(host, 
+                              tackExt, tackExtLen, 
+                              keyHash, 
+                              currentTime, 
+                              1, tackNss);
+      
       LOG(WARNING) << "TACK PROCESS = "<< std::string(tackRetvalString(retval));
+      LOG(WARNING) << store->getStringDump();
       if (domain_state.tackKeyFingerprint.size() > 0) {
         LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprint;
       }
