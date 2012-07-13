@@ -3582,37 +3582,47 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
           UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);
         }
       }
-
-      TACK_RETVAL retval;
-      uint8_t* tackExt = NULL;
-      uint32_t tackExtLen = 0;
-
-      // Get TACK Extension (Check return value?)
-      SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
-
-      // Get key hash
-      CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
-      uint8 keyHash[32];
-      SECStatus rv = HASH_HashBuf(HASH_AlgSHA256, keyHash,
-                                  cert->derPublicKey.data, cert->derPublicKey.len);
-      DCHECK_EQ(rv, SECSuccess);
       
-      uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
-
-      LOG(WARNING) << "TACK ABOUT-TO-PROCESS";
-      TackStore* store = transport_security_state_->GetTackStore();
-      retval = store->process(host, 
-                              tackExt, tackExtLen, 
-                              keyHash, 
-                              currentTime, 
-                              1, tackNss);
-      
-      LOG(WARNING) << "TACK PROCESS = "<< std::string(tackRetvalString(retval));
-      LOG(WARNING) << store->getStringDump();
-      if (domain_state.tackKeyFingerprint.size() > 0) {
-        LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprint;
+      if (result != ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN) {
+          TACK_RETVAL retval = TACK_ERR;
+          uint8_t* tackExt = NULL;
+          uint32_t tackExtLen = 0;
+          uint8 keyHash[32];
+          SECStatus rv;
+          uint32_t currentTime = 0;
+          
+          // Get TACK Extension
+          rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
+          DCHECK_EQ(rv, SECSuccess);
+          
+          // Get key hash
+          CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
+          rv = HASH_HashBuf(HASH_AlgSHA256, keyHash,
+                            cert->derPublicKey.data, cert->derPublicKey.len);
+          DCHECK_EQ(rv, SECSuccess);
+          
+          // Get current time (in uint32_t for minutes since epoch)
+          currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
+          
+          // Execute client processing
+          TackStore* store = transport_security_state_->GetTackStore();
+          retval = store->process(host, 
+                                  tackExt, tackExtLen, 
+                                  keyHash, 
+                                  currentTime, 
+                                  1, tackNss);
+          
+          // Handle security failure
+          if (retval == TACK_OK_REJECTED)
+              result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+          
+          // Debug output
+          LOG(WARNING) << "TACK PROCESS = "<< std::string(tackRetvalString(retval));
+          LOG(WARNING) << store->getStringDump();
+          if (domain_state.tackKeyFingerprint.size() > 0) {
+              LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprint;
+          }          
       }
-
     }
   }
 #endif
