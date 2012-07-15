@@ -35,6 +35,7 @@
 #include "net/base/ssl_info.h"
 #include "net/base/x509_certificate.h"
 #include "net/http/http_util.h"
+#include "base/build_time.h"
 
 #if defined(USE_OPENSSL)
 #include "crypto/openssl_util.h"
@@ -48,10 +49,6 @@ static std::string HashHost(const std::string& canonicalized_host) {
   char hashed[crypto::kSHA256Length];
   crypto::SHA256HashString(canonicalized_host, hashed, sizeof(hashed));
   return std::string(hashed, sizeof(hashed));
-}
-
-TransportSecurityState::TransportSecurityState()
-  : delegate_(NULL) {
 }
 
 void TransportSecurityState::SetDelegate(
@@ -591,6 +588,29 @@ struct HSTSPreload {
   SecondLevelDomainName second_level_domain_name;
 };
 
+#include "net/base/transport_security_state_static.h"
+
+TransportSecurityState::TransportSecurityState()
+  : delegate_(NULL) 
+{
+    TackPinStruct pin;
+
+    for (size_t count=0; count < kNumPreloadedSTS; count++) {
+        if (strlen(kPreloadedSTS[count].pins.tackKeyFingerprint) != 0) {
+            strcpy(pin.keyFingerprint, kPreloadedSTS[count].pins.tackKeyFingerprint); 
+            pin.minGeneration =  kPreloadedSTS[count].pins.tackMinGeneration;
+            pin.initialTime = (base::GetBuildTime() - base::Time::UnixEpoch()).InMinutes();
+            //pin.activePeriodEnd = pin.initialTime + (21 * 24 * 60);
+            pin.endTime = 0xFFFFFFFF;
+            std::string name(kPreloadedSTS[count].dns_name, kPreloadedSTS[count].length);
+            store.newPin(name, &pin);
+        }
+    }
+    //for (int count=0; count < kNumPreloadedSNISTS; count++) {
+
+    //}
+}
+
 static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
                        const std::string& canonicalized_host, size_t i,
                        TransportSecurityState::DomainState* out, bool* ret) {
@@ -629,8 +649,6 @@ static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
   }
   return false;
 }
-
-#include "net/base/transport_security_state_static.h"
 
 // Returns the HSTSPreload entry for the |canonicalized_host| in |entries|,
 // or NULL if there is none. Prefers exact hostname matches to those that

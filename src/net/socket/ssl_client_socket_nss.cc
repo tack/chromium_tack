@@ -3590,6 +3590,9 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
           uint8 keyHash[32];
           SECStatus rv;
           uint32_t currentTime = 0;
+
+          // Canonicalize hostname
+          std::string name = TransportSecurityState::CanonicalizeHost(host);
           
           // Get TACK Extension
           rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
@@ -3606,7 +3609,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
           
           // Execute client processing
           TackStore* store = transport_security_state_->GetTackStore();
-          retval = store->process(host, 
+          retval = store->process(name, 
                                   tackExt, tackExtLen, 
                                   keyHash, 
                                   currentTime, 
@@ -3617,11 +3620,21 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
               result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
           
           // Debug output
-          LOG(WARNING) << "TACK PROCESS = "<< std::string(tackRetvalString(retval));
+          LOG(WARNING) << "TACK RESULT = "<< std::string(tackRetvalString(retval));
+          LOG(WARNING) << "TACK CNAME = " << name;
+
+          TackPinStruct pin;
+          retval = store->getPin(name, &pin);
+          if (retval == TACK_OK) {
+              LOG(WARNING) << "TACK PIN = " << std::string(pin.keyFingerprint);
+          }
+          else
+              LOG(WARNING) << "NO TACK PIN";
+
           LOG(WARNING) << store->getStringDump();
-          if (domain_state.tackKeyFingerprint.size() > 0) {
-              LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprint;
-          }          
+          
+          //if (domain_state.tackKeyFingerprint.size() > 0) {
+          //    LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprin          //}          
       }
     }
   }
