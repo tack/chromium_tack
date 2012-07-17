@@ -3590,6 +3590,9 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
           uint8 keyHash[32];
           SECStatus rv;
           uint32_t currentTime = 0;
+          TackStore* staticStore;
+          TackStore* revocationStore;
+          TackStore* pinActivationStore;
 
           // Canonicalize hostname
           std::string name = TransportSecurityState::CanonicalizeHost(host);
@@ -3608,33 +3611,63 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
           currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
           
           // Execute client processing
-          TackStore* store = transport_security_state_->GetTackStore();
-          retval = store->process(name, 
-                                  tackExt, tackExtLen, 
-                                  keyHash, 
-                                  currentTime, 
-                                  1, tackNss);
-          
-          // Handle security failure
+
+          // Step 1: check connection is well-formed
+          TackProcessingContext ctx;
+          retval = tackProcessWellFormed(tackExt, tackExtLen, keyHash,
+                                         currentTime, &ctx, tackNss);
+          if (retval != TACK_OK)
+              return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+
+          // Step 2: check the pin stores
+          revocationStore = transport_security_state_->GetTackRevocationStore();
+          staticStore = transport_security_state_->GetTackStaticStore();
+          pinActivationStore = transport_security_state_->GetTackPinActivationStore();
+
+          // Check revocation store to ensure the tack is not revoked
+          retval = revocationStore->process(&ctx, name, currentTime);
+          if (retval < TACK_OK)
+              return retval;
+          if (retval == TACK_OK_REJECTED) // Shouldn't happen, but let's be safe...
+              return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+
+          // Check static store
+          retval = staticStore->process(&ctx, name, currentTime);
+          if (retval < TACK_OK)
+              return retval;
           if (retval == TACK_OK_REJECTED)
-              result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+              return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+
+          // If the static store returns UNPINNED, check pin activation store
+          if (retval != TACK_OK_ACCEPTED) {
+              retval = pinActivationStore->process(&ctx, name, currentTime);
+              if (retval < TACK_OK)
+                  return retval;
+              if (retval == TACK_OK_REJECTED)
+                  return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+          }
           
           // Debug output
           LOG(WARNING) << "TACK RESULT = "<< std::string(tackRetvalString(retval));
           LOG(WARNING) << "TACK CNAME = " << name;
 
-          TackPinStruct pin;
-          retval = store->getPin(name, &pin);
+          TackPin pin;
+          retval = staticStore->getPin(name, &pin);
           if (retval == TACK_OK) {
-              LOG(WARNING) << "TACK PIN = " << std::string(pin.keyFingerprint);
+              LOG(WARNING) << "STATIC TACK PIN = " << std::string(pin.fingerprint);
           }
           else
-              LOG(WARNING) << "NO TACK PIN";
+              LOG(WARNING) << "NO PRELOADED TACK PIN";
 
-          LOG(WARNING) << store->getStringDump();
-          
-          //if (domain_state.tackKeyFingerprint.size() > 0) {
-          //    LOG(WARNING) << "TACK DVCC DOMAIN_STATE " << domain_state.tackKeyFingerprin          //}          
+          retval = pinActivationStore->getPin(name, &pin);
+          if (retval == TACK_OK) {
+              LOG(WARNING) << "PIN ACTIVATION TACK PIN = " << 
+                  std::string(pin.fingerprint);
+          }
+          else
+              LOG(WARNING) << "NO PIN ACTIVATION TACK PIN";
+
+          //LOG(WARNING) << pinActivationStore->getStringDump();                   
       }
     }
   }

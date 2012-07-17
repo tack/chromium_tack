@@ -37,6 +37,8 @@
 #include "net/http/http_util.h"
 #include "base/build_time.h"
 
+#include "net/third_party/tackc/src/TackNss.h"
+
 #if defined(USE_OPENSSL)
 #include "crypto/openssl_util.h"
 #endif
@@ -593,17 +595,23 @@ struct HSTSPreload {
 TransportSecurityState::TransportSecurityState()
   : delegate_(NULL) 
 {
-    TackPinStruct pin;
+    revocationStore.setCryptoFuncs(tackNss);
+    staticStore.setCryptoFuncs(tackNss);
+    pinActivationStore.setCryptoFuncs(tackNss);
 
+    staticStore.setRevocationStore(&revocationStore);
+    pinActivationStore.setRevocationStore(&pinActivationStore);
+    pinActivationStore.setPinActivation(true);
+
+    TackPin pin;
     for (size_t count=0; count < kNumPreloadedSTS; count++) {
         if (strlen(kPreloadedSTS[count].pins.tackKeyFingerprint) != 0) {
-            strcpy(pin.keyFingerprint, kPreloadedSTS[count].pins.tackKeyFingerprint); 
+            strcpy(pin.fingerprint, kPreloadedSTS[count].pins.tackKeyFingerprint); 
             pin.minGeneration =  kPreloadedSTS[count].pins.tackMinGeneration;
             pin.initialTime = (base::GetBuildTime() - base::Time::UnixEpoch()).InMinutes();
-            //pin.activePeriodEnd = pin.initialTime + (21 * 24 * 60);
             pin.endTime = 0xFFFFFFFF;
             std::string name(kPreloadedSTS[count].dns_name, kPreloadedSTS[count].length);
-            store.newPin(name, &pin);
+            staticStore.newPin(name, &pin);
         }
     }
     //for (int count=0; count < kNumPreloadedSNISTS; count++) {
