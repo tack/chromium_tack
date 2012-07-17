@@ -595,13 +595,9 @@ struct HSTSPreload {
 TransportSecurityState::TransportSecurityState()
   : delegate_(NULL) 
 {
-    revocationStore.setCryptoFuncs(tackNss);
     staticStore.setCryptoFuncs(tackNss);
-    pinActivationStore.setCryptoFuncs(tackNss);
-
-    staticStore.setRevocationStore(&revocationStore);
-    pinActivationStore.setRevocationStore(&pinActivationStore);
-    pinActivationStore.setPinActivation(true);
+    dynamicStore.setCryptoFuncs(tackNss);
+    staticStore.setRevocationStore(&dynamicStore);
 
     TackPin pin;
     for (size_t count=0; count < kNumPreloadedSTS; count++) {

@@ -281,9 +281,8 @@ class NET_EXPORT TransportSecurityState
   // to the caller with |GetStaticDomainState|.
   static void ReportUMAOnPinFailure(const std::string& host);
 
-  TackStore* GetTackRevocationStore() {return &revocationStore;}
   TackStore* GetTackStaticStore() {return &staticStore;}
-  TackStore* GetTackPinActivationStore() {return &pinActivationStore;}
+  TackStore* GetTackDynamicStore() {return &dynamicStore;}
 
  private:
   // If a Delegate is present, notify it that the internal state has
@@ -299,9 +298,8 @@ class NET_EXPORT TransportSecurityState
 
   Delegate* delegate_;
 
-  TackStoreDefault revocationStore;
   TackStoreDefault staticStore;
-  TackStoreDefault pinActivationStore;
+  TackStoreDefault dynamicStore;
 
   DISALLOW_COPY_AND_ASSIGN(TransportSecurityState);
 };
