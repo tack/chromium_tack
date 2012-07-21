@@ -592,29 +592,38 @@ struct HSTSPreload {
 
 #include "net/base/transport_security_state_static.h"
 
+static void ConsiderPreloadForTackStore(TackStore* store, 
+                                        const HSTSPreload* preload,
+                                        uint32_t initialTime, 
+                                        uint32_t endTime)
+{
+    if (strlen(preload->pins.tackKeyFingerprint) != 0) {
+        TackNameRecord nameRecord;
+        strcpy(nameRecord.fingerprint, preload->pins.tackKeyFingerprint); 
+        nameRecord.initialTime = initialTime;
+        nameRecord.endTime = endTime;
+        std::string name(preload->dns_name, preload->length);
+        store->setPin(name, &nameRecord, preload->pins.tackMinGeneration);
+    }    
+}
+
 TransportSecurityState::TransportSecurityState()
   : delegate_(NULL) 
 {
-    staticStore.setCryptoFuncs(tackNss);
-    dynamicStore.setCryptoFuncs(tackNss);
-    staticStore.setRevocationStore(&dynamicStore);
-    dynamicStore.setPinActivation(true);
+    staticStore_.setCryptoFuncs(tackNss);
+    dynamicStore_.setCryptoFuncs(tackNss);
+    staticStore_.setRevocationStore(&dynamicStore_);
+    dynamicStore_.setPinActivation(true);
 
-    TackNameRecord nameRecord;
-    for (size_t count=0; count < kNumPreloadedSTS; count++) {
-        if (strlen(kPreloadedSTS[count].pins.tackKeyFingerprint) != 0) {
-            strcpy(nameRecord.fingerprint, kPreloadedSTS[count].pins.tackKeyFingerprint); 
-            nameRecord.initialTime = (base::GetBuildTime() - 
-                                      base::Time::UnixEpoch()).InMinutes();
-            nameRecord.endTime = 0xFFFFFFFF;
-            std::string name(kPreloadedSTS[count].dns_name, kPreloadedSTS[count].length);
-            staticStore.setPin(name, &nameRecord, 
-                               kPreloadedSTS[count].pins.tackMinGeneration);
-        }
-    }
-    //for (int count=0; count < kNumPreloadedSNISTS; count++) {
+    uint32_t initialTime = (base::GetBuildTime() - base::Time::UnixEpoch()).InMinutes();
+    uint32_t endTime = 0xFFFFFFFF; // Active forever?! - change this
 
-    //}
+    for (size_t count=0; count < kNumPreloadedSTS; count++)
+        ConsiderPreloadForTackStore(&staticStore_, &kPreloadedSTS[count],
+                                    initialTime, endTime);
+    for (size_t count=0; count < kNumPreloadedSNISTS; count++)
+        ConsiderPreloadForTackStore(&staticStore_, &kPreloadedSNISTS[count],
+                                    initialTime, endTime);
 }
 
 static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
