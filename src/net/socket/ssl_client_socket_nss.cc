@@ -3582,93 +3582,77 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
           UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);
         }
       }
+    }
       
-      if (result != ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN) {
-          TACK_RETVAL retval = TACK_ERR, staticRetval, dynamicRetval;
-          uint8_t* tackExt = NULL;
-          uint32_t tackExtLen = 0;
-          uint8 keyHash[32];
-          SECStatus rv;
-          uint32_t currentTime = 0;
-          TackStore* staticStore;
-          TackStore* dynamicStore;
+    if (result != ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN) {
+        
+        TACK_RETVAL retval = TACK_ERR;
+        SECStatus rv;
+        TackStore* staticStore = transport_security_state_->GetTackStaticStore();
+        TackStore* dynamicStore = transport_security_state_->GetTackDynamicStore();
+        
+        // Canonicalize hostname
+        std::string name = TransportSecurityState::CanonicalizeHost(host);
+        
+        // Get TACK Extension
+        uint8_t* tackExt = NULL;
+        uint32_t tackExtLen = 0;
+        rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
+        DCHECK_EQ(rv, SECSuccess);
+        
+        // Get key hash
+        uint8 keyHash[32];
+        CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
+        rv = HASH_HashBuf(HASH_AlgSHA256, keyHash,
+                          cert->derPublicKey.data, cert->derPublicKey.len);
+        DCHECK_EQ(rv, SECSuccess);
+        
+        // Get current time (in uint32_t for minutes since epoch)
+        uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
+        
+        // Check connection is well-formed
+        TackProcessingContext ctx;
+        retval = tackProcessWellFormed(&ctx, tackExt, tackExtLen, keyHash,
+                                       currentTime, tackNss);
+        if (retval != TACK_OK)
+            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+        
+        // Check static store
+        bool invalidateOnly = false;
+        retval = staticStore->process(&ctx, name, currentTime);
+        if (retval < TACK_OK) {
+            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+        }
+        if (retval == TACK_OK_REJECTED) {
+            invalidateOnly = true;
+            LOG(WARNING) << "TACK: Connection rejected by TACK static store: " << host;
+        }
+        if (retval == TACK_OK_ACCEPTED) {
+            invalidateOnly = true;
+            LOG(INFO) << "TACK: Connection accepted by TACK static store: " << host;
+        }
+        if (retval == TACK_OK_UNPINNED) {
+            LOG(INFO) << "TACK: Connection unpinned by TACK static store: " << host;
+        }
+        TACK_RETVAL staticRetval = retval;
 
-          // Canonicalize hostname
-          std::string name = TransportSecurityState::CanonicalizeHost(host);
-          
-          // Get TACK Extension
-          rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
-          DCHECK_EQ(rv, SECSuccess);
-          
-          // Get key hash
-          CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
-          rv = HASH_HashBuf(HASH_AlgSHA256, keyHash,
-                            cert->derPublicKey.data, cert->derPublicKey.len);
-          DCHECK_EQ(rv, SECSuccess);
-          
-          // Get current time (in uint32_t for minutes since epoch)
-          currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
-          
-          // Execute client processing
+        // Check dynamic store
+        retval = dynamicStore->process(&ctx, name, currentTime, invalidateOnly);
+        if (retval < TACK_OK) {
+            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+        }
+        if (retval == TACK_OK_REJECTED) {
+            LOG(WARNING) << "TACK: Connection rejected by TACK dynamic store: " << host;
+        }
+        if (retval == TACK_OK_ACCEPTED) {
+            LOG(INFO) << "TACK: Connection accepted by TACK dynamic store: " << host;
+        }
+        if (retval == TACK_OK_UNPINNED) {
+            LOG(INFO) << "TACK: Connection unpinned by TACK dynamic store: " << host;
+        }
 
-          // Step 1: check connection is well-formed
-          TackProcessingContext ctx;
-          retval = tackProcessWellFormed(tackExt, tackExtLen, keyHash,
-                                         currentTime, &ctx, tackNss);
-          if (retval != TACK_OK)
-              return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-
-          // Step 2: check the pin stores
-          staticStore = transport_security_state_->GetTackStaticStore();
-          dynamicStore = transport_security_state_->GetTackDynamicStore();
-
-          // Check static store
-          retval = staticStore->process(&ctx, name, currentTime, false);
-          if (retval < TACK_OK)
-              return retval;
-          staticRetval = retval;
-
-          // Check dynamic store
-          retval = dynamicStore->process(&ctx, name, currentTime, true);
-          if (retval < TACK_OK)
-              return retval;
-          dynamicRetval = retval;
-          
-          // Debug output
-          TackPin pin;
-
-          LOG(WARNING) << "TACK STATIC RESULT = " << 
-              std::string(tackRetvalString(staticRetval));
-          retval = staticStore->getPin(name, &pin);
-          if (retval == TACK_OK) {
-              LOG(WARNING) << "STATIC TACK PIN = " <<
-                  std::string(pin.fingerprint) << " " <<
-                  pin.initialTime << " " << pin.endTime << " " << 
-                  (uint32_t)pin.minGeneration;
-          }
-          else
-              LOG(WARNING) << "NO STATIC TACK PIN";
-
-          LOG(WARNING) << "TACK DYNAMIC RESULT = " <<
-              std::string(tackRetvalString(dynamicRetval));
-          retval = dynamicStore->getPin(name, &pin);
-          if (retval == TACK_OK) {
-              LOG(WARNING) << "DYNAMIC TACK PIN = " << 
-                  std::string(pin.fingerprint) << " " <<
-                  pin.initialTime << " " << pin.endTime << " " << 
-                  (uint32_t)pin.minGeneration;
-          }
-          else
-              LOG(WARNING) << "NO DYNAMIC TACK PIN";
-
-          // Return errors
-          //if (staticRetval == TACK_OK_REJECTED)
-          //    return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-          //if (dynamicRetval == TACK_OK_REJECTED)
-          //   return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-
-          //LOG(WARNING) << pinActivationStore->getStringDump();                   
-      }
+        if (retval == TACK_OK_REJECTED || staticRetval == TACK_OK_REJECTED)
+            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
     }
   }
 #endif

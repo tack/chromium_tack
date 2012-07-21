@@ -598,16 +598,18 @@ TransportSecurityState::TransportSecurityState()
     staticStore.setCryptoFuncs(tackNss);
     dynamicStore.setCryptoFuncs(tackNss);
     staticStore.setRevocationStore(&dynamicStore);
+    dynamicStore.setPinActivation(true);
 
-    TackPin pin;
+    TackNameRecord nameRecord;
     for (size_t count=0; count < kNumPreloadedSTS; count++) {
         if (strlen(kPreloadedSTS[count].pins.tackKeyFingerprint) != 0) {
-            strcpy(pin.fingerprint, kPreloadedSTS[count].pins.tackKeyFingerprint); 
-            pin.minGeneration =  kPreloadedSTS[count].pins.tackMinGeneration;
-            pin.initialTime = (base::GetBuildTime() - base::Time::UnixEpoch()).InMinutes();
-            pin.endTime = 0xFFFFFFFF;
+            strcpy(nameRecord.fingerprint, kPreloadedSTS[count].pins.tackKeyFingerprint); 
+            nameRecord.initialTime = (base::GetBuildTime() - 
+                                      base::Time::UnixEpoch()).InMinutes();
+            nameRecord.endTime = 0xFFFFFFFF;
             std::string name(kPreloadedSTS[count].dns_name, kPreloadedSTS[count].length);
-            staticStore.newPin(name, &pin);
+            staticStore.setPin(name, &nameRecord, 
+                               kPreloadedSTS[count].pins.tackMinGeneration);
         }
     }
     //for (int count=0; count < kNumPreloadedSNISTS; count++) {

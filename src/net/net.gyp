@@ -809,6 +809,7 @@
         'third_party/tackc/src/TackRetVal.c',
         'third_party/tackc/src/TackProcessing.h',
         'third_party/tackc/src/TackProcessing.c',
+        'third_party/tackc/src/TackStoreFuncs.h',
       ],
       'defines': [
         'NET_IMPLEMENTATION',
