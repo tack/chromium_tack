@@ -38,6 +38,7 @@ class SSLInfo;
 class NET_EXPORT TransportSecurityState
     : NON_EXPORTED_BASE(public base::NonThreadSafe) {
  public:
+
   class Delegate {
    public:
     // This function may not block and may be called with internal locks held.
@@ -47,6 +48,17 @@ class NET_EXPORT TransportSecurityState
    protected:
     virtual ~Delegate() {}
   };
+
+  class TackDelegate {
+   public:
+    // This function may not block and may be called with internal locks held.
+    // Thus it must not reenter the TransportSecurityState object.
+    virtual void StateIsDirty(TransportSecurityState* state) = 0;
+
+   protected:
+    virtual ~TackDelegate() {}
+  };
+
 
   TransportSecurityState();
   ~TransportSecurityState();
@@ -178,6 +190,7 @@ class NET_EXPORT TransportSecurityState
   // Assign a |Delegate| for persisting the transport security state. If
   // |NULL|, state will not be persisted. Caller owns |delegate|.
   void SetDelegate(Delegate* delegate);
+  void SetTackDelegate(TackDelegate* delegate);
 
   // Enable TransportSecurity for |host|. |state| supercedes any previous
   // state for the |host|, including static entries.
@@ -284,7 +297,10 @@ class NET_EXPORT TransportSecurityState
   TackStore* GetTackStaticStore() {return &staticStore_;}
   TackStore* GetTackDynamicStore() {return &dynamicStore_;}
 
+  void TackDirtyNotify();
+
  private:
+
   // If a Delegate is present, notify it that the internal state has
   // changed.
   void DirtyNotify();
@@ -298,6 +314,7 @@ class NET_EXPORT TransportSecurityState
 
   Delegate* delegate_;
 
+  TackDelegate* tackDelegate_;
   TackStoreDefault staticStore_;
   TackStoreDefault dynamicStore_;
 

@@ -58,6 +58,12 @@ void TransportSecurityState::SetDelegate(
   delegate_ = delegate;
 }
 
+void TransportSecurityState::SetTackDelegate(
+    TransportSecurityState::TackDelegate* tackDelegate) {
+  tackDelegate_ = tackDelegate;
+}
+
+
 void TransportSecurityState::EnableHost(const std::string& host,
                                         const DomainState& state) {
   DCHECK(CalledOnValidThread());
@@ -494,6 +500,14 @@ void TransportSecurityState::DirtyNotify() {
     delegate_->StateIsDirty(this);
 }
 
+void TransportSecurityState::TackDirtyNotify() {
+  DCHECK(CalledOnValidThread());
+
+  if (tackDelegate_)
+    tackDelegate_->StateIsDirty(this);
+}
+
+
 // static
 std::string TransportSecurityState::CanonicalizeHost(const std::string& host) {
   // We cannot perform the operations as detailed in the spec here as |host|
@@ -608,7 +622,7 @@ static void ConsiderPreloadForTackStore(TackStore* store,
 }
 
 TransportSecurityState::TransportSecurityState()
-  : delegate_(NULL) 
+    : delegate_(NULL), tackDelegate_(NULL) 
 {
     staticStore_.setCryptoFuncs(tackNss);
     dynamicStore_.setCryptoFuncs(tackNss);
