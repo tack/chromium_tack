@@ -3591,9 +3591,10 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         TackStore* staticStore = transport_security_state_->GetTackStaticStore();
         TackStore* dynamicStore = transport_security_state_->GetTackDynamicStore();
         
-        // Canonicalize hostname
-        std::string name = TransportSecurityState::CanonicalizeHost(host);
-        
+        // Canonicalize hostname to lowercase
+        std::string name(host);
+        std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+ 
         // Get TACK Extension
         uint8_t* tackExt = NULL;
         uint32_t tackExtLen = 0;
@@ -3625,14 +3626,14 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         }
         if (retval == TACK_OK_REJECTED) {
             invalidateOnly = true;
-            LOG(WARNING) << "TACK: Connection REJECTED by TACK static store: " << host;
+            LOG(WARNING) << "TACK: Connection REJECTED by TACK static store: " << name;
         }
         if (retval == TACK_OK_ACCEPTED) {
             invalidateOnly = true;
-            LOG(INFO) << "TACK: Connection ACCEPTED by TACK static store: " << host;
+            LOG(INFO) << "TACK: Connection ACCEPTED by TACK static store: " << name;
         }
         if (retval == TACK_OK_UNPINNED) {
-            LOG(INFO) << "TACK: Connection unpinned by TACK static store: " << host;
+            LOG(INFO) << "TACK: Connection unpinned by TACK static store: " << name;
         }
         TACK_RETVAL staticRetval = retval;
 
@@ -3642,17 +3643,18 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
             return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
         }
         if (retval == TACK_OK_REJECTED) {
-            LOG(WARNING) << "TACK: Connection REJECTED by TACK dynamic store: " << host;
+            LOG(WARNING) << "TACK: Connection REJECTED by TACK dynamic store: " << name;
         }
         if (retval == TACK_OK_ACCEPTED) {
-            LOG(INFO) << "TACK: Connection ACCEPTED by TACK dynamic store: " << host;
+            LOG(INFO) << "TACK: Connection ACCEPTED by TACK dynamic store: " << name;
         }
         if (retval == TACK_OK_UNPINNED) {
-            LOG(INFO) << "TACK: Connection unpinned by TACK dynamic store: " << host;
+            LOG(INFO) << "TACK: Connection unpinned by TACK dynamic store: " << name;
         }
 
         // Write out dynamic store contents if changed
         if (dynamicStore->getDirtyFlag()) {
+            LOG(INFO) << "TACK: STORE IS DIRTY";
             transport_security_state_->TackDirtyNotify();
             dynamicStore->setDirtyFlag(false);
         }
