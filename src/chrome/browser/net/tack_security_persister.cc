@@ -69,7 +69,7 @@ TackSecurityPersister::TackSecurityPersister(
     const FilePath& profile_path,
     bool readonly)
     : transport_security_state_(state),
-      writer_(profile_path.AppendASCII("TackSecurity"),
+      writer_(profile_path.AppendASCII("TackDynamicPins"),
               BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)),
       readonly_(readonly),
       weak_ptr_factory_(ALLOW_THIS_IN_INITIALIZER_LIST(this)) {

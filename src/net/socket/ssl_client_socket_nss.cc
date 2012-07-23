@@ -3622,6 +3622,8 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         bool invalidateOnly = false;
         retval = staticStore->process(&ctx, name, currentTime);
         if (retval < TACK_OK) {
+            LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
+                ", " << tackRetvalString(retval);
             return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
         }
         if (retval == TACK_OK_REJECTED) {
@@ -3640,6 +3642,8 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         // Check dynamic store
         retval = dynamicStore->process(&ctx, name, currentTime, invalidateOnly);
         if (retval < TACK_OK) {
+            LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
+                ", " << tackRetvalString(retval);
             return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
         }
         if (retval == TACK_OK_REJECTED) {
@@ -3654,7 +3658,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
         // Write out dynamic store contents if changed
         if (dynamicStore->getDirtyFlag()) {
-            LOG(INFO) << "TACK: STORE IS DIRTY, time: " << currentTime;
+            LOG(INFO) << "TACK: DYNAMIC STORE IS DIRTY, time: " << currentTime;
             transport_security_state_->TackDirtyNotify();
             dynamicStore->setDirtyFlag(false);
         }

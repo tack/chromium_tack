@@ -626,7 +626,6 @@ TransportSecurityState::TransportSecurityState()
 {
     staticStore_.setCryptoFuncs(tackNss);
     dynamicStore_.setCryptoFuncs(tackNss);
-    staticStore_.setRevocationStore(&dynamicStore_);
     dynamicStore_.setPinActivation(true);
 
     uint32_t initialTime = (base::GetBuildTime() - base::Time::UnixEpoch()).InMinutes();
