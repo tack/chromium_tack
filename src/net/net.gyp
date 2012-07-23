@@ -810,6 +810,8 @@
         'third_party/tackc/src/TackProcessing.h',
         'third_party/tackc/src/TackProcessing.c',
         'third_party/tackc/src/TackStoreFuncs.h',
+        'third_party/tackc/src/TackPinList.h',
+        'third_party/tackc/src/TackPinList.c',
       ],
       'defines': [
         'NET_IMPLEMENTATION',

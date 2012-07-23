@@ -3654,7 +3654,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
         // Write out dynamic store contents if changed
         if (dynamicStore->getDirtyFlag()) {
-            LOG(INFO) << "TACK: STORE IS DIRTY";
+            LOG(INFO) << "TACK: STORE IS DIRTY, time: " << currentTime;
             transport_security_state_->TackDirtyNotify();
             dynamicStore->setDirtyFlag(false);
         }
