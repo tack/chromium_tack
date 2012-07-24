@@ -496,10 +496,15 @@ void ProfileIOData::LazyInitialize() const {
       new TransportSecurityPersister(transport_security_state_.get(),
                                      profile_params_->path,
                                      is_incognito()));
-  tack_security_persister_.reset(
+  tack_security_persister_static.reset(
       new TackSecurityPersister(transport_security_state_.get(),
-                                     profile_params_->path,
-                                     is_incognito()));
+                                profile_params_->path,
+                                is_incognito(), false, "TackStaticPins"));
+  tack_security_persister_dynamic.reset(
+      new TackSecurityPersister(transport_security_state_.get(),
+                                profile_params_->path,
+                                is_incognito(), true, "TackDynamicPins"));
+
   const std::string& serialized =
       command_line.GetSwitchValueASCII(switches::kHstsHosts);
   transport_security_persister_.get()->DeserializeFromCommandLine(serialized);

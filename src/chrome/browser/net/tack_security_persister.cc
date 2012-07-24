@@ -61,15 +61,18 @@ class TackSecurityPersister::Loader {
 TackSecurityPersister::TackSecurityPersister(
     TransportSecurityState* state,
     const FilePath& profile_path,
-    bool readonly)
+    bool readonly,
+    bool dynamic,
+    const char* filename)
     : transport_security_state_(state),
-      writer_(profile_path.AppendASCII("TackDynamicPins"),
+      writer_(profile_path.AppendASCII(filename),
               BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)),
       readonly_(readonly),
+      dynamic_(dynamic),
       weak_ptr_factory_(ALLOW_THIS_IN_INITIALIZER_LIST(this)) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
-  transport_security_state_->SetTackDelegate(this);
+  transport_security_state_->SetTackDelegate(dynamic_, this);
 
   Loader* loader = new Loader(weak_ptr_factory_.GetWeakPtr(), writer_.path());
   BrowserThread::PostTaskAndReply(
@@ -84,7 +87,7 @@ TackSecurityPersister::~TackSecurityPersister() {
   if (writer_.HasPendingWrite())
     writer_.DoScheduledWrite();
 
-  transport_security_state_->SetTackDelegate(NULL);
+  transport_security_state_->SetTackDelegate(dynamic_, NULL);
 }
 
 void TackSecurityPersister::StateIsDirty(
@@ -99,7 +102,11 @@ void TackSecurityPersister::StateIsDirty(
 bool TackSecurityPersister::SerializeData(std::string* output) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
-  TackStore* store = transport_security_state_->GetTackDynamicStore();
+  TackStore* store = NULL;
+  if (dynamic_)
+      store = transport_security_state_->GetTackDynamicStore();
+  else
+      store = transport_security_state_->GetTackStaticStore();
   
   uint32_t outputLen = 1024 * 1024;
   char* outputStr = new char[1024 * 1024];
@@ -120,12 +127,19 @@ bool TackSecurityPersister::SerializeData(std::string* output) {
 void TackSecurityPersister::CompleteLoad(const std::string& state) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
-  TackStore* store = transport_security_state_->GetTackDynamicStore();
+  TackStore* store = NULL;
+  if (dynamic_) {
+      LOG(INFO) << "TACK: Deserializing dynamic state";
+      store = transport_security_state_->GetTackDynamicStore();
+  }
+  else {
+      LOG(INFO) << "TACK: Deserializing static state";
+      store = transport_security_state_->GetTackStaticStore();
+  }
   
   uint32_t outputLen = state.size();
-  LOG(WARNING) << "TACK ABOUT TO DESERIALIZE STATE";
 
   TACK_RETVAL retval = store->deserialize(state.data(), &outputLen);
   if (retval != TACK_OK)
-      LOG(ERROR) << "Failed to deserialize state: " << state;
+      LOG(ERROR) << "TACK: Failed to deserialize state: " << state;
 }

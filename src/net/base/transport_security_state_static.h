@@ -1436,15 +1436,6 @@ static const char* const kTor2webAcceptableCerts[] = {
   kNoRejectedPublicKeys, \
 }
 
-static const char* const kTesttackioAcceptableCerts[] = {
-  NULL,
-};
-#define kTesttackioPins { \
-  kTesttackioAcceptableCerts, \
-  kNoRejectedPublicKeys, \
-  "j6det.kfbj5.oweph.mdyxi.wvbch", 0 \
-}
-
 #define kNoPins {\
   NULL, NULL, \
 }
@@ -1566,7 +1557,6 @@ static const struct HSTSPreload kPreloadedSTS[] = {
   {13, true, "\007tor2web\003org", false, kTor2webPins, DOMAIN_TOR2WEB_ORG },
   {25, true, "\010business\007medbank\003com\002mt", false, kNoPins, DOMAIN_NOT_PINNED },
   {14, true, "\005arivo\003com\002br", false, kNoPins, DOMAIN_NOT_PINNED },
-  {15, false, "\005testX\004tack\002io", true, kTesttackioPins, DOMAIN_TACK_IO },
 };
 static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
 

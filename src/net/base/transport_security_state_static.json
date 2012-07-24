@@ -130,10 +130,6 @@
         "AlphaSSL_G2",
         "Tor2web"
       ]
-    },
-    {
-        "name": "testtackio",
-        "tack_pin": ["j6det.kfbj5.oweph.mdyxi.wvbch", "0"]
     }
   ],
 
@@ -272,7 +268,6 @@
     { "name": "tor2web.org", "include_subdomains": true, "pins": "tor2web" },
     { "name": "business.medbank.com.mt", "include_subdomains": true },
     { "name": "arivo.com.br", "include_subdomains": true },
-    { "name": "testX.tack.io", "mode": "force-https", "pins": "testtackio"},
 
     // Entries that are only valid if the client supports SNI.
     { "name": "gmail.com", "mode": "force-https", "pins": "google", "snionly": true },

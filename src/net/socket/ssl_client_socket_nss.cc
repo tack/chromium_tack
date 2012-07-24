@@ -3615,8 +3615,11 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         TackProcessingContext ctx;
         retval = tackProcessWellFormed(&ctx, tackExt, tackExtLen, keyHash,
                                        currentTime, tackNss);
-        if (retval != TACK_OK)
+        if (retval != TACK_OK) {
+            LOG(WARNING) << "TACK: Connection ERROR - not well-formed: " << name <<
+                ", " << tackRetvalString(retval);
             return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+        }
         
         // Check static store
         bool invalidateOnly = false;
@@ -3656,10 +3659,15 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
             LOG(INFO) << "TACK: Connection unpinned by TACK dynamic store: " << name;
         }
 
-        // Write out dynamic store contents if changed
+        // Write out store contents if changed
+        if (staticStore->getDirtyFlag()) {
+            LOG(INFO) << "TACK: Static store is DIRTY, time: " << currentTime;
+            transport_security_state_->TackDirtyNotify(false);
+            staticStore->setDirtyFlag(false);
+        }
         if (dynamicStore->getDirtyFlag()) {
-            LOG(INFO) << "TACK: DYNAMIC STORE IS DIRTY, time: " << currentTime;
-            transport_security_state_->TackDirtyNotify();
+            LOG(INFO) << "TACK: Dynamic store is DIRTY, time: " << currentTime;
+            transport_security_state_->TackDirtyNotify(true);
             dynamicStore->setDirtyFlag(false);
         }
         

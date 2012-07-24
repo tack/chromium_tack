@@ -17,8 +17,10 @@ class TackSecurityPersister
       public ImportantFileWriter::DataSerializer {
  public:
   TackSecurityPersister(net::TransportSecurityState* state,
-                             const FilePath& profile_path,
-                             bool readonly);
+                        const FilePath& profile_path,
+                        bool readonly,
+                        bool dynamic,
+                        const char* filename);
   virtual ~TackSecurityPersister();
 
   // Called by the TransportSecurityState when it changes its state.
@@ -44,6 +46,8 @@ private:
 
   // Whether or not we're in read-only mode.
   const bool readonly_;
+
+  const bool dynamic_;
 
   base::WeakPtrFactory<TackSecurityPersister> weak_ptr_factory_;
 

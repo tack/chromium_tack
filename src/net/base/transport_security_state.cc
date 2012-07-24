@@ -58,9 +58,12 @@ void TransportSecurityState::SetDelegate(
   delegate_ = delegate;
 }
 
-void TransportSecurityState::SetTackDelegate(
+void TransportSecurityState::SetTackDelegate(bool dynamic,
     TransportSecurityState::TackDelegate* tackDelegate) {
-  tackDelegate_ = tackDelegate;
+    if (dynamic)
+        tackDynamicDelegate_ = tackDelegate;
+    else
+        tackStaticDelegate_ = tackDelegate;
 }
 
 
@@ -500,11 +503,13 @@ void TransportSecurityState::DirtyNotify() {
     delegate_->StateIsDirty(this);
 }
 
-void TransportSecurityState::TackDirtyNotify() {
+void TransportSecurityState::TackDirtyNotify(bool dynamic) {
   DCHECK(CalledOnValidThread());
 
-  if (tackDelegate_)
-    tackDelegate_->StateIsDirty(this);
+  if (dynamic && tackDynamicDelegate_)
+    tackDynamicDelegate_->StateIsDirty(this);
+  if (!dynamic && tackStaticDelegate_)
+    tackStaticDelegate_->StateIsDirty(this);
 }
 
 
@@ -591,8 +596,6 @@ enum SecondLevelDomainName {
 struct PublicKeyPins {
   const char* const* required_hashes;
   const char* const* excluded_hashes;
-  char tackKeyFingerprint[30];
-  uint8 tackMinGeneration;
 };
 
 struct HSTSPreload {
@@ -606,37 +609,12 @@ struct HSTSPreload {
 
 #include "net/base/transport_security_state_static.h"
 
-static void ConsiderPreloadForTackStore(TackStore* store, 
-                                        const HSTSPreload* preload,
-                                        uint32_t initialTime, 
-                                        uint32_t endTime)
-{
-    if (strlen(preload->pins.tackKeyFingerprint) != 0) {
-        TackNameRecord nameRecord;
-        strcpy(nameRecord.fingerprint, preload->pins.tackKeyFingerprint); 
-        nameRecord.initialTime = initialTime;
-        nameRecord.endTime = endTime;
-        std::string name(preload->dns_name, preload->length);
-        store->setPin(name, &nameRecord, preload->pins.tackMinGeneration);
-    }    
-}
-
 TransportSecurityState::TransportSecurityState()
-    : delegate_(NULL), tackDelegate_(NULL) 
+    : delegate_(NULL), tackStaticDelegate_(NULL), tackDynamicDelegate_(NULL) 
 {
     staticStore_.setCryptoFuncs(tackNss);
     dynamicStore_.setCryptoFuncs(tackNss);
     dynamicStore_.setPinActivation(true);
-
-    uint32_t initialTime = (base::GetBuildTime() - base::Time::UnixEpoch()).InMinutes();
-    uint32_t endTime = 0xFFFFFFFF; // Active forever?! - change this
-
-    for (size_t count=0; count < kNumPreloadedSTS; count++)
-        ConsiderPreloadForTackStore(&staticStore_, &kPreloadedSTS[count],
-                                    initialTime, endTime);
-    for (size_t count=0; count < kNumPreloadedSNISTS; count++)
-        ConsiderPreloadForTackStore(&staticStore_, &kPreloadedSNISTS[count],
-                                    initialTime, endTime);
 }
 
 static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
@@ -669,8 +647,6 @@ static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
             hash++;
           }
         }
-        out->tackKeyFingerprint = entries[j].pins.tackKeyFingerprint;
-        out->tackMinGeneration = entries[j].pins.tackMinGeneration;
       }
       return true;
     }

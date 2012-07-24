@@ -159,9 +159,6 @@ class NET_EXPORT TransportSecurityState
     // certificate chain.
     FingerprintVector bad_static_spki_hashes;
 
-    std::string tackKeyFingerprint;
-    uint8 tackMinGeneration;
-
     // The following members are not valid when stored in |enabled_hosts_|:
 
     // The domain which matched during a search for this DomainState entry.
@@ -190,7 +187,7 @@ class NET_EXPORT TransportSecurityState
   // Assign a |Delegate| for persisting the transport security state. If
   // |NULL|, state will not be persisted. Caller owns |delegate|.
   void SetDelegate(Delegate* delegate);
-  void SetTackDelegate(TackDelegate* delegate);
+  void SetTackDelegate(bool dynamic, TackDelegate* delegate);
 
   // Enable TransportSecurity for |host|. |state| supercedes any previous
   // state for the |host|, including static entries.
@@ -297,7 +294,7 @@ class NET_EXPORT TransportSecurityState
   TackStore* GetTackStaticStore() {return &staticStore_;}
   TackStore* GetTackDynamicStore() {return &dynamicStore_;}
 
-  void TackDirtyNotify();
+  void TackDirtyNotify(bool dynamic);
 
  private:
 
@@ -314,7 +311,9 @@ class NET_EXPORT TransportSecurityState
 
   Delegate* delegate_;
 
-  TackDelegate* tackDelegate_;
+  TackDelegate* tackStaticDelegate_;
+  TackDelegate* tackDynamicDelegate_;
+
   TackStoreDefault staticStore_;
   TackStoreDefault dynamicStore_;
 
