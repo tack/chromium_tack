@@ -4,7 +4,6 @@
 
 #include "chrome/browser/net/tack_security_persister.h"
 
-#include "base/base64.h"
 #include "base/bind.h"
 #include "base/file_path.h"
 #include "base/file_util.h"
@@ -12,16 +11,11 @@
 #include "base/json/json_writer.h"
 #include "base/message_loop.h"
 #include "base/path_service.h"
-#include "base/values.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_thread.h"
-#include "crypto/sha2.h"
 #include "net/base/transport_security_state.h"
-#include "net/base/x509_certificate.h"
 
 using content::BrowserThread;
-using net::Fingerprint;
-using net::FingerprintVector;
 using net::TransportSecurityState;
 
 namespace {
@@ -122,131 +116,16 @@ bool TackSecurityPersister::SerializeData(std::string* output) {
   return true;
 }
 
-bool TackSecurityPersister::LoadEntries(const std::string& serialized,
-                                             bool* dirty) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-
-  //transport_security_state_->Clear(); // !!! Replace w/some TackClear() ?
-  return Deserialize(serialized, false, dirty, transport_security_state_);
-}
-
-// static
-bool TackSecurityPersister::Deserialize(const std::string& serialized,
-                                             bool forced,
-                                             bool* dirty,
-                                             TransportSecurityState* state) {
-/*
-  scoped_ptr<Value> value(base::JSONReader::Read(serialized));
-  ListValue* list_value;
-  if (!value.get() || !value->GetAsList(&list_value))
-    return false;
-
-  const base::Time current_time(base::Time::Now());
-  bool dirtied = false;
-
-
-  for (int count=0; count != list_value.GetSize(); count++) {
-      ListValue* entry;
-      list_value.GetList(count, &entry);
-      
-      
-
-  }
-
-  for (DictionaryValue::key_iterator i = dict_value->begin_keys();
-       i != dict_value->end_keys(); ++i) {
-    DictionaryValue* parsed;
-    if (!dict_value->GetDictionaryWithoutPathExpansion(*i, &parsed)) {
-      LOG(WARNING) << "Could not parse entry " << *i << "; skipping entry";
-      continue;
-    }
-
-    std::string mode_string;
-    double created;
-    double expiry;
-    double dynamic_spki_hashes_expiry = 0.0;
-    TransportSecurityState::DomainState domain_state;
-
-    if (!parsed->GetBoolean(kIncludeSubdomains,
-                            &domain_state.include_subdomains) ||
-        !parsed->GetString(kMode, &mode_string) ||
-        !parsed->GetDouble(kExpiry, &expiry)) {
-      LOG(WARNING) << "Could not parse some elements of entry " << *i
-                   << "; skipping entry";
-      continue;
-    }
-
-    // Don't fail if this key is not present.
-    parsed->GetDouble(kDynamicSPKIHashesExpiry,
-                      &dynamic_spki_hashes_expiry);
-
-    ListValue* pins_list = NULL;
-    // preloaded_spki_hashes is a legacy synonym for static_spki_hashes.
-    if (parsed->GetList(kStaticSPKIHashes, &pins_list))
-      SPKIHashesFromListValue(*pins_list, &domain_state.static_spki_hashes);
-    else if (parsed->GetList(kPreloadedSPKIHashes, &pins_list))
-      SPKIHashesFromListValue(*pins_list, &domain_state.static_spki_hashes);
-
-    if (parsed->GetList(kDynamicSPKIHashes, &pins_list))
-      SPKIHashesFromListValue(*pins_list, &domain_state.dynamic_spki_hashes);
-
-    if (mode_string == kForceHTTPS || mode_string == kStrict) {
-      domain_state.upgrade_mode =
-          TransportSecurityState::DomainState::MODE_FORCE_HTTPS;
-    } else if (mode_string == kDefault || mode_string == kPinningOnly) {
-      domain_state.upgrade_mode =
-          TransportSecurityState::DomainState::MODE_DEFAULT;
-    } else {
-      LOG(WARNING) << "Unknown TransportSecurityState mode string "
-                   << mode_string << " found for entry " << *i
-                   << "; skipping entry";
-      continue;
-    }
-
-    domain_state.upgrade_expiry = base::Time::FromDoubleT(expiry);
-    domain_state.dynamic_spki_hashes_expiry =
-        base::Time::FromDoubleT(dynamic_spki_hashes_expiry);
-    if (parsed->GetDouble(kCreated, &created)) {
-      domain_state.created = base::Time::FromDoubleT(created);
-    } else {
-      // We're migrating an old entry with no creation date. Make sure we
-      // write the new date back in a reasonable time frame.
-      dirtied = true;
-      domain_state.created = base::Time::Now();
-    }
-
-    if (domain_state.upgrade_expiry <= current_time &&
-        domain_state.dynamic_spki_hashes_expiry <= current_time) {
-      // Make sure we dirty the state if we drop an entry.
-      dirtied = true;
-      continue;
-    }
-
-    std::string hashed = ExternalStringToHashedDomain(*i);
-    if (hashed.empty()) {
-      dirtied = true;
-      continue;
-    }
-
-    if (forced)
-      state->AddOrUpdateForcedHosts(hashed, domain_state);
-    else
-      state->AddOrUpdateEnabledHosts(hashed, domain_state);
-  }
-
-  *dirty = dirtied;
-  */
-  return true;
-}
 
 void TackSecurityPersister::CompleteLoad(const std::string& state) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
-  bool dirty = false;
-  if (!LoadEntries(state, &dirty)) {
-    LOG(ERROR) << "Failed to deserialize state: " << state;
-    return;
-  }
-  if (dirty)
-    StateIsDirty(transport_security_state_);
+  TackStore* store = transport_security_state_->GetTackDynamicStore();
+  
+  uint32_t outputLen = state.size();
+  LOG(WARNING) << "TACK ABOUT TO DESERIALIZE STATE";
+
+  TACK_RETVAL retval = store->deserialize(state.data(), &outputLen);
+  if (retval != TACK_OK)
+      LOG(ERROR) << "Failed to deserialize state: " << state;
 }
