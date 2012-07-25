@@ -11,6 +11,7 @@
 #include "base/basictypes.h"
 #include "base/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/stl_util.h"
 #include "base/stringprintf.h"
 #include "content/public/test/test_browser_thread.h"
@@ -84,6 +85,9 @@ class HttpPipeliningCompatibilityClientTest : public testing::Test {
 
  protected:
   virtual void SetUp() OVERRIDE {
+    // Start up a histogram recorder.
+    // TODO(rtenneti): Leaks StatisticsRecorder and will update suppressions.
+    base::StatisticsRecorder::Initialize();
     ASSERT_TRUE(test_server_.Start());
     context_ = new TestURLRequestContextGetter(
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
@@ -191,9 +195,9 @@ class HttpPipeliningCompatibilityClientTest : public testing::Test {
  private:
   base::Histogram::SampleSet GetHistogram(const char* name) {
     base::Histogram::SampleSet sample;
-    base::Histogram* current_histogram = NULL;
     base::Histogram* cached_histogram = NULL;
-    base::StatisticsRecorder::FindHistogram(name, &current_histogram);
+    base::Histogram* current_histogram =
+        base::StatisticsRecorder::FindHistogram(name);
     if (ContainsKey(histograms_, name)) {
       cached_histogram = histograms_[name];
     }
@@ -224,7 +228,6 @@ class HttpPipeliningCompatibilityClientTest : public testing::Test {
   static std::map<std::string, base::Histogram*> histograms_;
   std::map<std::string, base::Histogram::SampleSet> samples_;
   std::map<std::string, base::Histogram::SampleSet> original_samples_;
-  base::StatisticsRecorder recorder_;
 };
 
 // static

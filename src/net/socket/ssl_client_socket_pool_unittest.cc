@@ -99,7 +99,6 @@ class SSLClientSocketPoolTest : public testing::Test {
         NULL /* cert_verifier */,
         NULL /* server_bound_cert_service */,
         NULL /* transport_security_state */,
-        NULL /* ssl_host_info_factory */,
         ""   /* ssl_session_cache_shard */,
         &socket_factory_,
         transport_pool ? &transport_socket_pool_ : NULL,
@@ -146,6 +145,8 @@ class SSLClientSocketPoolTest : public testing::Test {
     params.http_server_properties = &http_server_properties_;
     return new HttpNetworkSession(params);
   }
+
+  void TestIPPoolingDisabled(SSLSocketDataProvider* ssl);
 
   MockClientSocketFactory socket_factory_;
   MockCachingHostResolver host_resolver_;
@@ -329,7 +330,7 @@ TEST_F(SSLClientSocketPoolTest, DirectWithNPN) {
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
-  EXPECT_TRUE(ssl_socket->was_npn_negotiated());
+  EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
 }
 
 TEST_F(SSLClientSocketPoolTest, DirectNoSPDY) {
@@ -381,7 +382,7 @@ TEST_F(SSLClientSocketPoolTest, DirectGotSPDY) {
   EXPECT_TRUE(handle.socket());
 
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
-  EXPECT_TRUE(ssl_socket->was_npn_negotiated());
+  EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
   std::string proto;
   std::string server_protos;
   ssl_socket->GetNextProto(&proto, &server_protos);
@@ -413,7 +414,7 @@ TEST_F(SSLClientSocketPoolTest, DirectGotBonusSPDY) {
   EXPECT_TRUE(handle.socket());
 
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
-  EXPECT_TRUE(ssl_socket->was_npn_negotiated());
+  EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
   std::string proto;
   std::string server_protos;
   ssl_socket->GetNextProto(&proto, &server_protos);
@@ -713,7 +714,7 @@ TEST_F(SSLClientSocketPoolTest, IPPooling) {
   EXPECT_TRUE(handle->socket());
 
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle->socket());
-  EXPECT_TRUE(ssl_socket->was_npn_negotiated());
+  EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
   std::string proto;
   std::string server_protos;
   ssl_socket->GetNextProto(&proto, &server_protos);
@@ -738,9 +739,8 @@ TEST_F(SSLClientSocketPoolTest, IPPooling) {
   session_->spdy_session_pool()->CloseAllSessions();
 }
 
-// Verifies that an SSL connection with client authentication disables SPDY IP
-// pooling.
-TEST_F(SSLClientSocketPoolTest, IPPoolingClientCert) {
+void SSLClientSocketPoolTest::TestIPPoolingDisabled(
+    SSLSocketDataProvider* ssl) {
   const int kTestPort = 80;
   struct TestHosts {
     std::string name;
@@ -775,12 +775,7 @@ TEST_F(SSLClientSocketPoolTest, IPPoolingClientCert) {
   };
   StaticSocketDataProvider data(reads, arraysize(reads), NULL, 0);
   socket_factory_.AddSocketDataProvider(&data);
-  SSLSocketDataProvider ssl(ASYNC, OK);
-  ssl.cert = X509Certificate::CreateFromBytes(
-      reinterpret_cast<const char*>(webkit_der), sizeof(webkit_der));
-  ssl.client_cert_sent = true;
-  ssl.SetNextProto(kProtoSPDY2);
-  socket_factory_.AddSSLSocketDataProvider(&ssl);
+  socket_factory_.AddSSLSocketDataProvider(ssl);
 
   CreatePool(true /* tcp pool */, false, false);
   scoped_refptr<SSLSocketParams> params = SSLParams(ProxyServer::SCHEME_DIRECT,
@@ -798,7 +793,7 @@ TEST_F(SSLClientSocketPoolTest, IPPoolingClientCert) {
   EXPECT_TRUE(handle->socket());
 
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle->socket());
-  EXPECT_TRUE(ssl_socket->was_npn_negotiated());
+  EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
   std::string proto;
   std::string server_protos;
   ssl_socket->GetNextProto(&proto, &server_protos);
@@ -820,6 +815,25 @@ TEST_F(SSLClientSocketPoolTest, IPPoolingClientCert) {
   EXPECT_FALSE(session_->spdy_session_pool()->HasSession(test_hosts[1].pair));
 
   session_->spdy_session_pool()->CloseAllSessions();
+}
+
+// Verifies that an SSL connection with client authentication disables SPDY IP
+// pooling.
+TEST_F(SSLClientSocketPoolTest, IPPoolingClientCert) {
+  SSLSocketDataProvider ssl(ASYNC, OK);
+  ssl.cert = X509Certificate::CreateFromBytes(
+      reinterpret_cast<const char*>(webkit_der), sizeof(webkit_der));
+  ssl.client_cert_sent = true;
+  ssl.SetNextProto(kProtoSPDY2);
+  TestIPPoolingDisabled(&ssl);
+}
+
+// Verifies that an SSL connection with channel ID disables SPDY IP pooling.
+TEST_F(SSLClientSocketPoolTest, IPPoolingChannelID) {
+  SSLSocketDataProvider ssl(ASYNC, OK);
+  ssl.channel_id_sent = true;
+  ssl.SetNextProto(kProtoSPDY2);
+  TestIPPoolingDisabled(&ssl);
 }
 
 // It would be nice to also test the timeouts in SSLClientSocketPool.

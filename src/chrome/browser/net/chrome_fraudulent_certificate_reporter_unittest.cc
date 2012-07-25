@@ -121,11 +121,11 @@ class NotSendingTestReporter : public TestReporter {
 // This class doesn't do anything now, but in near future versions it will.
 class MockURLRequest : public net::URLRequest {
  public:
-  MockURLRequest() : net::URLRequest(GURL(""), NULL), passed_(false) {
+  MockURLRequest(net::URLRequestContext* context)
+      : net::URLRequest(GURL(""), NULL, context) {
   }
 
  private:
-  bool passed_;
 };
 
 // A ChromeFraudulentCertificateReporter that uses a MockURLRequest, but is
@@ -135,8 +135,9 @@ class MockReporter : public ChromeFraudulentCertificateReporter {
   explicit MockReporter(net::URLRequestContext* request_context)
     : ChromeFraudulentCertificateReporter(request_context) {}
 
-  virtual net::URLRequest* CreateURLRequest() OVERRIDE {
-    return new MockURLRequest();
+  virtual net::URLRequest* CreateURLRequest(
+      net::URLRequestContext* context) OVERRIDE {
+    return new MockURLRequest(context);
   }
 
   virtual void SendReport(

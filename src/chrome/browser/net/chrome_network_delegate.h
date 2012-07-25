@@ -4,7 +4,6 @@
 
 #ifndef CHROME_BROWSER_NET_CHROME_NETWORK_DELEGATE_H_
 #define CHROME_BROWSER_NET_CHROME_NETWORK_DELEGATE_H_
-#pragma once
 
 #include "base/basictypes.h"
 #include "base/compiler_specific.h"
@@ -12,12 +11,15 @@
 #include "net/base/network_delegate.h"
 
 class CookieSettings;
-class ExtensionEventRouterForwarder;
 class ExtensionInfoMap;
 class PrefService;
 template<class T> class PrefMember;
 
 typedef PrefMember<bool> BooleanPrefMember;
+
+namespace extensions {
+class EventRouterForwarder;
+}
 
 namespace policy {
 class URLBlacklistManager;
@@ -34,7 +36,7 @@ class ChromeNetworkDelegate : public net::NetworkDelegate {
   // shutdown. If |cookie_settings| is NULL, all cookies are enabled,
   // otherwise, the settings are enforced on all observed network requests.
   ChromeNetworkDelegate(
-      ExtensionEventRouterForwarder* event_router,
+      extensions::EventRouterForwarder* event_router,
       ExtensionInfoMap* extension_info_map,
       const policy::URLBlacklistManager* url_blacklist_manager,
       void* profile,
@@ -97,7 +99,7 @@ class ChromeNetworkDelegate : public net::NetworkDelegate {
       net::SocketStream* stream,
       const net::CompletionCallback& callback) OVERRIDE;
 
-  scoped_refptr<ExtensionEventRouterForwarder> event_router_;
+  scoped_refptr<extensions::EventRouterForwarder> event_router_;
   void* profile_;
   scoped_refptr<CookieSettings> cookie_settings_;
 

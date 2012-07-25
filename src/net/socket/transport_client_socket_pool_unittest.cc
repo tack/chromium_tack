@@ -20,7 +20,6 @@
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_histograms.h"
 #include "net/socket/socket_test_util.h"
-#include "net/socket/ssl_host_info.h"
 #include "net/socket/stream_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -90,8 +89,14 @@ class MockClientSocket : public StreamSocket {
   virtual base::TimeDelta GetConnectTimeMicros() const {
     return base::TimeDelta::FromMicroseconds(-1);
   }
+  virtual bool WasNpnNegotiated() const {
+    return false;
+  }
   virtual NextProto GetNegotiatedProtocol() const {
     return kProtoUnknown;
+  }
+  virtual bool GetSSLInfo(SSLInfo* ssl_info) {
+    return false;
   }
 
   // Socket implementation.
@@ -147,8 +152,14 @@ class MockFailingClientSocket : public StreamSocket {
   virtual base::TimeDelta GetConnectTimeMicros() const {
     return base::TimeDelta::FromMicroseconds(-1);
   }
+  virtual bool WasNpnNegotiated() const {
+    return false;
+  }
   virtual NextProto GetNegotiatedProtocol() const {
     return kProtoUnknown;
+  }
+  virtual bool GetSSLInfo(SSLInfo* ssl_info) {
+    return false;
   }
 
   // Socket implementation.
@@ -229,8 +240,14 @@ class MockPendingClientSocket : public StreamSocket {
   virtual base::TimeDelta GetConnectTimeMicros() const {
     return base::TimeDelta::FromMicroseconds(-1);
   }
+  virtual bool WasNpnNegotiated() const {
+    return false;
+  }
   virtual NextProto GetNegotiatedProtocol() const {
     return kProtoUnknown;
+  }
+  virtual bool GetSSLInfo(SSLInfo* ssl_info) {
+    return false;
   }
 
   // Socket implementation.
@@ -336,10 +353,8 @@ class MockClientSocketFactory : public ClientSocketFactory {
       ClientSocketHandle* transport_socket,
       const HostPortPair& host_and_port,
       const SSLConfig& ssl_config,
-      SSLHostInfo* ssl_host_info,
       const SSLClientSocketContext& context) {
     NOTIMPLEMENTED();
-    delete ssl_host_info;
     return NULL;
   }
 

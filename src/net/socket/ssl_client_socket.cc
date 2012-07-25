@@ -12,7 +12,7 @@ SSLClientSocket::SSLClientSocket()
     : was_npn_negotiated_(false),
       was_spdy_negotiated_(false),
       protocol_negotiated_(kProtoUnknown),
-      domain_bound_cert_type_(CLIENT_CERT_INVALID_TYPE) {
+      channel_id_sent_(false) {
 }
 
 // static
@@ -77,6 +77,10 @@ std::string SSLClientSocket::ServerProtosToString(
   return JoinString(server_protos_with_commas, ',');
 }
 
+bool SSLClientSocket::WasNpnNegotiated() const {
+  return was_npn_negotiated_;
+}
+
 NextProto SSLClientSocket::GetNegotiatedProtocol() const {
   return protocol_negotiated_;
 }
@@ -100,10 +104,6 @@ bool SSLClientSocket::IgnoreCertError(int error, int load_flags) {
   return false;
 }
 
-bool SSLClientSocket::was_npn_negotiated() const {
-  return was_npn_negotiated_;
-}
-
 bool SSLClientSocket::set_was_npn_negotiated(bool negotiated) {
   return was_npn_negotiated_ = negotiated;
 }
@@ -120,17 +120,12 @@ void SSLClientSocket::set_protocol_negotiated(NextProto protocol_negotiated) {
   protocol_negotiated_ = protocol_negotiated;
 }
 
-bool SSLClientSocket::WasDomainBoundCertSent() const {
-  return domain_bound_cert_type_ != CLIENT_CERT_INVALID_TYPE;
+bool SSLClientSocket::WasChannelIDSent() const {
+  return channel_id_sent_;
 }
 
-SSLClientCertType SSLClientSocket::domain_bound_cert_type() const {
-  return domain_bound_cert_type_;
-}
-
-SSLClientCertType SSLClientSocket::set_domain_bound_cert_type(
-    SSLClientCertType type) {
-  return domain_bound_cert_type_ = type;
+void SSLClientSocket::set_channel_id_sent(bool channel_id_sent) {
+  channel_id_sent_ = channel_id_sent;
 }
 
 }  // namespace net

@@ -404,18 +404,19 @@ SSLClientSocketWin::~SSLClientSocketWin() {
   Disconnect();
 }
 
-void SSLClientSocketWin::GetSSLInfo(SSLInfo* ssl_info) {
+bool SSLClientSocketWin::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->Reset();
   if (!server_cert_)
-    return;
+    return false;
 
   ssl_info->cert = server_cert_verify_result_.verified_cert;
   ssl_info->cert_status = server_cert_verify_result_.cert_status;
   ssl_info->public_key_hashes = server_cert_verify_result_.public_key_hashes;
   ssl_info->is_issued_by_known_root =
       server_cert_verify_result_.is_issued_by_known_root;
-  ssl_info->client_cert_sent = WasDomainBoundCertSent() ||
-      (ssl_config_.send_client_cert && ssl_config_.client_cert);
+  ssl_info->client_cert_sent =
+      ssl_config_.send_client_cert && ssl_config_.client_cert;
+  ssl_info->channel_id_sent = WasChannelIDSent();
   SecPkgContext_ConnectionInfo connection_info;
   SECURITY_STATUS status = QueryContextAttributes(
       &ctxt_, SECPKG_ATTR_CONNECTION_INFO, &connection_info);
@@ -447,6 +448,8 @@ void SSLClientSocketWin::GetSSLInfo(SSLInfo* ssl_info) {
 
   if (ssl_config_.version_fallback)
     ssl_info->connection_status |= SSL_CONNECTION_VERSION_FALLBACK;
+
+  return true;
 }
 
 void SSLClientSocketWin::GetSSLCertRequestInfo(

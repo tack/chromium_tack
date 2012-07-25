@@ -156,6 +156,7 @@
     { "name": "talk.google.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
     { "name": "hostedtalkgadget.google.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
     { "name": "plus.google.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
+    { "name": "script.google.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
 
     // Other Google related domain that must use HTTPS.
     { "name": "market.android.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
@@ -266,8 +267,17 @@
     { "name": "www.braintreepayments.com", "mode": "force-https" },
     { "name": "emailprivacytester.com", "mode": "force-https" },
     { "name": "tor2web.org", "include_subdomains": true, "pins": "tor2web" },
-    { "name": "business.medbank.com.mt", "include_subdomains": true },
-    { "name": "arivo.com.br", "include_subdomains": true },
+    { "name": "business.medbank.com.mt", "include_subdomains": true, "mode": "force-https" },
+    { "name": "arivo.com.br", "include_subdomains": true, "mode": "force-https" },
+    { "name": "www.apollo-auto.com", "include_subdomains": true, "mode": "force-https" },
+    { "name": "www.cueup.com", "include_subdomains": true, "mode": "force-https" },
+    { "name": "jitsi.org", "mode": "force-https" },
+    { "name": "www.jitsi.org", "mode": "force-https" },
+    { "name": "download.jitsi.org", "mode": "force-https" },
+    { "name": "sol.io", "include_subdomains": true, "mode": "force-https" },
+    { "name": "irccloud.com", "mode": "force-https" },
+    { "name": "www.irccloud.com", "mode": "force-https" },
+    { "name": "alpha.irccloud.com", "mode": "force-https" },
 
     // Entries that are only valid if the client supports SNI.
     { "name": "gmail.com", "mode": "force-https", "pins": "google", "snionly": true },

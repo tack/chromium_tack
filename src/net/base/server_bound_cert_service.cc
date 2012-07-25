@@ -22,7 +22,7 @@
 #include "crypto/ec_private_key.h"
 #include "googleurl/src/gurl.h"
 #include "net/base/net_errors.h"
-#include "net/base/registry_controlled_domain.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/server_bound_cert_store.h"
 #include "net/base/x509_certificate.h"
 #include "net/base/x509_util.h"
@@ -206,6 +206,8 @@ class ServerBoundCertServiceWorker {
                                                   &expiration_time_,
                                                   &private_key_,
                                                   &cert_);
+    DVLOG(1) << "GenerateCert " << server_identifier_ << " " << type_
+             << " returned " << error_;
 #if defined(USE_NSS)
     // Detach the thread from NSPR.
     // Calling NSS functions attaches the thread to NSPR, which stores
@@ -382,6 +384,9 @@ int ServerBoundCertService::GetDomainBoundCert(
     std::string* cert,
     const CompletionCallback& callback,
     RequestHandle* out_req) {
+  DVLOG(1) << __FUNCTION__ << " " << origin << " "
+           << (requested_types.empty() ? -1 : requested_types[0])
+           << (requested_types.size() > 1 ? "..." : "");
   DCHECK(CalledOnValidThread());
   base::TimeTicks request_start = base::TimeTicks::Now();
 
@@ -433,6 +438,8 @@ int ServerBoundCertService::GetDomainBoundCert(
       DVLOG(1) << "Cert store had cert of wrong type " << *type << " for "
                << domain;
     } else {
+      DVLOG(1) << "Cert store had valid cert for " << domain
+               << " of type " << *type;
       cert_store_hits_++;
       RecordGetDomainBoundCertResult(SYNC_SUCCESS);
       base::TimeDelta request_time = base::TimeTicks::Now() - request_start;

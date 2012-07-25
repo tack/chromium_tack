@@ -4,7 +4,6 @@
 
 #ifndef NET_BASE_SSL_CONFIG_SERVICE_H_
 #define NET_BASE_SSL_CONFIG_SERVICE_H_
-#pragma once
 
 #include <vector>
 
@@ -88,8 +87,7 @@ struct NET_EXPORT SSLConfig {
   std::vector<uint16> disabled_cipher_suites;
 
   bool cached_info_enabled;  // True if TLS cached info extension is enabled.
-  bool domain_bound_certs_enabled;  // True if TLS origin bound cert extension
-                                    // is enabled.
+  bool channel_id_enabled;  // True if TLS channel ID extension is enabled.
   bool false_start_enabled;  // True if we'll use TLS False Start.
 
   // TODO(wtc): move the following members to a new SSLParams structure.  They
@@ -153,7 +151,7 @@ class NET_EXPORT SSLConfigService
     //     version_min
     //     version_max
     //     disabled_cipher_suites
-    //     domain_bound_certs_enabled
+    //     channel_id_enabled
     //     false_start_enabled
     virtual void OnSSLConfigChanged() = 0;
 
@@ -181,6 +179,9 @@ class NET_EXPORT SSLConfigService
   // Sets and gets the default maximum protocol version.
   static void SetDefaultVersionMax(uint16 version_max);
   static uint16 default_version_max();
+
+  // Force channel ID support to be enabled.
+  static void EnableChannelIDTrial();
 
   // Is SNI available in this configuration?
   static bool IsSNIAvailable(SSLConfigService* service);

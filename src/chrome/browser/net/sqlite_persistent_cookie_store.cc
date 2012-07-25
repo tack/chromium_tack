@@ -27,7 +27,8 @@
 #include "chrome/browser/net/clear_on_exit_policy.h"
 #include "content/public/browser/browser_thread.h"
 #include "googleurl/src/gurl.h"
-#include "net/base/registry_controlled_domain.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/cookies/canonical_cookie.h"
 #include "sql/meta_table.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
@@ -83,13 +84,13 @@ class SQLitePersistentCookieStore::Backend
       const LoadedCallback& loaded_callback);
 
   // Batch a cookie addition.
-  void AddCookie(const net::CookieMonster::CanonicalCookie& cc);
+  void AddCookie(const net::CanonicalCookie& cc);
 
   // Batch a cookie access time update.
-  void UpdateCookieAccessTime(const net::CookieMonster::CanonicalCookie& cc);
+  void UpdateCookieAccessTime(const net::CanonicalCookie& cc);
 
   // Batch a cookie deletion.
-  void DeleteCookie(const net::CookieMonster::CanonicalCookie& cc);
+  void DeleteCookie(const net::CanonicalCookie& cc);
 
   // Commit pending operations as soon as possible.
   void Flush(const base::Closure& callback);
@@ -120,16 +121,15 @@ class SQLitePersistentCookieStore::Backend
       COOKIE_DELETE,
     } OperationType;
 
-    PendingOperation(OperationType op,
-                     const net::CookieMonster::CanonicalCookie& cc)
+    PendingOperation(OperationType op, const net::CanonicalCookie& cc)
         : op_(op), cc_(cc) { }
 
     OperationType op() const { return op_; }
-    const net::CookieMonster::CanonicalCookie& cc() const { return cc_; }
+    const net::CanonicalCookie& cc() const { return cc_; }
 
    private:
     OperationType op_;
-    net::CookieMonster::CanonicalCookie cc_;
+    net::CanonicalCookie cc_;
   };
 
  private:
@@ -179,7 +179,7 @@ class SQLitePersistentCookieStore::Backend
 
   // Batch a cookie operation (add or delete)
   void BatchOperation(PendingOperation::OperationType op,
-                      const net::CookieMonster::CanonicalCookie& cc);
+                      const net::CanonicalCookie& cc);
   // Commit our pending operations to the database.
   void Commit();
   // Close() executed on the background thread.
@@ -204,7 +204,7 @@ class SQLitePersistentCookieStore::Backend
   // Temporary buffer for cookies loaded from DB. Accumulates cookies to reduce
   // the number of messages sent to the IO thread. Sent back in response to
   // individual load requests for domain keys or when all loading completes.
-  std::vector<net::CookieMonster::CanonicalCookie*> cookies_;
+  std::vector<net::CanonicalCookie*> cookies_;
 
   // Map of domain keys(eTLD+1) to domains/hosts that are to be loaded from DB.
   std::map<std::string, std::set<std::string> > keys_to_load_;
@@ -253,7 +253,7 @@ class SQLitePersistentCookieStore::Backend
 // database can store session cookies as well as persistent cookies. Databases
 // of version 5 are incompatible with older versions of code. If a database of
 // version 5 is read by older code, session cookies will be treated as normal
-// cookies.
+// cookies. Currently, these fields are written, but not read anymore.
 //
 // In version 4, we migrated the time epoch.  If you open the DB with an older
 // version on Mac or Linux, the times will look wonky, but the file will likely
@@ -462,7 +462,7 @@ void SQLitePersistentCookieStore::Backend::Notify(
     bool load_success) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
-  std::vector<net::CookieMonster::CanonicalCookie*> cookies;
+  std::vector<net::CanonicalCookie*> cookies;
   {
     base::AutoLock locked(lock_);
     cookies.swap(cookies_);
@@ -608,13 +608,13 @@ bool SQLitePersistentCookieStore::Backend::LoadCookiesForDomains(
     return false;
   }
 
-  std::vector<net::CookieMonster::CanonicalCookie*> cookies;
+  std::vector<net::CanonicalCookie*> cookies;
   std::set<std::string>::const_iterator it = domains.begin();
   for (; it != domains.end(); ++it) {
     smt.BindString(0, *it);
     while (smt.Step()) {
-      scoped_ptr<net::CookieMonster::CanonicalCookie> cc(
-          new net::CookieMonster::CanonicalCookie(
+      scoped_ptr<net::CanonicalCookie> cc(
+          new net::CanonicalCookie(
               // The "source" URL is not used with persisted cookies.
               GURL(),                                         // Source
               smt.ColumnString(2),                            // name
@@ -627,9 +627,7 @@ bool SQLitePersistentCookieStore::Backend::LoadCookiesForDomains(
               Time::FromInternalValue(smt.ColumnInt64(5)),    // expires_utc
               Time::FromInternalValue(smt.ColumnInt64(8)),    // last_access_utc
               smt.ColumnInt(6) != 0,                          // secure
-              smt.ColumnInt(7) != 0,                          // httponly
-              smt.ColumnInt(9) != 0,                          // has_expires
-              smt.ColumnInt(10) != 0));                       // is_persistent
+              smt.ColumnInt(7) != 0));                        // httponly
       DLOG_IF(WARNING,
               cc->CreationDate() > Time::Now()) << L"CreationDate too recent";
       cookies_per_origin_[CookieOrigin(cc->Domain(), cc->IsSecure())]++;
@@ -753,23 +751,23 @@ bool SQLitePersistentCookieStore::Backend::EnsureDatabaseVersion() {
 }
 
 void SQLitePersistentCookieStore::Backend::AddCookie(
-    const net::CookieMonster::CanonicalCookie& cc) {
+    const net::CanonicalCookie& cc) {
   BatchOperation(PendingOperation::COOKIE_ADD, cc);
 }
 
 void SQLitePersistentCookieStore::Backend::UpdateCookieAccessTime(
-    const net::CookieMonster::CanonicalCookie& cc) {
+    const net::CanonicalCookie& cc) {
   BatchOperation(PendingOperation::COOKIE_UPDATEACCESS, cc);
 }
 
 void SQLitePersistentCookieStore::Backend::DeleteCookie(
-    const net::CookieMonster::CanonicalCookie& cc) {
+    const net::CanonicalCookie& cc) {
   BatchOperation(PendingOperation::COOKIE_DELETE, cc);
 }
 
 void SQLitePersistentCookieStore::Backend::BatchOperation(
     PendingOperation::OperationType op,
-    const net::CookieMonster::CanonicalCookie& cc) {
+    const net::CanonicalCookie& cc) {
   // Commit every 30 seconds.
   static const int kCommitIntervalMs = 30 * 1000;
   // Commit right away if we have more than 512 outstanding operations.
@@ -854,7 +852,7 @@ void SQLitePersistentCookieStore::Backend::Commit() {
         add_smt.BindInt(6, po->cc().IsSecure());
         add_smt.BindInt(7, po->cc().IsHttpOnly());
         add_smt.BindInt64(8, po->cc().LastAccessDate().ToInternalValue());
-        add_smt.BindInt(9, po->cc().DoesExpire());
+        add_smt.BindInt(9, po->cc().IsPersistent());
         add_smt.BindInt(10, po->cc().IsPersistent());
         if (!add_smt.Run())
           NOTREACHED() << "Could not add a cookie to the DB.";
@@ -999,20 +997,18 @@ void SQLitePersistentCookieStore::LoadCookiesForKey(
   backend_->LoadCookiesForKey(key, loaded_callback);
 }
 
-void SQLitePersistentCookieStore::AddCookie(
-    const net::CookieMonster::CanonicalCookie& cc) {
+void SQLitePersistentCookieStore::AddCookie(const net::CanonicalCookie& cc) {
   if (backend_.get())
     backend_->AddCookie(cc);
 }
 
 void SQLitePersistentCookieStore::UpdateCookieAccessTime(
-    const net::CookieMonster::CanonicalCookie& cc) {
+    const net::CanonicalCookie& cc) {
   if (backend_.get())
     backend_->UpdateCookieAccessTime(cc);
 }
 
-void SQLitePersistentCookieStore::DeleteCookie(
-    const net::CookieMonster::CanonicalCookie& cc) {
+void SQLitePersistentCookieStore::DeleteCookie(const net::CanonicalCookie& cc) {
   if (backend_.get())
     backend_->DeleteCookie(cc);
 }

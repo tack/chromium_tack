@@ -1,15 +1,15 @@
 10
 
 dir
-142632
+148271
 https://src.chromium.org/chrome/trunk/src/chrome/browser/net/gaia
 https://src.chromium.org/chrome
 
 
 
-2012-06-08T22:44:16.384161Z
-141309
-avi@chromium.org
+2012-07-18T13:13:34.571072Z
+147222
+battre@chromium.org
 
 
 
@@ -32,11 +32,11 @@ file
 
 
 
-2012-06-15T03:14:12.000000Z
-8d2681f06b71419cc1fde81e0662b7c9
-2011-10-04T15:47:14.923756Z
-103908
-mnissler@chromium.org
+2012-07-25T00:00:57.000000Z
+899b7e22953454016595621ce10456c6
+2012-07-11T19:01:43.570763Z
+146163
+ajwong@chromium.org
 has-props
 
 
@@ -58,7 +58,7 @@ has-props
 
 
 
-1855
+1842
 
 gaia_oauth_fetcher_unittest.cc
 file
@@ -66,11 +66,11 @@ file
 
 
 
-2012-06-15T03:14:12.000000Z
-f46d6ead65fc7050ae5edec510a5f511
-2012-06-04T14:45:50.627461Z
-140287
-jam@chromium.org
+2012-07-25T00:00:57.000000Z
+b978998568587441b6729d4d8071a362
+2012-07-18T13:13:34.571072Z
+147222
+battre@chromium.org
 has-props
 
 
@@ -92,7 +92,7 @@ has-props
 
 
 
-10753
+10042
 
 gaia_oauth_fetcher.cc
 file
@@ -100,11 +100,11 @@ file
 
 
 
-2012-06-15T03:14:12.000000Z
-ebae1cc8467789ca2bba7ba8bc9e4fb9
-2012-06-08T22:44:16.384161Z
-141309
-avi@chromium.org
+2012-07-25T00:00:57.000000Z
+ea659925ef6acb05aecf0ce3abab730e
+2012-07-12T12:21:41.162547Z
+146324
+battre@chromium.org
 has-props
 
 
@@ -126,7 +126,7 @@ has-props
 
 
 
-25354
+19656
 
 gaia_oauth_fetcher.h
 file
@@ -134,11 +134,11 @@ file
 
 
 
-2012-06-15T03:14:12.000000Z
-354bc4eeb7afd4220f85a344d61b10f1
-2012-05-22T22:52:59.546524Z
-138384
-akalin@chromium.org
+2012-07-25T00:00:57.000000Z
+ce7a383f755d98af65f38326797eeb0f
+2012-07-11T19:01:43.570763Z
+146163
+ajwong@chromium.org
 has-props
 
 
@@ -160,7 +160,7 @@ has-props
 
 
 
-10645
+9199
 
 OWNERS
 file

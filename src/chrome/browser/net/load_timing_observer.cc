@@ -115,9 +115,9 @@ void LoadTimingObserver::PopulateTimingInfo(
   LoadTimingObserver::URLRequestRecord* record =
       observer->GetURLRequestRecord(source_id);
   if (record) {
-    response->connection_id = record->socket_log_id;
-    response->connection_reused = record->socket_reused;
-    response->load_timing = record->timing;
+    response->head.connection_id = record->socket_log_id;
+    response->head.connection_reused = record->socket_reused;
+    response->head.load_timing = record->timing;
   }
 }
 
@@ -296,7 +296,6 @@ void LoadTimingObserver::OnAddHTTPStreamJobEntry(
         NOTREACHED();
         return;
       }
-      DCHECK_EQ(net::NetLog::SOURCE_SOCKET, socket_source.type);
 
       it->second.socket_log_id = socket_source.id;
       if (!it->second.socket_reused) {

@@ -4,7 +4,6 @@
 
 #ifndef NET_SOCKET_SSL_CLIENT_SOCKET_NSS_H_
 #define NET_SOCKET_SSL_CLIENT_SOCKET_NSS_H_
-#pragma once
 
 #include <certt.h>
 #include <keyt.h>
@@ -31,7 +30,7 @@
 #include "net/socket/ssl_client_socket.h"
 
 namespace base {
-class SingleThreadTaskRunner;
+class SequencedTaskRunner;
 }
 
 namespace net {
@@ -41,7 +40,6 @@ class CertVerifier;
 class ClientSocketHandle;
 class ServerBoundCertService;
 class SingleRequestCertVerifier;
-class SSLHostInfo;
 class TransportSecurityState;
 class X509Certificate;
 
@@ -60,16 +58,14 @@ class SSLClientSocketNSS : public SSLClientSocket {
   // NSS may optionally be run on a dedicated thread. If synchronous/blocking
   // behaviour is desired, for performance or compatibility, the current task
   // runner should be supplied instead.
-  SSLClientSocketNSS(base::SingleThreadTaskRunner* nss_task_runner,
+  SSLClientSocketNSS(base::SequencedTaskRunner* nss_task_runner,
                      ClientSocketHandle* transport_socket,
                      const HostPortPair& host_and_port,
                      const SSLConfig& ssl_config,
-                     SSLHostInfo* ssl_host_info,
                      const SSLClientSocketContext& context);
   virtual ~SSLClientSocketNSS();
 
   // SSLClientSocket implementation.
-  virtual void GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
   virtual void GetSSLCertRequestInfo(
       SSLCertRequestInfo* cert_request_info) OVERRIDE;
   virtual int ExportKeyingMaterial(const base::StringPiece& label,
@@ -94,6 +90,7 @@ class SSLClientSocketNSS : public SSLClientSocket {
   virtual bool UsingTCPFastOpen() const OVERRIDE;
   virtual int64 NumBytesRead() const OVERRIDE;
   virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
+  virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
 
   // Socket implementation.
   virtual int Read(IOBuffer* buf,
@@ -113,7 +110,6 @@ class SSLClientSocketNSS : public SSLClientSocket {
 
   enum State {
     STATE_NONE,
-    STATE_LOAD_SSL_HOST_INFO,
     STATE_HANDSHAKE,
     STATE_HANDSHAKE_COMPLETE,
     STATE_VERIFY_DNSSEC,
@@ -133,16 +129,12 @@ class SSLClientSocketNSS : public SSLClientSocket {
   void DoConnectCallback(int result);
   void OnHandshakeIOComplete(int result);
 
-  void LoadSSLHostInfo();
-  int DoLoadSSLHostInfo();
-
   int DoHandshakeLoop(int last_io_result);
   int DoHandshake();
   int DoHandshakeComplete(int result);
   int DoVerifyDNSSEC(int result);
   int DoVerifyCert(int result);
   int DoVerifyCertComplete(int result);
-  void SaveSSLHostInfo();
 
   void LogConnectionTypeMetrics() const;
 
@@ -152,7 +144,7 @@ class SSLClientSocketNSS : public SSLClientSocket {
   bool CalledOnValidThread() const;
 
   // The task runner used to perform NSS operations.
-  scoped_refptr<base::SingleThreadTaskRunner> nss_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> nss_task_runner_;
   scoped_ptr<ClientSocketHandle> transport_;
   HostPortPair host_and_port_;
   SSLConfig ssl_config_;
@@ -161,11 +153,7 @@ class SSLClientSocketNSS : public SSLClientSocket {
 
   CompletionCallback user_connect_callback_;
 
-  // |server_cert_verify_result_| points at the verification result, which may,
-  // or may not be, |&local_server_cert_verify_result_|, depending on whether
-  // we used an SSLHostInfo's verification.
-  const CertVerifyResult* server_cert_verify_result_;
-  CertVerifyResult local_server_cert_verify_result_;
+  CertVerifyResult server_cert_verify_result_;
   std::vector<SHA1Fingerprint> side_pinned_public_keys_;
 
   CertVerifier* const cert_verifier_;
@@ -192,8 +180,6 @@ class SSLClientSocketNSS : public SSLClientSocket {
   BoundNetLog net_log_;
 
   base::TimeTicks start_cert_verification_time_;
-
-  scoped_ptr<SSLHostInfo> ssl_host_info_;
 
   TransportSecurityState* transport_security_state_;
 

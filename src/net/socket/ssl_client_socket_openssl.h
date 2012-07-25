@@ -4,7 +4,6 @@
 
 #ifndef NET_SOCKET_SSL_CLIENT_SOCKET_OPENSSL_H_
 #define NET_SOCKET_SSL_CLIENT_SOCKET_OPENSSL_H_
-#pragma once
 
 #include <string>
 
@@ -56,7 +55,6 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
                               const unsigned char* in, unsigned int inlen);
 
   // SSLClientSocket implementation.
-  virtual void GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
   virtual void GetSSLCertRequestInfo(
       SSLCertRequestInfo* cert_request_info) OVERRIDE;
   virtual int ExportKeyingMaterial(const base::StringPiece& label,
@@ -82,6 +80,7 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   virtual bool UsingTCPFastOpen() const OVERRIDE;
   virtual int64 NumBytesRead() const OVERRIDE;
   virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
+  virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
 
   // Socket implementation.
   virtual int Read(IOBuffer* buf, int buf_len,

@@ -4,7 +4,6 @@
 
 #ifndef NET_SOCKET_BUFFERED_WRITE_STREAM_SOCKET_H_
 #define NET_SOCKET_BUFFERED_WRITE_STREAM_SOCKET_H_
-#pragma once
 
 #include "base/memory/weak_ptr.h"
 #include "net/base/net_log.h"
@@ -59,7 +58,9 @@ class NET_EXPORT_PRIVATE BufferedWriteStreamSocket : public StreamSocket {
   virtual bool UsingTCPFastOpen() const OVERRIDE;
   virtual int64 NumBytesRead() const OVERRIDE;
   virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
+  virtual bool WasNpnNegotiated() const OVERRIDE;
   virtual NextProto GetNegotiatedProtocol() const OVERRIDE;
+  virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
 
  private:
   void DoDelayedWrite();

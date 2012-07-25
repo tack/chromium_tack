@@ -137,6 +137,7 @@ enum DnsResolveStatus {
   RESOLVE_STATUS_DNS_SUCCESS = 0,
   RESOLVE_STATUS_PROC_SUCCESS,
   RESOLVE_STATUS_FAIL,
+  RESOLVE_STATUS_SUSPECT_NETBIOS,
   RESOLVE_STATUS_MAX
 };
 
@@ -144,6 +145,63 @@ void UmaAsyncDnsResolveStatus(DnsResolveStatus result) {
   UMA_HISTOGRAM_ENUMERATION("AsyncDNS.ResolveStatus",
                             result,
                             RESOLVE_STATUS_MAX);
+}
+
+bool ResemblesNetBIOSName(const std::string& hostname) {
+  return (hostname.size() < 16) && (hostname.find('.') == std::string::npos);
+}
+
+// True if |hostname| ends with either ".local" or ".local.".
+bool ResemblesMulticastDNSName(const std::string& hostname) {
+  DCHECK(!hostname.empty());
+  const char kSuffix[] = ".local.";
+  const size_t kSuffixLen = sizeof(kSuffix) - 1;
+  const size_t kSuffixLenTrimmed = kSuffixLen - 1;
+  if (hostname[hostname.size() - 1] == '.') {
+    return hostname.size() > kSuffixLen &&
+        !hostname.compare(hostname.size() - kSuffixLen, kSuffixLen, kSuffix);
+  }
+  return hostname.size() > kSuffixLenTrimmed &&
+      !hostname.compare(hostname.size() - kSuffixLenTrimmed, kSuffixLenTrimmed,
+                        kSuffix, kSuffixLenTrimmed);
+}
+
+// Provide a common macro to simplify code and readability. We must use a
+// macro as the underlying HISTOGRAM macro creates static variables.
+#define DNS_HISTOGRAM(name, time) UMA_HISTOGRAM_CUSTOM_TIMES(name, time, \
+    base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1), 100)
+
+// A macro to simplify code and readability.
+#define DNS_HISTOGRAM_BY_PRIORITY(basename, priority, time) \
+  do { \
+    switch (priority) { \
+      case HIGHEST: DNS_HISTOGRAM(basename "_HIGHEST", time); break; \
+      case MEDIUM: DNS_HISTOGRAM(basename "_MEDIUM", time); break; \
+      case LOW: DNS_HISTOGRAM(basename "_LOW", time); break; \
+      case LOWEST: DNS_HISTOGRAM(basename "_LOWEST", time); break; \
+      case IDLE: DNS_HISTOGRAM(basename "_IDLE", time); break; \
+      default: NOTREACHED(); break; \
+    } \
+    DNS_HISTOGRAM(basename, time); \
+  } while (0)
+
+// Record time from Request creation until a valid DNS response.
+void RecordTotalTime(bool had_dns_config,
+                     bool speculative,
+                     base::TimeDelta duration) {
+  if (had_dns_config) {
+    if (speculative) {
+      DNS_HISTOGRAM("AsyncDNS.TotalTime_speculative", duration);
+    } else {
+      DNS_HISTOGRAM("AsyncDNS.TotalTime", duration);
+    }
+  } else {
+    if (speculative) {
+      DNS_HISTOGRAM("DNS.TotalTime_speculative", duration);
+    } else {
+      DNS_HISTOGRAM("DNS.TotalTime", duration);
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -304,8 +362,8 @@ void LogCancelRequest(const BoundNetLog& source_net_log,
 // Keeps track of the highest priority.
 class PriorityTracker {
  public:
-  PriorityTracker()
-      : highest_priority_(IDLE), total_count_(0) {
+  explicit PriorityTracker(RequestPriority initial_priority)
+      : highest_priority_(initial_priority), total_count_(0) {
     memset(counts_, 0, sizeof(counts_));
   }
 
@@ -425,7 +483,8 @@ class HostResolverImpl::Request {
         info_(info),
         job_(NULL),
         callback_(callback),
-        addresses_(addresses) {
+        addresses_(addresses),
+        request_time_(base::TimeTicks::Now()) {
   }
 
   // Mark the request as canceled.
@@ -447,6 +506,7 @@ class HostResolverImpl::Request {
 
   // Prepare final AddressList and call completion callback.
   void OnComplete(int error, const AddressList& addr_list) {
+    DCHECK(!was_canceled());
     if (error == OK) {
       *addresses_ = addr_list;
       EnsurePortOnAddressList(info_.port(), addresses_);
@@ -474,6 +534,10 @@ class HostResolverImpl::Request {
     return info_;
   }
 
+  base::TimeTicks request_time() const {
+    return request_time_;
+  }
+
  private:
   BoundNetLog source_net_log_;
   BoundNetLog request_net_log_;
@@ -490,15 +554,12 @@ class HostResolverImpl::Request {
   // The address list to save result into.
   AddressList* addresses_;
 
+  const base::TimeTicks request_time_;
+
   DISALLOW_COPY_AND_ASSIGN(Request);
 };
 
 //------------------------------------------------------------------------------
-
-// Provide a common macro to simplify code and readability. We must use a
-// macros as the underlying HISTOGRAM macro creates static varibles.
-#define DNS_HISTOGRAM(name, time) UMA_HISTOGRAM_CUSTOM_TIMES(name, time, \
-    base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromHours(1), 100)
 
 // Calls HostResolverProc on the WorkerPool. Performs retries if necessary.
 //
@@ -900,9 +961,10 @@ class HostResolverImpl::ProcTask
 class HostResolverImpl::IPv6ProbeJob
     : public base::RefCountedThreadSafe<HostResolverImpl::IPv6ProbeJob> {
  public:
-  explicit IPv6ProbeJob(HostResolverImpl* resolver)
+  IPv6ProbeJob(HostResolverImpl* resolver, NetLog* net_log)
       : resolver_(resolver),
-        origin_loop_(base::MessageLoopProxy::current()) {
+        origin_loop_(base::MessageLoopProxy::current()),
+        net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_IPV6_PROBE_JOB)) {
     DCHECK(resolver);
   }
 
@@ -910,6 +972,7 @@ class HostResolverImpl::IPv6ProbeJob
     DCHECK(origin_loop_->BelongsToCurrentThread());
     if (was_canceled())
       return;
+    net_log_.BeginEvent(NetLog::TYPE_IPV6_PROBE_RUNNING);
     const bool kIsSlow = true;
     base::WorkerPool::PostTask(
         FROM_HERE, base::Bind(&IPv6ProbeJob::DoProbe, this), kIsSlow);
@@ -920,6 +983,7 @@ class HostResolverImpl::IPv6ProbeJob
     DCHECK(origin_loop_->BelongsToCurrentThread());
     if (was_canceled())
       return;
+    net_log_.AddEvent(NetLog::TYPE_CANCELLED);
     resolver_ = NULL;  // Read/write ONLY on origin thread.
   }
 
@@ -929,6 +993,8 @@ class HostResolverImpl::IPv6ProbeJob
   ~IPv6ProbeJob() {
   }
 
+  // Returns true if cancelled or if probe results have already been received
+  // on the origin thread.
   bool was_canceled() const {
     DCHECK(origin_loop_->BelongsToCurrentThread());
     return !resolver_;
@@ -937,20 +1003,28 @@ class HostResolverImpl::IPv6ProbeJob
   // Run on worker thread.
   void DoProbe() {
     // Do actual testing on this thread, as it takes 40-100ms.
-    AddressFamily family = IPv6Supported() ? ADDRESS_FAMILY_UNSPECIFIED
-                                           : ADDRESS_FAMILY_IPV4;
-
     origin_loop_->PostTask(
         FROM_HERE,
-        base::Bind(&IPv6ProbeJob::OnProbeComplete, this, family));
+        base::Bind(&IPv6ProbeJob::OnProbeComplete, this, TestIPv6Support()));
   }
 
   // Callback for when DoProbe() completes.
-  void OnProbeComplete(AddressFamily address_family) {
+  void OnProbeComplete(const IPv6SupportResult& support_result) {
     DCHECK(origin_loop_->BelongsToCurrentThread());
+    net_log_.EndEvent(
+        NetLog::TYPE_IPV6_PROBE_RUNNING,
+        base::Bind(&IPv6SupportResult::ToNetLogValue,
+                   base::Unretained(&support_result)));
     if (was_canceled())
       return;
-    resolver_->IPv6ProbeSetDefaultAddressFamily(address_family);
+
+    // Clear |resolver_| so that no cancel event is logged.
+    HostResolverImpl* resolver = resolver_;
+    resolver_ = NULL;
+
+    resolver->IPv6ProbeSetDefaultAddressFamily(
+        support_result.ipv6_supported ? ADDRESS_FAMILY_UNSPECIFIED
+                                      : ADDRESS_FAMILY_IPV4);
   }
 
   // Used/set only on origin thread.
@@ -958,6 +1032,8 @@ class HostResolverImpl::IPv6ProbeJob
 
   // Used to post ourselves onto the origin thread.
   scoped_refptr<base::MessageLoopProxy> origin_loop_;
+
+  BoundNetLog net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(IPv6ProbeJob);
 };
@@ -1051,11 +1127,16 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
   // request that spawned it.
   Job(HostResolverImpl* resolver,
       const Key& key,
+      RequestPriority priority,
       const BoundNetLog& request_net_log)
       : resolver_(resolver->AsWeakPtr()),
         key_(key),
+        priority_tracker_(priority),
         had_non_speculative_request_(false),
         had_dns_config_(false),
+        dns_task_error_(OK),
+        creation_time_(base::TimeTicks::Now()),
+        priority_change_time_(creation_time_),
         net_log_(BoundNetLog::Make(request_net_log.net_log(),
                                    NetLog::SOURCE_HOST_RESOLVER_IMPL_JOB)) {
     request_net_log.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_CREATE_JOB);
@@ -1100,8 +1181,8 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
   }
 
   // Add this job to the dispatcher.
-  void Schedule(RequestPriority priority) {
-    handle_ = resolver_->dispatcher_.Add(this, priority);
+  void Schedule() {
+    handle_ = resolver_->dispatcher_.Add(this, priority());
   }
 
   void AddRequest(scoped_ptr<Request> req) {
@@ -1129,8 +1210,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
 
     requests_.push_back(req.release());
 
-    if (is_queued())
-      handle_ = resolver_->dispatcher_.ChangePriority(handle_, priority());
+    UpdatePriority();
   }
 
   // Marks |req| as cancelled. If it was the last active Request, also finishes
@@ -1152,8 +1232,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
                    priority()));
 
     if (num_active_requests() > 0) {
-      if (is_queued())
-        handle_ = resolver_->dispatcher_.ChangePriority(handle_, priority());
+      UpdatePriority();
     } else {
       // If we were called from a Request's callback within CompleteRequests,
       // that Request could not have been cancelled, so num_active_requests()
@@ -1190,7 +1269,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     DCHECK_GT(num_active_requests(), 0u);
     AddressList addr_list;
     if (resolver_->ServeFromHosts(key(),
-                                  requests_->front()->info(),
+                                  requests_.front()->info(),
                                   &addr_list)) {
       // This will destroy the Job.
       CompleteRequests(OK, addr_list, base::TimeDelta());
@@ -1212,6 +1291,14 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
   }
 
  private:
+  void UpdatePriority() {
+    if (is_queued()) {
+      if (priority() != static_cast<RequestPriority>(handle_.priority()))
+        priority_change_time_ = base::TimeTicks::Now();
+      handle_ = resolver_->dispatcher_.ChangePriority(handle_, priority());
+    }
+  }
+
   // PriorityDispatch::Job:
   virtual void Start() OVERRIDE {
     DCHECK(!is_running());
@@ -1220,8 +1307,24 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     net_log_.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_JOB_STARTED);
 
     had_dns_config_ = resolver_->HaveDnsConfig();
-    // Job::Start must not complete synchronously.
+
+    base::TimeTicks now = base::TimeTicks::Now();
+    base::TimeDelta queue_time = now - creation_time_;
+    base::TimeDelta queue_time_after_change = now - priority_change_time_;
+
     if (had_dns_config_) {
+      DNS_HISTOGRAM_BY_PRIORITY("AsyncDNS.JobQueueTime", priority(),
+                                queue_time);
+      DNS_HISTOGRAM_BY_PRIORITY("AsyncDNS.JobQueueTimeAfterChange", priority(),
+                                queue_time_after_change);
+    } else {
+      DNS_HISTOGRAM_BY_PRIORITY("DNS.JobQueueTime", priority(), queue_time);
+      DNS_HISTOGRAM_BY_PRIORITY("DNS.JobQueueTimeAfterChange", priority(),
+                                queue_time_after_change);
+    }
+
+    // Caution: Job::Start must not complete synchronously.
+    if (had_dns_config_ && !ResemblesMulticastDNSName(key_.hostname)) {
       StartDnsTask();
     } else {
       StartProcTask();
@@ -1251,10 +1354,17 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
   void OnProcTaskComplete(int net_error, const AddressList& addr_list) {
     DCHECK(is_proc_running());
 
-    if (had_dns_config_) {
-      // TODO(szym): guess if the hostname is a NetBIOS name and discount it.
+    if (dns_task_error_ != OK) {
       if (net_error == OK) {
-        UmaAsyncDnsResolveStatus(RESOLVE_STATUS_PROC_SUCCESS);
+        if ((dns_task_error_ == ERR_NAME_NOT_RESOLVED) &&
+            ResemblesNetBIOSName(key_.hostname)) {
+          UmaAsyncDnsResolveStatus(RESOLVE_STATUS_SUSPECT_NETBIOS);
+        } else {
+          UmaAsyncDnsResolveStatus(RESOLVE_STATUS_PROC_SUCCESS);
+        }
+        UMA_HISTOGRAM_CUSTOM_ENUMERATION("AsyncDNS.ResolveError",
+                                         std::abs(dns_task_error_),
+                                         GetAllErrorCodesForUma());
       } else {
         UmaAsyncDnsResolveStatus(RESOLVE_STATUS_FAIL);
       }
@@ -1279,6 +1389,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     int rv = dns_task_->Start();
     if (rv != ERR_IO_PENDING) {
       DCHECK_NE(OK, rv);
+      dns_task_error_ = rv;
       dns_task_.reset();
       StartProcTask();
     }
@@ -1291,6 +1402,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     DCHECK(is_dns_running());
 
     if (net_error != OK) {
+      dns_task_error_ = net_error;
       dns_task_.reset();
 
       // TODO(szym): Run ServeFromHosts now if nsswitch.conf says so.
@@ -1352,18 +1464,17 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     DCHECK(!requests_.empty());
 
     if (net_error == OK) {
-      SetPortOnAddressList(requests_->front()->info().port(), &list);
+      SetPortOnAddressList(requests_.front()->info().port(), &list);
       // Record this histogram here, when we know the system has a valid DNS
       // configuration.
-      UMA_HISTOGRAM_ENUMERATION("AsyncDNS.HaveDnsConfig",
-                                resolver_->received_dns_config_ ? 1 : 0,
-                                2);
+      UMA_HISTOGRAM_BOOLEAN("AsyncDNS.HaveDnsConfig",
+                            resolver_->received_dns_config_);
     }
 
-    if ((net_error != ERR_ABORTED) &&
-        (net_error != ERR_HOST_RESOLVER_QUEUE_TOO_LARGE)) {
+    bool did_complete = (net_error != ERR_ABORTED) &&
+                        (net_error != ERR_HOST_RESOLVER_QUEUE_TOO_LARGE);
+    if (did_complete)
       resolver_->CacheResult(key_, net_error, list, ttl);
-    }
 
     // Complete all of the requests that were attached to the job.
     for (RequestsList::const_iterator it = requests_.begin();
@@ -1377,7 +1488,11 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
       // Update the net log and notify registered observers.
       LogFinishRequest(req->source_net_log(), req->request_net_log(),
                        req->info(), net_error);
-
+      if (did_complete) {
+        // Record effective total time from creation to completion.
+        RecordTotalTime(had_dns_config_, req->info().is_speculative(),
+                        base::TimeTicks::Now() - req->request_time());
+      }
       req->OnComplete(net_error, list);
 
       // Check if the resolver was destroyed as a result of running the
@@ -1413,8 +1528,14 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
 
   bool had_non_speculative_request_;
 
-  // True if resolver had DnsConfig when the Job was started.
+  // Distinguishes measurements taken while DnsClient was fully configured.
   bool had_dns_config_;
+
+  // Result of DnsTask.
+  int dns_task_error_;
+
+  const base::TimeTicks creation_time_;
+  base::TimeTicks priority_change_time_;
 
   BoundNetLog net_log_;
 
@@ -1530,6 +1651,7 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   int rv = ResolveHelper(key, info, addresses, request_net_log);
   if (rv != ERR_DNS_CACHE_MISS) {
     LogFinishRequest(source_net_log, request_net_log, info, rv);
+    RecordTotalTime(HaveDnsConfig(), info.is_speculative(), base::TimeDelta());
     return rv;
   }
 
@@ -1540,8 +1662,8 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   Job* job;
   if (jobit == jobs_.end()) {
     // Create new Job.
-    job = new Job(this, key, request_net_log);
-    job->Schedule(info.priority());
+    job = new Job(this, key, info.priority(), request_net_log);
+    job->Schedule();
 
     // Check for queue overflow.
     if (dispatcher_.num_queued_jobs() > max_queued_jobs_) {
@@ -1847,7 +1969,7 @@ void HostResolverImpl::OnIPAddressChanged() {
     cache_->clear();
   if (ipv6_probe_monitoring_) {
     DiscardIPv6ProbeJob();
-    ipv6_probe_job_ = new IPv6ProbeJob(this);
+    ipv6_probe_job_ = new IPv6ProbeJob(this, net_log_);
     ipv6_probe_job_->Start();
   }
 #if defined(OS_POSIX) && !defined(OS_MACOSX)

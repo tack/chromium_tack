@@ -4,7 +4,6 @@
 
 #ifndef CHROME_BROWSER_PROFILES_PROFILE_IO_DATA_H_
 #define CHROME_BROWSER_PROFILES_PROFILE_IO_DATA_H_
-#pragma once
 
 #include <string>
 
@@ -19,6 +18,7 @@
 #include "chrome/browser/prefs/pref_member.h"
 #include "content/public/browser/resource_context.h"
 #include "net/cookies/cookie_monster.h"
+#include "net/url_request/url_request_job_factory.h"
 
 class CookieSettings;
 class DesktopNotificationService;
@@ -32,6 +32,7 @@ class TackSecurityPersister;
 
 namespace chrome_browser_net {
 class HttpServerPropertiesManager;
+class ResourcePrefetchPredictorObserver;
 }
 
 namespace net {
@@ -115,6 +116,11 @@ class ProfileIOData {
     return is_incognito_;
   }
 
+  chrome_browser_net::ResourcePrefetchPredictorObserver*
+      resource_prefetch_predictor_observer() const {
+    return resource_prefetch_predictor_observer_.get();
+  }
+
   // Initialize the member needed to track the metrics enabled state. This is
   // only to be called on the UI thread.
   void InitializeMetricsEnabledStateOnUIThread();
@@ -154,12 +160,20 @@ class ProfileIOData {
     scoped_refptr<net::SSLConfigService> ssl_config_service;
     scoped_refptr<net::CookieMonster::Delegate> cookie_monster_delegate;
     scoped_refptr<ExtensionInfoMap> extension_info_map;
+    scoped_ptr<chrome_browser_net::ResourcePrefetchPredictorObserver>
+        resource_prefetch_predictor_observer_;
 
 #if defined(ENABLE_NOTIFICATIONS)
     DesktopNotificationService* notification_service;
 #endif
 
-    scoped_refptr<ProtocolHandlerRegistry> protocol_handler_registry;
+    // This pointer exists only as a means of conveying a url interceptor
+    // pointer from the protocol handler registry on the UI thread to the
+    // the URLRequestJobFactory on the IO thread. The consumer MUST take
+    // ownership of the object by calling release() on this pointer.
+    scoped_ptr<net::URLRequestJobFactory::Interceptor>
+        protocol_handler_url_interceptor;
+
     // We need to initialize the ProxyConfigService from the UI thread
     // because on linux it relies on initializing things through gconf,
     // and needs to be on the main thread.
@@ -176,6 +190,8 @@ class ProfileIOData {
 
   void InitializeOnUIThread(Profile* profile);
   void ApplyProfileParamsToContext(ChromeURLRequestContext* context) const;
+
+  void SetUpJobFactoryDefaults(net::URLRequestJobFactory* job_factory) const;
 
   // Lazy initializes the ProfileIOData object the first time a request context
   // is requested. The lazy logic is implemented here. The actual initialization
@@ -211,10 +227,6 @@ class ProfileIOData {
 
   net::ProxyService* proxy_service() const {
     return proxy_service_.get();
-  }
-
-  net::URLRequestJobFactory* job_factory() const {
-    return job_factory_.get();
   }
 
   void set_http_server_properties_manager(
@@ -323,7 +335,6 @@ class ProfileIOData {
       fraudulent_certificate_reporter_;
   mutable scoped_ptr<net::ProxyService> proxy_service_;
   mutable scoped_ptr<net::TransportSecurityState> transport_security_state_;
-  mutable scoped_ptr<net::URLRequestJobFactory> job_factory_;
   mutable scoped_ptr<chrome_browser_net::HttpServerPropertiesManager>
       http_server_properties_manager_;
 
@@ -348,6 +359,9 @@ class ProfileIOData {
 
   mutable scoped_refptr<ExtensionInfoMap> extension_info_map_;
   mutable scoped_refptr<CookieSettings> cookie_settings_;
+
+  mutable scoped_ptr<chrome_browser_net::ResourcePrefetchPredictorObserver>
+      resource_prefetch_predictor_observer_;
 
   // TODO(jhawkins): Remove once crbug.com/102004 is fixed.
   bool initialized_on_UI_thread_;

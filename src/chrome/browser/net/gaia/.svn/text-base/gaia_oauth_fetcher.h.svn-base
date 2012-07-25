@@ -4,23 +4,16 @@
 
 #ifndef CHROME_BROWSER_NET_GAIA_GAIA_OAUTH_FETCHER_H_
 #define CHROME_BROWSER_NET_GAIA_GAIA_OAUTH_FETCHER_H_
-#pragma once
 
 #include <string>
 #include <vector>
 
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/net/chrome_cookie_notification_details.h"
-#include "chrome/browser/net/gaia/gaia_oauth_consumer.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
+#include "chrome/common/net/gaia/google_service_auth_error.h"
 #include "googleurl/src/gurl.h"
 #include "net/url_request/url_fetcher_delegate.h"
 
-struct ChromeCookieDetails;
-
-class Browser;
-class Profile;
+class GaiaOAuthConsumer;
 
 namespace net {
 class URLFetcher;
@@ -33,11 +26,12 @@ typedef std::vector<std::string> ResponseCookies;
 //
 // Users of this class typically desire an OAuth2 Access token scoped for a
 // specific service.  This will typically start with either an interactive
-// login, using StartGetOAuthToken, or with a long-lived OAuth1 all-scope
+// login, using StartOAuthLogin, or with a long-lived OAuth1 all-scope
 // token obtained through a previous login or other means, using
 // StartOAuthGetAccessToken.  In fact, one can start with any of these
 // routines:
-//   StartGetOAuthToken()
+//   StartOAuthLogin()
+//   StartGetOAuthTokenRequest()
 //   StartOAuthGetAccessToken()
 //   StartOAuthWrapBridge()
 //   StartUserInfo()
@@ -46,8 +40,7 @@ typedef std::vector<std::string> ResponseCookies;
 //
 // This class can handle one request at a time, and all calls through an
 // instance should be serialized.
-class GaiaOAuthFetcher : public net::URLFetcherDelegate,
-                         public content::NotificationObserver {
+class GaiaOAuthFetcher : public net::URLFetcherDelegate {
  public:
   // Defines steps of OAuth process performed by this class.
   typedef enum {
@@ -61,7 +54,6 @@ class GaiaOAuthFetcher : public net::URLFetcherDelegate,
 
   GaiaOAuthFetcher(GaiaOAuthConsumer* consumer,
                    net::URLRequestContextGetter* getter,
-                   Profile* profile,
                    const std::string& service_scope);
 
   virtual ~GaiaOAuthFetcher();
@@ -70,12 +62,6 @@ class GaiaOAuthFetcher : public net::URLFetcherDelegate,
   // of upon successful completition of the previous steps. By default,
   // this class will chain all steps in OAuth proccess.
   void SetAutoFetchLimit(RequestType limit) { auto_fetch_limit_ = limit; }
-
-  // Obtains an OAuth 1 request token
-  //
-  // Pops up a window aimed at the Gaia OAuth URL for GetOAuthToken and then
-  // listens for COOKIE_CHANGED notifications
-  virtual void StartGetOAuthToken();
 
   // Non-UI version of the method above. Initiates Gaia OAuth request token
   // retrieval.
@@ -124,19 +110,6 @@ class GaiaOAuthFetcher : public net::URLFetcherDelegate,
   // StartOAuthWrapBridge).
   virtual void StartOAuthRevokeWrapToken(const std::string& token);
 
-  // content::NotificationObserver implementation.
-  virtual void Observe(int type,
-                       const content::NotificationSource& source,
-                       const content::NotificationDetails& details) OVERRIDE;
-
-  // Called when a cookie, e. g. oauth_token, changes
-  virtual void OnCookieChanged(Profile* profile,
-                               ChromeCookieDetails* cookie_details);
-
-  // Called when a cookie, e. g. oauth_token, changes
-  virtual void OnBrowserClosing(Browser* profile,
-                                bool detail);
-
   // Implementation of net::URLFetcherDelegate
   virtual void OnURLFetchComplete(const net::URLFetcher* source) OVERRIDE;
 
@@ -152,9 +125,6 @@ class GaiaOAuthFetcher : public net::URLFetcherDelegate,
   RequestType request_type_;
 
  private:
-  // Process the results of a GetOAuthToken fetch via UI.
-  virtual void OnGetOAuthTokenFetched(const std::string& token);
-
   // Process the results of a GetOAuthToken fetch for non-UI driven path.
   virtual void OnGetOAuthTokenUrlFetched(const net::ResponseCookies& cookies,
                                          const net::URLRequestStatus& status,
@@ -184,10 +154,6 @@ class GaiaOAuthFetcher : public net::URLFetcherDelegate,
   virtual void OnUserInfoFetched(const std::string& data,
                                  const net::URLRequestStatus& status,
                                  int response_code);
-
-  // Tokenize the results of a GetOAuthToken fetch.
-  static void ParseGetOAuthTokenResponse(const std::string& data,
-                                         std::string* token);
 
   // Tokenize the results of a OAuthLogin fetch.
   static void ParseOAuthLoginResponse(const std::string& data,
@@ -251,9 +217,6 @@ class GaiaOAuthFetcher : public net::URLFetcherDelegate,
   // These fields are common to GaiaOAuthFetcher, same every request
   GaiaOAuthConsumer* const consumer_;
   net::URLRequestContextGetter* const getter_;
-  Profile* profile_;
-  Browser* popup_;
-  content::NotificationRegistrar registrar_;
 
   // While a fetch is going on:
   scoped_ptr<net::URLFetcher> fetcher_;

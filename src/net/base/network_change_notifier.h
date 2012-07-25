@@ -4,7 +4,6 @@
 
 #ifndef NET_BASE_NETWORK_CHANGE_NOTIFIER_H_
 #define NET_BASE_NETWORK_CHANGE_NOTIFIER_H_
-#pragma once
 
 #include "base/basictypes.h"
 #include "base/observer_list_threadsafe.h"
@@ -17,6 +16,10 @@ class NetworkChangeNotifierFactory;
 
 namespace internal {
 class DnsConfigWatcher;
+
+#if defined(OS_LINUX)
+class AddressTrackerLinux;
+#endif
 }
 
 // NetworkChangeNotifier monitors the system for network changes, and notifies
@@ -27,6 +30,10 @@ class DnsConfigWatcher;
 class NET_EXPORT NetworkChangeNotifier {
  public:
   // Flags which are ORed together to form |detail| in OnDNSChanged.
+  //
+  // TODO(akalin): Name this enum type and use it instead of plain
+  // 'unsigned' in OnDNSChanged.  ORing together enum values always
+  // results in a valid enum value by the C++ standard.
   enum {
     // The DNS configuration (name servers, suffix search) has changed.
     CHANGE_DNS_SETTINGS = 1 << 0,
@@ -41,14 +48,14 @@ class NET_EXPORT NetworkChangeNotifier {
   // Using the terminology of the Network Information API:
   // http://www.w3.org/TR/netinfo-api.
   enum ConnectionType {
-  CONNECTION_UNKNOWN, // A connection exists, but its type is unknown.
-  CONNECTION_ETHERNET,
-  CONNECTION_WIFI,
-  CONNECTION_2G,
-  CONNECTION_3G,
-  CONNECTION_4G,
-  CONNECTION_NONE     // No connection.
-};
+    CONNECTION_UNKNOWN, // A connection exists, but its type is unknown.
+    CONNECTION_ETHERNET,
+    CONNECTION_WIFI,
+    CONNECTION_2G,
+    CONNECTION_3G,
+    CONNECTION_4G,
+    CONNECTION_NONE     // No connection.
+  };
 
   class NET_EXPORT IPAddressObserver {
    public:
@@ -121,6 +128,11 @@ class NET_EXPORT NetworkChangeNotifier {
   // attempt to a particular remote site will be successful.
   static ConnectionType GetConnectionType();
 
+#if defined(OS_LINUX)
+  // Returns the AddressTrackerLinux if present.
+  static const internal::AddressTrackerLinux* GetAddressTracker();
+#endif
+
   // Convenience method to determine if the user is offline.
   // Returns true if there is currently no internet connection.
   //
@@ -169,6 +181,12 @@ class NET_EXPORT NetworkChangeNotifier {
   friend class internal::DnsConfigWatcher;
 
   NetworkChangeNotifier();
+
+#if defined(OS_LINUX)
+  // Returns the AddressTrackerLinux if present.
+  virtual const internal::AddressTrackerLinux*
+      GetAddressTrackerInternal() const;
+#endif
 
   // Broadcasts a notification to all registered observers.  Note that this
   // happens asynchronously, even for observers on the current thread, even in

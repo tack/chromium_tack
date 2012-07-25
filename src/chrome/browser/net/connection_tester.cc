@@ -158,7 +158,7 @@ class ExperimentURLRequestContext : public net::URLRequestContext {
         // Note that we don't use impl->ProbeIPv6Support() since that finishes
         // asynchronously and may not take effect in time for the test.
         // So instead we will probe synchronously (might take 100-200 ms).
-        net::AddressFamily family = net::IPv6Supported() ?
+        net::AddressFamily family = net::TestIPv6Support().ipv6_supported ?
             net::ADDRESS_FAMILY_UNSPECIFIED : net::ADDRESS_FAMILY_IPV4;
         impl->SetDefaultAddressFamily(family);
         return net::OK;
@@ -395,8 +395,9 @@ void ConnectionTester::TestRunner::ProxyConfigServiceCreated(
     return;
   }
   // Fetch a request using the experimental context.
-  request_.reset(new net::URLRequest(experiment.url, this));
-  request_->set_context(request_context_.get());
+  request_.reset(new net::URLRequest(experiment.url,
+                                     this,
+                                     request_context_.get()));
   request_->Start();
 }
 

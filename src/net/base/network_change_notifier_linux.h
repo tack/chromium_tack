@@ -4,7 +4,6 @@
 
 #ifndef NET_BASE_NETWORK_CHANGE_NOTIFIER_LINUX_H_
 #define NET_BASE_NETWORK_CHANGE_NOTIFIER_LINUX_H_
-#pragma once
 
 #include "base/basictypes.h"
 #include "base/compiler_specific.h"
@@ -34,6 +33,9 @@ class NET_EXPORT_PRIVATE NetworkChangeNotifierLinux
 
   // NetworkChangeNotifier:
   virtual ConnectionType GetCurrentConnectionType() const OVERRIDE;
+
+  virtual const internal::AddressTrackerLinux*
+      GetAddressTrackerInternal() const OVERRIDE;
 
   // The thread used to listen for notifications.  This relays the notification
   // to the registered observers without posting back to the thread the object

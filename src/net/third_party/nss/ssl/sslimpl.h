@@ -294,6 +294,8 @@ struct sslSocketOpsStr {
 #define ssl_SEND_FLAG_NO_BUFFER		0x20000000
 #define ssl_SEND_FLAG_USE_EPOCH		0x10000000 /* DTLS only */
 #define ssl_SEND_FLAG_NO_RETRANSMIT	0x08000000 /* DTLS only */
+#define ssl_SEND_FLAG_CAP_RECORD_VERSION \
+					0x04000000 /* TLS only */
 #define ssl_SEND_FLAG_MASK		0x7f000000
 
 /*
@@ -1417,6 +1419,7 @@ extern SECStatus
 ssl3_CompressMACEncryptRecord(ssl3CipherSpec *   cwSpec,
 		              PRBool             isServer,
 			      PRBool             isDTLS,
+			      PRBool             capRecordVersion,
                               SSL3ContentType    type,
 		              const SSL3Opaque * pIn,
 		              PRUint32           contentLen,
@@ -1777,6 +1780,11 @@ extern PRBool ssl_GetSessionTicketKeysPKCS11(SECKEYPrivateKey *svrPrivKey,
 
 extern SECStatus ssl3_ValidateNextProtoNego(const unsigned char* data,
 					    unsigned int length);
+
+extern SECStatus ssl3_GetTLSUniqueChannelBinding(sslSocket *ss,
+						 unsigned char *out,
+						 unsigned int *outLen,
+						 unsigned int outLenMax);
 
 /* Construct a new NSPR socket for the app to use */
 extern PRFileDesc *ssl_NewPRSocket(sslSocket *ss, PRFileDesc *fd);

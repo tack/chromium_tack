@@ -113,6 +113,10 @@ func process(jsonFileName, certsFileName string) error {
 		return err
 	}
 
+	if err := checkNoopEntries(preloaded.Entries); err != nil {
+		return err
+	}
+
 	outFile, err := os.OpenFile("transport_security_state_static.h", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -392,6 +396,22 @@ func checkCertsInPinsets(pinsets []pinset, pins []pin) error {
 	return nil
 }
 
+func checkNoopEntries(entries []hsts) error {
+	for _, e := range entries {
+		if len(e.Mode) == 0 && len(e.Pins) == 0 {
+			switch e.Name {
+			// This entry is deliberately used as an exclusion.
+			case "learn.doubleclick.net":
+				continue
+			default:
+				return errors.New("Entry for " + e.Name + " has no mode and no pins")
+			}
+		}
+	}
+
+	return nil
+}
+
 func writeHeader(out *bufio.Writer) {
 	out.WriteString(`// Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -401,7 +421,6 @@ func writeHeader(out *bufio.Writer) {
 
 #ifndef NET_BASE_TRANSPORT_SECURITY_STATE_STATIC_H_
 #define NET_BASE_TRANSPORT_SECURITY_STATE_STATIC_H_
-#pragma once
 
 `)
 
@@ -418,11 +437,6 @@ func writeCertsOutput(out *bufio.Writer, pins []pin) {
 `)
 
 	for _, pin := range pins {
-		if pin.cert != nil {
-			out.WriteString("#if 0\n")
-			pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: pin.cert.Raw})
-			out.WriteString("#endif\n")
-		}
 		fmt.Fprintf(out, "static const char kSPKIHash_%s[] =\n", pin.name)
 		fmt.Fprintf(out, "    \"%s/%s\";\n\n", pin.spkiHashFunc, base64.StdEncoding.EncodeToString(pin.spkiHash))
 	}

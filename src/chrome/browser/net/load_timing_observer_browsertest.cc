@@ -3,19 +3,17 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test_utils.h"
 #include "googleurl/src/gurl.h"
 #include "net/test/test_server.h"
 
 class LoadTimingObserverTest : public InProcessBrowserTest {
  public:
-  LoadTimingObserverTest() {
-    EnableDOMAutomation();
-  }
-
- protected:
+  LoadTimingObserverTest() {}
 };
 
 // http://crbug.com/102030
@@ -29,13 +27,13 @@ IN_PROC_BROWSER_TEST_F(LoadTimingObserverTest, FLAKY_CacheHitAfterRedirect) {
   int response_start = 0;
   int response_end = 0;
   content::RenderViewHost* render_view_host =
-      browser()->GetActiveWebContents()->GetRenderViewHost();
-  ASSERT_TRUE(ui_test_utils::ExecuteJavaScriptAndExtractInt(
+      chrome::GetActiveWebContents(browser())->GetRenderViewHost();
+  ASSERT_TRUE(content::ExecuteJavaScriptAndExtractInt(
       render_view_host, L"",
       L"window.domAutomationController.send("
       L"window.performance.timing.responseStart - "
       L"window.performance.timing.navigationStart)", &response_start));
-  ASSERT_TRUE(ui_test_utils::ExecuteJavaScriptAndExtractInt(
+  ASSERT_TRUE(content::ExecuteJavaScriptAndExtractInt(
       render_view_host, L"",
       L"window.domAutomationController.send("
       L"window.performance.timing.responseEnd - "

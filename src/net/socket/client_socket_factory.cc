@@ -6,7 +6,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/thread_task_runner_handle.h"
-#include "base/threading/thread.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "net/base/cert_database.h"
 #include "net/socket/client_socket_handle.h"
@@ -21,7 +21,6 @@
 #include "net/socket/ssl_client_socket_mac.h"
 #include "net/socket/ssl_client_socket_nss.h"
 #endif
-#include "net/socket/ssl_host_info.h"
 #include "net/socket/tcp_client_socket.h"
 #include "net/udp/udp_client_socket.h"
 
@@ -48,9 +47,12 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
  public:
   DefaultClientSocketFactory() {
     if (g_use_dedicated_nss_thread) {
-      nss_thread_.reset(new base::Thread("NSS SSL Thread"));
-      if (nss_thread_->Start())
-        nss_thread_task_runner_ = nss_thread_->message_loop_proxy();
+      // Use a single thread for the worker pool.
+      worker_pool_ = new base::SequencedWorkerPool(1, "NSS SSL Thread");
+      nss_thread_task_runner_ =
+          worker_pool_->GetSequencedTaskRunnerWithShutdownBehavior(
+              worker_pool_->GetSequenceToken(),
+              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
     }
 
     CertDatabase::AddObserver(this);
@@ -92,10 +94,7 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
       ClientSocketHandle* transport_socket,
       const HostPortPair& host_and_port,
       const SSLConfig& ssl_config,
-      SSLHostInfo* ssl_host_info,
       const SSLClientSocketContext& context) {
-    scoped_ptr<SSLHostInfo> shi(ssl_host_info);
-
     // nss_thread_task_runner_ may be NULL if g_use_dedicated_nss_thread is
     // false or if the dedicated NSS thread failed to start. If so, cause NSS
     // functions to execute on the current task runner.
@@ -105,7 +104,7 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
     // between each test. Because the DefaultClientSocketFactory is leaky, it
     // may span multiple tests, and thus the current task runner may change
     // from call to call.
-    scoped_refptr<base::SingleThreadTaskRunner> nss_task_runner(
+    scoped_refptr<base::SequencedTaskRunner> nss_task_runner(
         nss_thread_task_runner_);
     if (!nss_task_runner)
       nss_task_runner = base::ThreadTaskRunnerHandle::Get();
@@ -115,15 +114,14 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
                                       ssl_config, context);
 #elif defined(USE_NSS)
     return new SSLClientSocketNSS(nss_task_runner, transport_socket,
-                                  host_and_port, ssl_config, shi.release(),
-                                  context);
+                                  host_and_port, ssl_config, context);
 #elif defined(OS_WIN)
     if (g_use_system_ssl) {
       return new SSLClientSocketWin(transport_socket, host_and_port,
                                     ssl_config, context);
     }
     return new SSLClientSocketNSS(nss_task_runner, transport_socket,
-                                  host_and_port, ssl_config, shi.release(),
+                                  host_and_port, ssl_config,
                                   context);
 #elif defined(OS_MACOSX)
     if (g_use_system_ssl) {
@@ -131,7 +129,7 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
                                     ssl_config, context);
     }
     return new SSLClientSocketNSS(nss_task_runner, transport_socket,
-                                  host_and_port, ssl_config, shi.release(),
+                                  host_and_port, ssl_config,
                                   context);
 #else
     NOTIMPLEMENTED();
@@ -144,8 +142,8 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
   }
 
  private:
-  scoped_ptr<base::Thread> nss_thread_;
-  scoped_refptr<base::SingleThreadTaskRunner> nss_thread_task_runner_;
+  scoped_refptr<base::SequencedWorkerPool> worker_pool_;
+  scoped_refptr<base::SequencedTaskRunner> nss_thread_task_runner_;
 };
 
 static base::LazyInstance<DefaultClientSocketFactory>::Leaky
@@ -158,12 +156,11 @@ SSLClientSocket* ClientSocketFactory::CreateSSLClientSocket(
     StreamSocket* transport_socket,
     const HostPortPair& host_and_port,
     const SSLConfig& ssl_config,
-    SSLHostInfo* ssl_host_info,
     const SSLClientSocketContext& context) {
   ClientSocketHandle* socket_handle = new ClientSocketHandle();
   socket_handle->set_socket(transport_socket);
   return CreateSSLClientSocket(socket_handle, host_and_port, ssl_config,
-                               ssl_host_info, context);
+                               context);
 }
 
 // static

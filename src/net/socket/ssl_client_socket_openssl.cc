@@ -591,10 +591,10 @@ int SSLClientSocketOpenSSL::ClientCertRequestCallback(SSL* ssl,
 
 // SSLClientSocket methods
 
-void SSLClientSocketOpenSSL::GetSSLInfo(SSLInfo* ssl_info) {
+bool SSLClientSocketOpenSSL::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->Reset();
   if (!server_cert_)
-    return;
+    return false;
 
   ssl_info->cert = server_cert_verify_result_.verified_cert;
   ssl_info->cert_status = server_cert_verify_result_.cert_status;
@@ -602,8 +602,9 @@ void SSLClientSocketOpenSSL::GetSSLInfo(SSLInfo* ssl_info) {
       server_cert_verify_result_.is_issued_by_known_root;
   ssl_info->public_key_hashes =
     server_cert_verify_result_.public_key_hashes;
-  ssl_info->client_cert_sent = WasDomainBoundCertSent() ||
-      (ssl_config_.send_client_cert && ssl_config_.client_cert);
+  ssl_info->client_cert_sent =
+      ssl_config_.send_client_cert && ssl_config_.client_cert;
+  ssl_info->channel_id_sent = WasChannelIDSent();
 
   const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl_);
   CHECK(cipher);
@@ -630,6 +631,7 @@ void SSLClientSocketOpenSSL::GetSSLInfo(SSLInfo* ssl_info) {
       << SSLConnectionStatusToCompression(ssl_info->connection_status)
       << " version = "
       << SSLConnectionStatusToVersion(ssl_info->connection_status);
+  return true;
 }
 
 void SSLClientSocketOpenSSL::GetSSLCertRequestInfo(
