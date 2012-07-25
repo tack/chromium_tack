@@ -142,4 +142,7 @@ void TackSecurityPersister::CompleteLoad(const std::string& state) {
   TACK_RETVAL retval = store->deserialize(state.data(), &outputLen);
   if (retval != TACK_OK)
       LOG(ERROR) << "TACK: Failed to deserialize state: " << state;
+
+  // Don't go and write it to disk right away
+  store->setDirtyFlag(false);
 }
