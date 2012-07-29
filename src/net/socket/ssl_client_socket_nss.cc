@@ -3496,7 +3496,6 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         }
         
         // Check static store
-        bool invalidateOnly = false;
         retval = staticStore->process(&ctx, name, currentTime);
         if (retval < TACK_OK) {
             LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
@@ -3504,11 +3503,9 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
             return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
         }
         if (retval == TACK_OK_REJECTED) {
-            invalidateOnly = true;
             LOG(WARNING) << "TACK: Connection REJECTED by TACK static store: " << name;
         }
         if (retval == TACK_OK_ACCEPTED) {
-            invalidateOnly = true;
             LOG(INFO) << "TACK: Connection ACCEPTED by TACK static store: " << name;
         }
         if (retval == TACK_OK_UNPINNED) {
@@ -3517,7 +3514,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         TACK_RETVAL staticRetval = retval;
 
         // Check dynamic store
-        retval = dynamicStore->process(&ctx, name, currentTime, invalidateOnly);
+        retval = dynamicStore->process(&ctx, name, currentTime);
         if (retval < TACK_OK) {
             LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
                 ", " << tackRetvalString(retval);
