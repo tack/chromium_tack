@@ -3459,7 +3459,6 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
     // TACK
     if (result != ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN) {
-        
         TACK_RETVAL retval = TACK_ERR;
         SECStatus rv;
         TackStore* staticStore = transport_security_state_->GetTackStaticStore();
