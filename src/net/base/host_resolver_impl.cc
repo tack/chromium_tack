@@ -38,6 +38,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/net_log.h"
 #include "net/base/net_util.h"
+#include "net/dns/address_sorter.h"
 #include "net/dns/dns_client.h"
 #include "net/dns/dns_config_service.h"
 #include "net/dns/dns_protocol.h"
@@ -407,7 +408,6 @@ class PriorityTracker {
 HostResolver* CreateHostResolver(size_t max_concurrent_resolves,
                                  size_t max_retry_attempts,
                                  HostCache* cache,
-                                 scoped_ptr<DnsConfigService> config_service,
                                  scoped_ptr<DnsClient> dns_client,
                                  NetLog* net_log) {
   if (max_concurrent_resolves == HostResolver::kDefaultParallelism)
@@ -422,7 +422,6 @@ HostResolver* CreateHostResolver(size_t max_concurrent_resolves,
       cache,
       limits,
       HostResolverImpl::ProcTaskParams(NULL, max_retry_attempts),
-      config_service.Pass(),
       dns_client.Pass(),
       net_log);
 
@@ -439,7 +438,6 @@ HostResolver* CreateSystemHostResolver(size_t max_concurrent_resolves,
   return CreateHostResolver(max_concurrent_resolves,
                             max_retry_attempts,
                             HostCache::CreateDefaultCache(),
-                            DnsConfigService::CreateSystemService(),
                             scoped_ptr<DnsClient>(NULL),
                             net_log);
 }
@@ -450,7 +448,6 @@ HostResolver* CreateNonCachingSystemHostResolver(size_t max_concurrent_resolves,
   return CreateHostResolver(max_concurrent_resolves,
                             max_retry_attempts,
                             NULL,
-                            scoped_ptr<DnsConfigService>(NULL),
                             scoped_ptr<DnsClient>(NULL),
                             net_log);
 }
@@ -461,7 +458,6 @@ HostResolver* CreateAsyncHostResolver(size_t max_concurrent_resolves,
   return CreateHostResolver(max_concurrent_resolves,
                             max_retry_attempts,
                             HostCache::CreateDefaultCache(),
-                            DnsConfigService::CreateSystemService(),
                             DnsClient::CreateClient(net_log),
                             net_log);
 }
@@ -609,7 +605,7 @@ class HostResolverImpl::ProcTask
   void Cancel() {
     DCHECK(origin_loop_->BelongsToCurrentThread());
 
-    if (was_canceled())
+    if (was_canceled() || was_completed())
       return;
 
     callback_.Reset();
@@ -1042,32 +1038,33 @@ class HostResolverImpl::IPv6ProbeJob
 
 // Resolves the hostname using DnsTransaction.
 // TODO(szym): This could be moved to separate source file as well.
-class HostResolverImpl::DnsTask {
+class HostResolverImpl::DnsTask : public base::SupportsWeakPtr<DnsTask> {
  public:
   typedef base::Callback<void(int net_error,
                               const AddressList& addr_list,
                               base::TimeDelta ttl)> Callback;
 
-  DnsTask(DnsTransactionFactory* factory,
+  DnsTask(DnsClient* client,
           const Key& key,
           const Callback& callback,
           const BoundNetLog& job_net_log)
-      : callback_(callback), net_log_(job_net_log) {
-    DCHECK(factory);
+      : client_(client),
+        family_(key.address_family),
+        callback_(callback),
+        net_log_(job_net_log) {
+    DCHECK(client);
     DCHECK(!callback.is_null());
 
-    // For now we treat ADDRESS_FAMILY_UNSPEC as if it was IPV4.
-    uint16 qtype = (key.address_family == ADDRESS_FAMILY_IPV6)
-                   ? dns_protocol::kTypeAAAA
-                   : dns_protocol::kTypeA;
-    // TODO(szym): Implement "happy eyeballs".
-    transaction_ = factory->CreateTransaction(
+    // If unspecified, do IPv4 first, because suffix search will be faster.
+    uint16 qtype = (family_ == ADDRESS_FAMILY_IPV6) ?
+                   dns_protocol::kTypeAAAA :
+                   dns_protocol::kTypeA;
+    transaction_ = client_->GetTransactionFactory()->CreateTransaction(
         key.hostname,
         qtype,
         base::Bind(&DnsTask::OnTransactionComplete, base::Unretained(this),
-                   base::TimeTicks::Now()),
+                   true /* first_query */, base::TimeTicks::Now()),
         net_log_);
-    DCHECK(transaction_.get());
   }
 
   int Start() {
@@ -1075,47 +1072,138 @@ class HostResolverImpl::DnsTask {
     return transaction_->Start();
   }
 
-  void OnTransactionComplete(const base::TimeTicks& start_time,
+ private:
+  void OnTransactionComplete(bool first_query,
+                             const base::TimeTicks& start_time,
                              DnsTransaction* transaction,
                              int net_error,
                              const DnsResponse* response) {
     DCHECK(transaction);
     // Run |callback_| last since the owning Job will then delete this DnsTask.
-    DnsResponse::Result result = DnsResponse::DNS_SUCCESS;
-    if (net_error == OK) {
-      CHECK(response);
-      DNS_HISTOGRAM("AsyncDNS.TransactionSuccess",
-                    base::TimeTicks::Now() - start_time);
-      AddressList addr_list;
-      base::TimeDelta ttl;
-      result = response->ParseToAddressList(&addr_list, &ttl);
-      UMA_HISTOGRAM_ENUMERATION("AsyncDNS.ParseToAddressList",
-                                result,
-                                DnsResponse::DNS_PARSE_RESULT_MAX);
-      if (result == DnsResponse::DNS_SUCCESS) {
-        net_log_.EndEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_DNS_TASK,
-                          addr_list.CreateNetLogCallback());
-        callback_.Run(net_error, addr_list, ttl);
-        return;
-      }
-      net_error = ERR_DNS_MALFORMED_RESPONSE;
-    } else {
+    if (net_error != OK) {
       DNS_HISTOGRAM("AsyncDNS.TransactionFailure",
                     base::TimeTicks::Now() - start_time);
+      OnFailure(net_error, DnsResponse::DNS_PARSE_OK);
+      return;
     }
+
+    CHECK(response);
+    DNS_HISTOGRAM("AsyncDNS.TransactionSuccess",
+                  base::TimeTicks::Now() - start_time);
+    AddressList addr_list;
+    base::TimeDelta ttl;
+    DnsResponse::Result result = response->ParseToAddressList(&addr_list, &ttl);
+    UMA_HISTOGRAM_ENUMERATION("AsyncDNS.ParseToAddressList",
+                              result,
+                              DnsResponse::DNS_PARSE_RESULT_MAX);
+    if (result != DnsResponse::DNS_PARSE_OK) {
+      // Fail even if the other query succeeds.
+      OnFailure(ERR_DNS_MALFORMED_RESPONSE, result);
+      return;
+    }
+
+    bool needs_sort = false;
+    if (first_query) {
+      DCHECK(client_->GetConfig()) <<
+          "Transaction should have been aborted when config changed!";
+      if (family_ == ADDRESS_FAMILY_IPV6) {
+        needs_sort = (addr_list.size() > 1);
+      } else if (family_ == ADDRESS_FAMILY_UNSPECIFIED) {
+        first_addr_list_ = addr_list;
+        first_ttl_ = ttl;
+        // Use fully-qualified domain name to avoid search.
+        transaction_ = client_->GetTransactionFactory()->CreateTransaction(
+            response->GetDottedName() + ".",
+            dns_protocol::kTypeAAAA,
+            base::Bind(&DnsTask::OnTransactionComplete, base::Unretained(this),
+                       false /* first_query */, base::TimeTicks::Now()),
+            net_log_);
+        net_error = transaction_->Start();
+        if (net_error != ERR_IO_PENDING)
+          OnFailure(net_error, DnsResponse::DNS_PARSE_OK);
+        return;
+      }
+    } else {
+      DCHECK_EQ(ADDRESS_FAMILY_UNSPECIFIED, family_);
+      bool has_ipv6_addresses = !addr_list.empty();
+      if (!first_addr_list_.empty()) {
+        ttl = std::min(ttl, first_ttl_);
+        // Place IPv4 addresses after IPv6.
+        addr_list.insert(addr_list.end(), first_addr_list_.begin(),
+                                          first_addr_list_.end());
+      }
+      needs_sort = (has_ipv6_addresses && addr_list.size() > 1);
+    }
+
+    if (addr_list.empty()) {
+      // TODO(szym): Don't fallback to ProcTask in this case.
+      OnFailure(ERR_NAME_NOT_RESOLVED, DnsResponse::DNS_PARSE_OK);
+      return;
+    }
+
+    if (needs_sort) {
+      // Sort could complete synchronously.
+      client_->GetAddressSorter()->Sort(
+          addr_list,
+          base::Bind(&DnsTask::OnSortComplete, AsWeakPtr(),
+                     base::TimeTicks::Now(),
+                     ttl));
+    } else {
+      OnSuccess(addr_list, ttl);
+    }
+  }
+
+  void OnSortComplete(base::TimeTicks start_time,
+                      base::TimeDelta ttl,
+                      bool success,
+                      const AddressList& addr_list) {
+    if (!success) {
+      DNS_HISTOGRAM("AsyncDNS.SortFailure",
+                    base::TimeTicks::Now() - start_time);
+      OnFailure(ERR_DNS_SORT_ERROR, DnsResponse::DNS_PARSE_OK);
+      return;
+    }
+
+    DNS_HISTOGRAM("AsyncDNS.SortSuccess",
+                  base::TimeTicks::Now() - start_time);
+
+    // AddressSorter prunes unusable destinations.
+    if (addr_list.empty()) {
+      LOG(WARNING) << "Address list empty after RFC3484 sort";
+      OnFailure(ERR_NAME_NOT_RESOLVED, DnsResponse::DNS_PARSE_OK);
+      return;
+    }
+
+    OnSuccess(addr_list, ttl);
+  }
+
+  void OnFailure(int net_error, DnsResponse::Result result) {
+    DCHECK_NE(OK, net_error);
     net_log_.EndEvent(
         NetLog::TYPE_HOST_RESOLVER_IMPL_DNS_TASK,
         base::Bind(&NetLogDnsTaskFailedCallback, net_error, result));
     callback_.Run(net_error, AddressList(), base::TimeDelta());
   }
 
- private:
+  void OnSuccess(const AddressList& addr_list, base::TimeDelta ttl) {
+    net_log_.EndEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_DNS_TASK,
+                      addr_list.CreateNetLogCallback());
+    callback_.Run(OK, addr_list, ttl);
+  }
+
+  DnsClient* client_;
+  AddressFamily family_;
   // The listener to the results of this DnsTask.
   Callback callback_;
-
   const BoundNetLog net_log_;
 
   scoped_ptr<DnsTransaction> transaction_;
+
+  // Results from the first transaction. Used only if |family_| is unspecified.
+  AddressList first_addr_list_;
+  base::TimeDelta first_ttl_;
+
+  DISALLOW_COPY_AND_ASSIGN(DnsTask);
 };
 
 //-----------------------------------------------------------------------------
@@ -1214,7 +1302,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
   }
 
   // Marks |req| as cancelled. If it was the last active Request, also finishes
-  // this Job marking it either as aborted or cancelled, and deletes it.
+  // this Job, marking it as cancelled, and deletes it.
   void CancelRequest(Request* req) {
     DCHECK_EQ(key_.hostname, req->info().hostname());
     DCHECK(!req->was_canceled());
@@ -1381,7 +1469,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
   void StartDnsTask() {
     DCHECK(resolver_->HaveDnsConfig());
     dns_task_.reset(new DnsTask(
-        resolver_->dns_client_->GetTransactionFactory(),
+        resolver_->dns_client_.get(),
         key_,
         base::Bind(&Job::OnDnsTaskComplete, base::Unretained(this)),
         net_log_));
@@ -1415,6 +1503,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     }
 
     UmaAsyncDnsResolveStatus(RESOLVE_STATUS_DNS_SUCCESS);
+
     CompleteRequests(net_error, addr_list, ttl);
   }
 
@@ -1569,7 +1658,6 @@ HostResolverImpl::HostResolverImpl(
     HostCache* cache,
     const PrioritizedDispatcher::Limits& job_limits,
     const ProcTaskParams& proc_params,
-    scoped_ptr<DnsConfigService> dns_config_service,
     scoped_ptr<DnsClient> dns_client,
     NetLog* net_log)
     : cache_(cache),
@@ -1577,7 +1665,6 @@ HostResolverImpl::HostResolverImpl(
       max_queued_jobs_(job_limits.total_jobs * 100u),
       proc_params_(proc_params),
       default_address_family_(ADDRESS_FAMILY_UNSPECIFIED),
-      dns_config_service_(dns_config_service.Pass()),
       dns_client_(dns_client.Pass()),
       received_dns_config_(false),
       ipv6_probe_monitoring_(false),
@@ -1600,17 +1687,12 @@ HostResolverImpl::HostResolverImpl(
     additional_resolver_flags_ |= HOST_RESOLVER_LOOPBACK_ONLY;
 #endif
   NetworkChangeNotifier::AddIPAddressObserver(this);
+  NetworkChangeNotifier::AddDNSObserver(this);
+  OnDNSChanged();
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_OPENBSD) && \
     !defined(OS_ANDROID)
-  NetworkChangeNotifier::AddDNSObserver(this);
   EnsureDnsReloaderInit();
 #endif
-
-  if (dns_config_service_.get()) {
-    dns_config_service_->Watch(
-        base::Bind(&HostResolverImpl::OnDnsConfigChanged,
-                   base::Unretained(this)));
-  }
 }
 
 HostResolverImpl::~HostResolverImpl() {
@@ -1661,6 +1743,45 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   JobMap::iterator jobit = jobs_.find(key);
   Job* job;
   if (jobit == jobs_.end()) {
+    // If we couldn't find the desired address family, check to see if the
+    // other family is in the cache or another job, which indicates waste,
+    // and we should fix crbug.com/139811.
+    {
+      bool ipv4 = key.address_family == ADDRESS_FAMILY_IPV4;
+      Key other_family_key = key;
+      other_family_key.address_family = ipv4 ?
+          ADDRESS_FAMILY_UNSPECIFIED : ADDRESS_FAMILY_IPV4;
+      bool found_other_family_cache = false;
+      bool found_other_family_job = false;
+      if (default_address_family_ == ADDRESS_FAMILY_UNSPECIFIED) {
+        found_other_family_cache = cache_.get() &&
+            cache_->Lookup(other_family_key, base::TimeTicks::Now()) != NULL;
+        if (!found_other_family_cache)
+          found_other_family_job = jobs_.count(other_family_key) > 0;
+      }
+      enum {  // Used in UMA_HISTOGRAM_ENUMERATION.
+        AF_WASTE_IPV4_ONLY,
+        AF_WASTE_CACHE_IPV4,
+        AF_WASTE_CACHE_UNSPEC,
+        AF_WASTE_JOB_IPV4,
+        AF_WASTE_JOB_UNSPEC,
+        AF_WASTE_NONE_IPV4,
+        AF_WASTE_NONE_UNSPEC,
+        AF_WASTE_MAX,  // Bounding value.
+      } category = AF_WASTE_MAX;
+      if (default_address_family_ != ADDRESS_FAMILY_UNSPECIFIED) {
+        category = AF_WASTE_IPV4_ONLY;
+      } else if (found_other_family_cache) {
+        category = ipv4 ? AF_WASTE_CACHE_IPV4 : AF_WASTE_CACHE_UNSPEC;
+      } else if (found_other_family_job) {
+        category = ipv4 ? AF_WASTE_JOB_IPV4 : AF_WASTE_JOB_UNSPEC;
+      } else {
+        category = ipv4 ? AF_WASTE_NONE_IPV4 : AF_WASTE_NONE_UNSPEC;
+      }
+      UMA_HISTOGRAM_ENUMERATION("DNS.ResolveUnspecWaste", category,
+                                AF_WASTE_MAX);
+    }
+
     // Create new Job.
     job = new Job(this, key, info.priority(), request_net_log);
     job->Schedule();
@@ -1983,47 +2104,40 @@ void HostResolverImpl::OnIPAddressChanged() {
   // |this| may be deleted inside AbortAllInProgressJobs().
 }
 
-void HostResolverImpl::OnDNSChanged(unsigned detail) {
-  // Ignore signals about watches.
-  const unsigned kIgnoredDetail =
-      NetworkChangeNotifier::CHANGE_DNS_WATCH_STARTED |
-      NetworkChangeNotifier::CHANGE_DNS_WATCH_FAILED;
-  if ((detail & ~kIgnoredDetail) == 0)
-    return;
-  // If the DNS server has changed, existing cached info could be wrong so we
-  // have to drop our internal cache :( Note that OS level DNS caches, such
-  // as NSCD's cache should be dropped automatically by the OS when
-  // resolv.conf changes so we don't need to do anything to clear that cache.
-  if (cache_.get())
-    cache_->clear();
-  // Existing jobs will have been sent to the original server so they need to
-  // be aborted.
-  AbortAllInProgressJobs();
-  // |this| may be deleted inside AbortAllInProgressJobs().
-}
-
-void HostResolverImpl::OnDnsConfigChanged(const DnsConfig& dns_config) {
+void HostResolverImpl::OnDNSChanged() {
+  DnsConfig dns_config;
+  NetworkChangeNotifier::GetDnsConfig(&dns_config);
   if (net_log_) {
     net_log_->AddGlobalEntry(
         NetLog::TYPE_DNS_CONFIG_CHANGED,
         base::Bind(&NetLogDnsConfigCallback, &dns_config));
   }
 
-  // TODO(szym): Remove once http://crbug.com/125599 is resolved.
+  // TODO(szym): Remove once http://crbug.com/137914 is resolved.
   received_dns_config_ = dns_config.IsValid();
 
   // Life check to bail once |this| is deleted.
   base::WeakPtr<HostResolverImpl> self = AsWeakPtr();
 
-  if (dns_client_.get()) {
-    // We want a new factory in place, before we Abort running Jobs, so that the
-    // newly started jobs use the new factory.
+  // We want a new DnsSession in place, before we Abort running Jobs, so that
+  // the newly started jobs use the new config.
+  if (dns_client_.get())
     dns_client_->SetConfig(dns_config);
-    OnDNSChanged(NetworkChangeNotifier::CHANGE_DNS_SETTINGS);
-    // |this| may be deleted inside OnDNSChanged().
-    if (self)
-      TryServingAllJobsFromHosts();
-  }
+
+  // If the DNS server has changed, existing cached info could be wrong so we
+  // have to drop our internal cache :( Note that OS level DNS caches, such
+  // as NSCD's cache should be dropped automatically by the OS when
+  // resolv.conf changes so we don't need to do anything to clear that cache.
+  if (cache_.get())
+    cache_->clear();
+
+  // Existing jobs will have been sent to the original server so they need to
+  // be aborted.
+  AbortAllInProgressJobs();
+
+  // |this| may be deleted inside AbortAllInProgressJobs().
+  if (self)
+    TryServingAllJobsFromHosts();
 }
 
 bool HostResolverImpl::HaveDnsConfig() const {

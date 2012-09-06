@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/prefs/pref_change_registrar.h"
+#include "chrome/browser/api/prefs/pref_change_registrar.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "net/url_request/url_request_context.h"
@@ -20,6 +20,10 @@ class IOThread;
 class Profile;
 class ProfileIOData;
 
+namespace chrome_browser_net {
+class LoadTimeStats;
+}
+
 // Subclass of net::URLRequestContext which can be used to store extra
 // information for requests.
 //
@@ -27,7 +31,14 @@ class ProfileIOData;
 // including the constructor and destructor.
 class ChromeURLRequestContext : public net::URLRequestContext {
  public:
-  ChromeURLRequestContext();
+  enum ContextType {
+    CONTEXT_TYPE_MAIN,
+    CONTEXT_TYPE_MEDIA,
+    CONTEXT_TYPE_EXTENSIONS,
+    CONTEXT_TYPE_APP
+  };
+  ChromeURLRequestContext(ContextType type,
+                          chrome_browser_net::LoadTimeStats* load_time_stats);
   virtual ~ChromeURLRequestContext();
 
   base::WeakPtr<ChromeURLRequestContext> GetWeakPtr() {
@@ -70,6 +81,7 @@ class ChromeURLRequestContext : public net::URLRequestContext {
 
   ChromeURLDataManagerBackend* chrome_url_data_manager_backend_;
   bool is_incognito_;
+  chrome_browser_net::LoadTimeStats* load_time_stats_;
 
   // ---------------------------------------------------------------------------
   // Important: When adding any new members above, consider whether they need to
@@ -130,6 +142,13 @@ class ChromeURLRequestContextGetter : public net::URLRequestContextGetter,
   // Create an instance for an original profile for an app with isolated
   // storage. This is expected to get called on UI thread.
   static ChromeURLRequestContextGetter* CreateOriginalForIsolatedApp(
+      Profile* profile,
+      const ProfileIOData* profile_io_data,
+      const std::string& app_id);
+
+  // Create an instance for an original profile for media with isolated
+  // storage. This is expected to get called on UI thread.
+  static ChromeURLRequestContextGetter* CreateOriginalForIsolatedMedia(
       Profile* profile,
       const ProfileIOData* profile_io_data,
       const std::string& app_id);

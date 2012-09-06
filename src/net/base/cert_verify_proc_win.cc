@@ -13,6 +13,7 @@
 #include "crypto/sha2.h"
 #include "net/base/asn1_util.h"
 #include "net/base/cert_status_flags.h"
+#include "net/base/cert_verifier.h"
 #include "net/base/cert_verify_result.h"
 #include "net/base/crl_set.h"
 #include "net/base/ev_root_ca_metadata.h"
@@ -541,22 +542,11 @@ int CertVerifyProcWin::VerifyInternal(X509Certificate* cert,
   chain_para.RequestedUsage.Usage.cUsageIdentifier = arraysize(usage);
   chain_para.RequestedUsage.Usage.rgpszUsageIdentifier =
       const_cast<LPSTR*>(usage);
-  // We can set CERT_CHAIN_RETURN_LOWER_QUALITY_CONTEXTS to get more chains.
-  DWORD chain_flags = CERT_CHAIN_CACHE_END_CERT |
-                      CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT;
-  const bool rev_checking_enabled =
-      flags & X509Certificate::VERIFY_REV_CHECKING_ENABLED;
-
-  if (rev_checking_enabled) {
-    verify_result->cert_status |= CERT_STATUS_REV_CHECKING_ENABLED;
-  } else {
-    chain_flags |= CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY;
-  }
 
   // Get the certificatePolicies extension of the certificate.
   scoped_ptr_malloc<CERT_POLICIES_INFO> policies_info;
   LPSTR ev_policy_oid = NULL;
-  if (flags & X509Certificate::VERIFY_EV_CERT) {
+  if (flags & CertVerifier::VERIFY_EV_CERT) {
     GetCertPoliciesInfo(cert_handle, &policies_info);
     if (policies_info.get()) {
       EVRootCAMetadata* metadata = EVRootCAMetadata::GetInstance();
@@ -572,6 +562,20 @@ int CertVerifyProcWin::VerifyInternal(X509Certificate* cert,
         }
       }
     }
+  }
+
+  // We can set CERT_CHAIN_RETURN_LOWER_QUALITY_CONTEXTS to get more chains.
+  DWORD chain_flags = CERT_CHAIN_CACHE_END_CERT |
+                      CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT;
+  const bool rev_checking_enabled =
+      (flags & CertVerifier::VERIFY_REV_CHECKING_ENABLED) ||
+      (ev_policy_oid != NULL &&
+       (flags & CertVerifier::VERIFY_REV_CHECKING_ENABLED_EV_ONLY));
+
+  if (rev_checking_enabled) {
+    verify_result->cert_status |= CERT_STATUS_REV_CHECKING_ENABLED;
+  } else {
+    chain_flags |= CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY;
   }
 
   // For non-test scenarios, use the default HCERTCHAINENGINE, NULL, which

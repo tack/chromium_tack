@@ -11,6 +11,7 @@
 #include "crypto/openssl_util.h"
 #include "net/base/asn1_util.h"
 #include "net/base/cert_status_flags.h"
+#include "net/base/cert_verifier.h"
 #include "net/base/cert_verify_result.h"
 #include "net/base/net_errors.h"
 #include "net/base/x509_certificate.h"
@@ -50,7 +51,6 @@ CertStatus MapCertErrorToCertStatus(int err) {
 // TODO(bulach): what should we map to these status?
       return CERT_STATUS_NO_REVOCATION_MECHANISM;
       return CERT_STATUS_UNABLE_TO_CHECK_REVOCATION;
-      return CERT_STATUS_NOT_IN_DNS;
 #endif
     case X509_V_ERR_CERT_REVOKED:
       return CERT_STATUS_REVOKED;

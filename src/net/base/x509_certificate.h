@@ -88,12 +88,6 @@ class NET_EXPORT X509Certificate
     bool operator() (X509Certificate* lhs,  X509Certificate* rhs) const;
   };
 
-  enum VerifyFlags {
-    VERIFY_REV_CHECKING_ENABLED = 1 << 0,
-    VERIFY_EV_CERT = 1 << 1,
-    VERIFY_CERT_IO_ENABLED = 1 << 2,
-  };
-
   enum Format {
     // The data contains a single DER-encoded certificate, or a PEM-encoded
     // DER certificate with the PEM encoding block name of "CERTIFICATE".

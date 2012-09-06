@@ -127,4 +127,10 @@ int NetworkDelegate::NotifyBeforeSocketStreamConnect(
   return OnBeforeSocketStreamConnect(socket, callback);
 }
 
+void NetworkDelegate::NotifyRequestWaitStateChange(const URLRequest& request,
+                                                   RequestWaitState state) {
+  DCHECK(CalledOnValidThread());
+  OnRequestWaitStateChange(request, state);
+}
+
 }  // namespace net

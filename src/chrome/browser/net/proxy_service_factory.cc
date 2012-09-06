@@ -17,6 +17,7 @@
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
+#include "net/proxy/proxy_service_v8.h"
 #include "net/url_request/url_request_context.h"
 
 #if defined(OS_CHROMEOS)
@@ -77,6 +78,9 @@ net::ProxyService* ProxyServiceFactory::CreateProxyService(
     const CommandLine& command_line) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
+#if defined(OS_IOS)
+  bool use_v8 = false;
+#else
   bool use_v8 = !command_line.HasSwitch(switches::kWinHttpProxyResolver);
   if (use_v8 && command_line.HasSwitch(switches::kSingleProcess)) {
     // See the note about V8 multithreading in net/proxy/proxy_resolver_v8.h
@@ -84,6 +88,7 @@ net::ProxyService* ProxyServiceFactory::CreateProxyService(
     LOG(ERROR) << "Cannot use V8 Proxy resolver in single process mode.";
     use_v8 = false;  // Fallback to non-v8 implementation.
   }
+#endif  // defined(OS_IOS)
 
   size_t num_pac_threads = 0u;  // Use default number of threads.
 
@@ -103,12 +108,15 @@ net::ProxyService* ProxyServiceFactory::CreateProxyService(
 
   net::ProxyService* proxy_service;
   if (use_v8) {
+#if defined(OS_IOS)
+    NOTREACHED();
+#else
     net::DhcpProxyScriptFetcherFactory dhcp_factory;
     if (command_line.HasSwitch(switches::kDisableDhcpWpad)) {
       dhcp_factory.set_enabled(false);
     }
 
-    proxy_service = net::ProxyService::CreateUsingV8ProxyResolver(
+    proxy_service = net::CreateProxyServiceUsingV8ProxyResolver(
         proxy_config_service,
         num_pac_threads,
         new net::ProxyScriptFetcherImpl(context),
@@ -116,6 +124,7 @@ net::ProxyService* ProxyServiceFactory::CreateProxyService(
         context->host_resolver(),
         net_log,
         context->network_delegate());
+#endif  // defined(OS_IOS)
   } else {
     proxy_service = net::ProxyService::CreateUsingSystemProxyResolver(
         proxy_config_service,

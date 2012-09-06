@@ -19,13 +19,14 @@
 #include "net/base/host_resolver.h"
 #include "net/base/host_resolver_proc.h"
 #include "net/base/net_export.h"
-#include "net/base/net_log.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/prioritized_dispatcher.h"
-#include "net/dns/dns_client.h"
-#include "net/dns/dns_config_service.h"
 
 namespace net {
+
+class BoundNetLog;
+class DnsClient;
+class NetLog;
 
 // For each hostname that is requested, HostResolver creates a
 // HostResolverImpl::Job. When this job gets dispatched it creates a ProcTask
@@ -118,7 +119,6 @@ class NET_EXPORT HostResolverImpl
   HostResolverImpl(HostCache* cache,
                    const PrioritizedDispatcher::Limits& job_limits,
                    const ProcTaskParams& proc_params,
-                   scoped_ptr<DnsConfigService> dns_config_service,
                    scoped_ptr<DnsClient> dns_client,
                    NetLog* net_log);
 
@@ -220,10 +220,7 @@ class NET_EXPORT HostResolverImpl
   virtual void OnIPAddressChanged() OVERRIDE;
 
   // NetworkChangeNotifier::DNSObserver:
-  virtual void OnDNSChanged(unsigned detail) OVERRIDE;
-
-  // DnsConfigService callback:
-  void OnDnsConfigChanged(const DnsConfig& dns_config);
+  virtual void OnDNSChanged() OVERRIDE;
 
   // True if have a DnsClient with a valid DnsConfig.
   bool HaveDnsConfig() const;
@@ -250,8 +247,6 @@ class NET_EXPORT HostResolverImpl
 
   // Address family to use when the request doesn't specify one.
   AddressFamily default_address_family_;
-
-  scoped_ptr<DnsConfigService> dns_config_service_;
 
   // If present, used by DnsTask and ServeFromHosts to resolve requests.
   scoped_ptr<DnsClient> dns_client_;

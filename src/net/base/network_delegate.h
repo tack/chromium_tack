@@ -12,6 +12,7 @@
 #include "base/threading/non_thread_safe.h"
 #include "net/base/auth.h"
 #include "net/base/completion_callback.h"
+#include "net/cookies/canonical_cookie.h"
 
 class FilePath;
 class GURL;
@@ -28,7 +29,6 @@ namespace net {
 // NOTE: It is not okay to add any compile-time dependencies on symbols outside
 // of net/base here, because we have a net_base library. Forward declarations
 // are ok.
-class CookieList;
 class CookieOptions;
 class HttpRequestHeaders;
 class HttpResponseHeaders;
@@ -47,6 +47,14 @@ class NetworkDelegate : public base::NonThreadSafe {
     AUTH_REQUIRED_RESPONSE_IO_PENDING,
   };
   typedef base::Callback<void(AuthRequiredResponse)> AuthCallback;
+
+  enum RequestWaitState {
+    REQUEST_WAIT_STATE_CACHE_START,
+    REQUEST_WAIT_STATE_CACHE_FINISH,
+    REQUEST_WAIT_STATE_NETWORK_START,
+    REQUEST_WAIT_STATE_NETWORK_FINISH,
+    REQUEST_WAIT_STATE_RESET
+  };
 
   virtual ~NetworkDelegate() {}
 
@@ -89,6 +97,9 @@ class NetworkDelegate : public base::NonThreadSafe {
 
   int NotifyBeforeSocketStreamConnect(SocketStream* socket,
                                       const CompletionCallback& callback);
+
+  void NotifyRequestWaitStateChange(const URLRequest& request,
+                                    RequestWaitState state);
 
  private:
   // This is the interface for subclasses of NetworkDelegate to implement. These
@@ -214,6 +225,13 @@ class NetworkDelegate : public base::NonThreadSafe {
   // Called before a SocketStream tries to connect.
   virtual int OnBeforeSocketStreamConnect(
       SocketStream* socket, const CompletionCallback& callback) = 0;
+
+  // Called when the completion of a URLRequest is blocking on a cache
+  // action or a network action, or when that is no longer the case.
+  // REQUEST_WAIT_STATE_RESET indicates for a given URLRequest
+  // cancellation of any pending waits for this request.
+  virtual void OnRequestWaitStateChange(const URLRequest& request,
+                                        RequestWaitState state) = 0;
 };
 
 }  // namespace net

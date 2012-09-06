@@ -33,6 +33,7 @@
 #include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/http_server_properties_manager.h"
+#include "chrome/browser/net/load_time_stats.h"
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/net/resource_prefetch_predictor_observer.h"
 #include "chrome/browser/net/transport_security_persister.h"
@@ -61,14 +62,19 @@
 #include "net/proxy/proxy_config_service_fixed.h"
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
+#include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/url_request.h"
 
+#if !defined(OS_ANDROID)
+#include "chrome/browser/managed_mode.h"
+#endif
+
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/cros_settings.h"
-#include "chrome/browser/chromeos/cros_settings_names.h"
-#include "chrome/browser/chromeos/gdata/gdata_protocol_handler.h"
+#include "chrome/browser/chromeos/gdata/drive_protocol_handler.h"
 #include "chrome/browser/chromeos/gview_request_interceptor.h"
 #include "chrome/browser/chromeos/proxy_config_service_impl.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/settings/cros_settings_names.h"
 #endif  // defined(OS_CHROMEOS)
 
 using content::BrowserContext;
@@ -198,6 +204,10 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
       proxy_config_service);
   params->profile = profile;
   profile_params_.reset(params.release());
+#if defined(ENABLE_PRINTING)
+  printing_enabled_.Init(prefs::kPrintingEnabled, pref_service, NULL);
+  printing_enabled_.MoveToThread(BrowserThread::IO);
+#endif
 
   // The URLBlacklistManager has to be created on the UI thread to register
   // observers of |pref_service|, and it also has to clean up on
@@ -216,7 +226,25 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   BrowserContext::EnsureResourceContextInitialized(profile);
 }
 
-ProfileIOData::AppRequestContext::AppRequestContext() {}
+ProfileIOData::MediaRequestContext::MediaRequestContext(
+    chrome_browser_net::LoadTimeStats* load_time_stats)
+    : ChromeURLRequestContext(ChromeURLRequestContext::CONTEXT_TYPE_MEDIA,
+                              load_time_stats) {
+}
+
+void ProfileIOData::MediaRequestContext::SetHttpTransactionFactory(
+    net::HttpTransactionFactory* http_factory) {
+  http_factory_.reset(http_factory);
+  set_http_transaction_factory(http_factory);
+}
+
+ProfileIOData::MediaRequestContext::~MediaRequestContext() {}
+
+ProfileIOData::AppRequestContext::AppRequestContext(
+    chrome_browser_net::LoadTimeStats* load_time_stats)
+    : ChromeURLRequestContext(ChromeURLRequestContext::CONTEXT_TYPE_APP,
+                              load_time_stats) {
+}
 
 void ProfileIOData::AppRequestContext::SetCookieStore(
     net::CookieStore* cookie_store) {
@@ -259,8 +287,14 @@ ProfileIOData::~ProfileIOData() {
     main_request_context_->AssertNoURLRequests();
   if (extensions_request_context_.get())
     extensions_request_context_->AssertNoURLRequests();
-  for (AppRequestContextMap::iterator it = app_request_context_map_.begin();
+  for (URLRequestContextMap::iterator it = app_request_context_map_.begin();
        it != app_request_context_map_.end(); ++it) {
+    it->second->AssertNoURLRequests();
+    delete it->second;
+  }
+  for (URLRequestContextMap::iterator it =
+           isolated_media_request_context_map_.begin();
+       it != isolated_media_request_context_map_.end(); ++it) {
     it->second->AssertNoURLRequests();
     delete it->second;
   }
@@ -339,7 +373,7 @@ ProfileIOData::GetIsolatedAppRequestContext(
     ChromeURLRequestContext* main_context,
     const std::string& app_id) const {
   LazyInitialize();
-  ChromeURLRequestContext* context;
+  ChromeURLRequestContext* context = NULL;
   if (ContainsKey(app_request_context_map_, app_id)) {
     context = app_request_context_map_[app_id];
   } else {
@@ -350,7 +384,28 @@ ProfileIOData::GetIsolatedAppRequestContext(
   return context;
 }
 
+ChromeURLRequestContext*
+ProfileIOData::GetIsolatedMediaRequestContext(
+    ChromeURLRequestContext* main_context,
+    const std::string& app_id) const {
+  LazyInitialize();
+  ChromeURLRequestContext* context = NULL;
+  if (ContainsKey(isolated_media_request_context_map_, app_id)) {
+    context = isolated_media_request_context_map_[app_id];
+  } else {
+    // Get the app context as the starting point for the media context,
+    // so that it uses the app's cookie store.
+    ChromeURLRequestContext* app_context = GetIsolatedAppRequestContext(
+        main_context, app_id);
+    context = AcquireIsolatedMediaRequestContext(app_context, app_id);
+    isolated_media_request_context_map_[app_id] = context;
+  }
+  DCHECK(context);
+  return context;
+}
+
 ExtensionInfoMap* ProfileIOData::GetExtensionInfoMap() const {
+  DCHECK(extension_info_map_) << "ExtensionSystem not initialized";
   return extension_info_map_;
 }
 
@@ -403,7 +458,9 @@ void ProfileIOData::set_http_server_properties_manager(
 }
 
 ProfileIOData::ResourceContext::ResourceContext(ProfileIOData* io_data)
-    : io_data_(io_data) {
+    : io_data_(io_data),
+      host_resolver_(NULL),
+      request_context_(NULL) {
   DCHECK(io_data);
 }
 
@@ -450,10 +507,16 @@ void ProfileIOData::LazyInitialize() const {
   IOThread* const io_thread = profile_params_->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
   const CommandLine& command_line = *CommandLine::ForCurrentProcess();
+  load_time_stats_ = GetLoadTimeStats(io_thread_globals);
 
   // Create the common request contexts.
-  main_request_context_.reset(new ChromeURLRequestContext);
-  extensions_request_context_.reset(new ChromeURLRequestContext);
+  main_request_context_.reset(
+      new ChromeURLRequestContext(ChromeURLRequestContext::CONTEXT_TYPE_MAIN,
+                                  load_time_stats_));
+  extensions_request_context_.reset(
+      new ChromeURLRequestContext(
+          ChromeURLRequestContext::CONTEXT_TYPE_EXTENSIONS,
+          load_time_stats_));
 
   chrome_url_data_manager_backend_.reset(new ChromeURLDataManagerBackend);
 
@@ -461,9 +524,15 @@ void ProfileIOData::LazyInitialize() const {
         io_thread_globals->extension_event_router_forwarder.get(),
         profile_params_->extension_info_map,
         url_blacklist_manager_.get(),
+#if !defined(OS_ANDROID)
+        ManagedMode::GetURLFilter(),
+#else
+        NULL,
+#endif
         profile_params_->profile,
         profile_params_->cookie_settings,
-        &enable_referrers_));
+        &enable_referrers_,
+        load_time_stats_));
 
   fraudulent_certificate_reporter_.reset(
       new chrome_browser_net::ChromeFraudulentCertificateReporter(
@@ -549,13 +618,12 @@ void ProfileIOData::SetUpJobFactoryDefaults(
           chrome_url_data_manager_backend_.get()));
   DCHECK(set_protocol);
   set_protocol = job_factory->SetProtocolHandler(
-      chrome::kChromeDevToolsScheme,
-      CreateDevToolsProtocolHandler(chrome_url_data_manager_backend_.get()));
+      chrome::kDataScheme, new net::DataProtocolHandler());
   DCHECK(set_protocol);
 #if defined(OS_CHROMEOS)
   if (!is_incognito()) {
     set_protocol = job_factory->SetProtocolHandler(
-        chrome::kDriveScheme, new gdata::GDataProtocolHandler());
+        chrome::kDriveScheme, new gdata::DriveProtocolHandler());
     DCHECK(set_protocol);
   }
 #if !defined(GOOGLE_CHROME_BUILD)
@@ -575,6 +643,7 @@ void ProfileIOData::ShutdownOnUIThread() {
   enable_metrics_.Destroy();
 #endif
   safe_browsing_enabled_.Destroy();
+  printing_enabled_.Destroy();
   session_startup_pref_.Destroy();
 #if defined(ENABLE_CONFIGURATION_POLICY)
   if (url_blacklist_manager_.get())

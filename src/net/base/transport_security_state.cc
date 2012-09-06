@@ -53,6 +53,13 @@ static std::string HashHost(const std::string& canonicalized_host) {
   return std::string(hashed, sizeof(hashed));
 }
 
+TransportSecurityState::Iterator::Iterator(const TransportSecurityState& state)
+    : iterator_(state.enabled_hosts_.begin()),
+      end_(state.enabled_hosts_.end()) {
+}
+
+TransportSecurityState::Iterator::~Iterator() {}
+
 void TransportSecurityState::SetDelegate(
     TransportSecurityState::Delegate* delegate) {
   delegate_ = delegate;
@@ -601,7 +608,7 @@ struct PublicKeyPins {
 struct HSTSPreload {
   uint8 length;
   bool include_subdomains;
-  char dns_name[30];
+  char dns_name[34];
   bool https_required;
   PublicKeyPins pins;
   SecondLevelDomainName second_level_domain_name;

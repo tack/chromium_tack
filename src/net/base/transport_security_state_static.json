@@ -23,6 +23,13 @@
 //   include_subdomains: (optional bool) whether subdomains of |name| are also covered
 //   mode: (optional string) "force-https" iff covered names should require HTTPS
 //   pins: (optional string) the |name| member of an object in |pinsets|
+//   snionly: (optional bool) if true then this entry is only enforced if TLS is
+//       enabled because the site in question only serves the correct
+//       certificate if SNI is sent. Note that this only covers the case where
+//       TLS has been disabled by explicit configuration. If TLS was disabled
+//       because of SSLv3 fallback, then the entry is still in force and a
+//       fatal certificate error will result. Spurious certificate errors are
+//       an unfortunate result of SSLv3 fallback.
 
 {
   "pinsets": [
@@ -165,6 +172,8 @@
     { "name": "googleplex.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
     { "name": "groups.google.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
     { "name": "apis.google.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
+    { "name": "chromiumcodereview.appspot.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
+    { "name": "codereview.appspot.com", "include_subdomains": true, "mode": "force-https", "pins": "google" },
 
     // chart.apis.google.com is *not* HSTS because the certificate doesn't match
     // and there are lots of links out there that still use the name. The correct
@@ -278,6 +287,19 @@
     { "name": "irccloud.com", "mode": "force-https" },
     { "name": "www.irccloud.com", "mode": "force-https" },
     { "name": "alpha.irccloud.com", "mode": "force-https" },
+    { "name": "passwd.io", "include_subdomains": true, "mode": "force-https" },
+    { "name": "browserid.org", "include_subdomains": true, "mode": "force-https" },
+    { "name": "login.persona.org", "include_subdomains": true, "mode": "force-https" },
+    { "name": "neonisi.com", "mode": "force-https" },
+    { "name": "www.neonisi.com", "include_subdomains": true, "mode": "force-https" },
+    { "name": "shops.neonisi.com", "include_subdomains": true, "mode": "force-https" },
+    { "name": "piratenlogin.de", "include_subdomains": true, "mode": "force-https" },
+    { "name": "howrandom.org", "include_subdomains": true, "mode": "force-https" },
+    { "name": "intercom.io", "mode": "force-https" },
+    { "name": "api.intercom.io", "mode": "force-https" },
+    { "name": "www.intercom.io", "mode": "force-https" },
+    { "name": "fatzebra.com.au", "include_subdomains": true, "mode": "force-https" },
+    { "name": "csawctf.poly.edu", "include_subdomains": true, "mode": "force-https" },
 
     // Entries that are only valid if the client supports SNI.
     { "name": "gmail.com", "mode": "force-https", "pins": "google", "snionly": true },

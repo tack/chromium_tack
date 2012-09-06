@@ -52,7 +52,7 @@ bool  SetTCPKeepAlive(int fd, bool enable, int delay) {
     PLOG(ERROR) << "Failed to set SO_KEEPALIVE on fd: " << fd;
     return false;
   }
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
   // Set seconds until first TCP keep alive.
   if (setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &delay, sizeof(delay))) {
     PLOG(ERROR) << "Failed to set TCP_KEEPIDLE on fd: " << fd;
@@ -577,6 +577,19 @@ bool TCPClientSocketLibevent::SetKeepAlive(bool enable, int delay) {
 bool TCPClientSocketLibevent::SetNoDelay(bool no_delay) {
   int socket = socket_ != kInvalidSocket ? socket_ : bound_socket_;
   return SetTCPNoDelay(socket, no_delay);
+}
+
+void TCPClientSocketLibevent::ReadWatcher::OnFileCanReadWithoutBlocking(int) {
+  if (!socket_->read_callback_.is_null())
+    socket_->DidCompleteRead();
+}
+
+void TCPClientSocketLibevent::WriteWatcher::OnFileCanWriteWithoutBlocking(int) {
+  if (socket_->waiting_connect()) {
+    socket_->DidCompleteConnect();
+  } else if (!socket_->write_callback_.is_null()) {
+    socket_->DidCompleteWrite();
+  }
 }
 
 void TCPClientSocketLibevent::LogConnectCompletion(int net_error) {

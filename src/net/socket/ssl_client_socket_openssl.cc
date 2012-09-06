@@ -490,10 +490,7 @@ bool SSLClientSocketOpenSSL::Init() {
 #endif
 
 #if defined(SSL_OP_NO_COMPRESSION)
-  // If TLS was disabled also disable compression, to provide maximum site
-  // compatibility in the case of protocol fallback. See http://crbug.com/31628
-  options.ConfigureFlag(SSL_OP_NO_COMPRESSION,
-                        ssl_config_.version_max < SSL_PROTOCOL_VERSION_TLS1);
+  options.ConfigureFlag(SSL_OP_NO_COMPRESSION, true);
 #endif
 
   // TODO(joth): Set this conditionally, see http://crbug.com/55410
@@ -661,6 +658,10 @@ int SSLClientSocketOpenSSL::ExportKeyingMaterial(
     return MapOpenSSLError(ssl_error, err_tracer);
   }
   return OK;
+}
+
+int SSLClientSocketOpenSSL::GetTLSUniqueChannelBinding(std::string* out) {
+  return ERR_NOT_IMPLEMENTED;
 }
 
 SSLClientSocket::NextProtoStatus SSLClientSocketOpenSSL::GetNextProto(
@@ -917,11 +918,11 @@ int SSLClientSocketOpenSSL::DoVerifyCert(int result) {
 
   int flags = 0;
   if (ssl_config_.rev_checking_enabled)
-    flags |= X509Certificate::VERIFY_REV_CHECKING_ENABLED;
+    flags |= CertVerifier::VERIFY_REV_CHECKING_ENABLED;
   if (ssl_config_.verify_ev_cert)
-    flags |= X509Certificate::VERIFY_EV_CERT;
+    flags |= CertVerifier::VERIFY_EV_CERT;
   if (ssl_config_.cert_io_enabled)
-    flags |= X509Certificate::VERIFY_CERT_IO_ENABLED;
+    flags |= CertVerifier::VERIFY_CERT_IO_ENABLED;
   verifier_.reset(new SingleRequestCertVerifier(cert_verifier_));
   return verifier_->Verify(
       server_cert_, host_and_port_.host(), flags,

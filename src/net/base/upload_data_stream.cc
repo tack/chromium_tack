@@ -34,10 +34,14 @@ UploadDataStream::~UploadDataStream() {
 
 int UploadDataStream::Init() {
   DCHECK(!initialized_successfully_);
-
+  std::vector<UploadElement>* elements = upload_data_->elements_mutable();
   {
     base::ThreadRestrictions::ScopedAllowIO allow_io;
-    total_size_ = upload_data_->GetContentLengthSync();
+    total_size_ = 0;
+    if (!is_chunked()) {
+      for (size_t i = 0; i < elements->size(); ++i)
+        total_size_ += (*elements)[i].GetContentLength();
+    }
   }
 
   // If the underlying file has been changed and the expected file
@@ -45,10 +49,9 @@ int UploadDataStream::Init() {
   // modification time from WebKit is based on time_t precision. So we
   // have to convert both to time_t to compare. This check is used for
   // sliced files.
-  const std::vector<UploadData::Element>& elements = *upload_data_->elements();
-  for (size_t i = 0; i < elements.size(); ++i) {
-    const UploadData::Element& element = elements[i];
-    if (element.type() == UploadData::TYPE_FILE &&
+  for (size_t i = 0; i < elements->size(); ++i) {
+    const UploadElement& element = (*elements)[i];
+    if (element.type() == UploadElement::TYPE_FILE &&
         !element.expected_file_modification_time().is_null()) {
       // Temporarily allow until fix: http://crbug.com/72001.
       base::ThreadRestrictions::ScopedAllowIO allow_io;
@@ -63,24 +66,26 @@ int UploadDataStream::Init() {
 
   // Reset the offset, as upload_data_ may already be read (i.e. UploadData
   // can be reused for a new UploadDataStream).
-  upload_data_->ResetOffset();
+  for (size_t i = 0; i < elements->size(); ++i)
+    (*elements)[i].ResetOffset();
 
   initialized_successfully_ = true;
   return OK;
 }
 
 int UploadDataStream::Read(IOBuffer* buf, int buf_len) {
-  std::vector<UploadData::Element>& elements = *upload_data_->elements();
+  std::vector<UploadElement>& elements =
+      *upload_data_->elements_mutable();
 
   int bytes_copied = 0;
   while (bytes_copied < buf_len && element_index_ < elements.size()) {
-    UploadData::Element& element = elements[element_index_];
+    UploadElement& element = elements[element_index_];
 
     bytes_copied += element.ReadSync(buf->data() + bytes_copied,
                                      buf_len - bytes_copied);
 
     if (element.BytesRemaining() == 0)
-        ++element_index_;
+      ++element_index_;
 
     if (is_chunked() && !merge_chunks_)
       break;
@@ -94,24 +99,32 @@ int UploadDataStream::Read(IOBuffer* buf, int buf_len) {
 }
 
 bool UploadDataStream::IsEOF() const {
-  const std::vector<UploadData::Element>& elements = *upload_data_->elements();
+  const std::vector<UploadElement>& elements = *upload_data_->elements();
 
   // Check if all elements are consumed.
   if (element_index_ == elements.size()) {
-    // If the upload data is chunked, check if the last element is the
-    // last chunk.
-    if (!upload_data_->is_chunked() ||
-        (!elements.empty() && elements.back().is_last_chunk())) {
+    // If the upload data is chunked, check if the last chunk is appended.
+    if (!upload_data_->is_chunked() || upload_data_->last_chunk_appended())
       return true;
-    }
   }
   return false;
 }
 
 bool UploadDataStream::IsInMemory() const {
-  DCHECK(initialized_successfully_);
+  // Chunks are in memory, but UploadData does not have all the chunks at
+  // once. Chunks are provided progressively with AppendChunk() as chunks
+  // are ready. Check is_chunked_ here, rather than relying on the loop
+  // below, as there is a case that is_chunked_ is set to true, but the
+  // first chunk is not yet delivered.
+  if (is_chunked())
+    return false;
 
-  return upload_data_->IsInMemory();
+  const std::vector<UploadElement>& elements = *upload_data_->elements();
+  for (size_t i = 0; i < elements.size(); ++i) {
+    if (elements[i].type() != UploadElement::TYPE_BYTES)
+      return false;
+  }
+  return true;
 }
 
 }  // namespace net
