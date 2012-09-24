@@ -814,8 +814,6 @@
         'websockets/websocket_throttle.h',
         'third_party/tackc/src/Tack.h',
         'third_party/tackc/src/Tack.c',
-        'third_party/tackc/src/TackBreakSig.h',
-        'third_party/tackc/src/TackBreakSig.c',
         'third_party/tackc/src/TackExtension.h',
         'third_party/tackc/src/TackExtension.c',
         'third_party/tackc/src/TackStoreDefault.h',
