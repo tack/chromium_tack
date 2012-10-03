@@ -15,7 +15,7 @@
 #include "net/socket/ssl_client_socket_win.h"
 #elif defined(USE_OPENSSL)
 #include "net/socket/ssl_client_socket_openssl.h"
-#elif defined(USE_NSS)
+#elif defined(USE_NSS) || defined(OS_IOS)
 #include "net/socket/ssl_client_socket_nss.h"
 #elif defined(OS_MACOSX)
 #include "net/socket/ssl_client_socket_mac.h"
@@ -55,16 +55,16 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
               base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
     }
 
-    CertDatabase::AddObserver(this);
+    CertDatabase::GetInstance()->AddObserver(this);
   }
 
   virtual ~DefaultClientSocketFactory() {
     // Note: This code never runs, as the factory is defined as a Leaky
     // singleton.
-    CertDatabase::RemoveObserver(this);
+    CertDatabase::GetInstance()->RemoveObserver(this);
   }
 
-  virtual void OnUserCertAdded(const X509Certificate* cert) OVERRIDE {
+  virtual void OnCertAdded(const X509Certificate* cert) OVERRIDE {
     ClearSSLSessionCache();
   }
 
@@ -112,7 +112,7 @@ class DefaultClientSocketFactory : public ClientSocketFactory,
 #if defined(USE_OPENSSL)
     return new SSLClientSocketOpenSSL(transport_socket, host_and_port,
                                       ssl_config, context);
-#elif defined(USE_NSS)
+#elif defined(USE_NSS) || defined(OS_IOS)
     return new SSLClientSocketNSS(nss_task_runner, transport_socket,
                                   host_and_port, ssl_config, context);
 #elif defined(OS_WIN)
@@ -175,7 +175,7 @@ void ClientSocketFactory::UseSystemSSL() {
 #if defined(OS_WIN)
   // Reflect the capability of SSLClientSocketWin.
   SSLConfigService::SetDefaultVersionMax(SSL_PROTOCOL_VERSION_TLS1);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
   // Reflect the capability of SSLClientSocketMac.
   SSLConfigService::SetDefaultVersionMax(SSL_PROTOCOL_VERSION_TLS1);
 #endif

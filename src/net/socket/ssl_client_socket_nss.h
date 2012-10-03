@@ -157,12 +157,12 @@ class SSLClientSocketNSS : public SSLClientSocket {
   CompletionCallback user_connect_callback_;
 
   CertVerifyResult server_cert_verify_result_;
-  std::vector<SHA1Fingerprint> side_pinned_public_keys_;
+  HashValueVector side_pinned_public_keys_;
 
   CertVerifier* const cert_verifier_;
   scoped_ptr<SingleRequestCertVerifier> verifier_;
 
-  // For domain bound certificates in client auth.
+  // The service for retrieving Channel ID keys.  May be NULL.
   ServerBoundCertService* server_bound_cert_service_;
 
   // ssl_session_cache_shard_ is an opaque string that partitions the SSL

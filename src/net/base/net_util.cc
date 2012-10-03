@@ -1626,48 +1626,100 @@ std::string GetHostAndOptionalPort(const GURL& url) {
   return url.host();
 }
 
-std::string NetAddressToString(const struct addrinfo* net_address) {
-  return NetAddressToString(net_address->ai_addr, net_address->ai_addrlen);
-}
-
-std::string NetAddressToString(const struct sockaddr* net_address,
-                               socklen_t address_len) {
-#if defined(OS_WIN)
-  EnsureWinsockInit();
-#endif
-
-  // This buffer is large enough to fit the biggest IPv6 string.
-  char buffer[INET6_ADDRSTRLEN];
-
-  int result = getnameinfo(net_address, address_len, buffer, sizeof(buffer),
-                           NULL, 0, NI_NUMERICHOST);
-
-  if (result != 0) {
-    DVLOG(1) << "getnameinfo() failed with " << result << ": "
-             << gai_strerror(result);
-    buffer[0] = '\0';
-  }
-  return std::string(buffer);
-}
-
-std::string NetAddressToStringWithPort(const struct addrinfo* net_address) {
-  return NetAddressToStringWithPort(
-      net_address->ai_addr, net_address->ai_addrlen);
-}
-std::string NetAddressToStringWithPort(const struct sockaddr* net_address,
-                                       socklen_t address_len) {
-  std::string ip_address_string = NetAddressToString(net_address, address_len);
-  if (ip_address_string.empty())
-    return std::string();  // Failed.
-
-  int port = GetPortFromSockaddr(net_address, address_len);
-
-  if (ip_address_string.find(':') != std::string::npos) {
-    // Surround with square brackets to avoid ambiguity.
-    return base::StringPrintf("[%s]:%d", ip_address_string.c_str(), port);
+// Extracts the address and port portions of a sockaddr.
+bool GetIPAddressFromSockAddr(const struct sockaddr* sock_addr,
+                              socklen_t sock_addr_len,
+                              const uint8** address,
+                              size_t* address_len,
+                              uint16* port) {
+  if (sock_addr->sa_family == AF_INET) {
+    if (sock_addr_len < static_cast<socklen_t>(sizeof(struct sockaddr_in)))
+      return false;
+    const struct sockaddr_in* addr =
+        reinterpret_cast<const struct sockaddr_in*>(sock_addr);
+    *address = reinterpret_cast<const uint8*>(&addr->sin_addr);
+    *address_len = kIPv4AddressSize;
+    if (port)
+      *port = base::NetToHost16(addr->sin_port);
+    return true;
   }
 
-  return base::StringPrintf("%s:%d", ip_address_string.c_str(), port);
+  if (sock_addr->sa_family == AF_INET6) {
+    if (sock_addr_len < static_cast<socklen_t>(sizeof(struct sockaddr_in6)))
+      return false;
+    const struct sockaddr_in6* addr =
+        reinterpret_cast<const struct sockaddr_in6*>(sock_addr);
+    *address = reinterpret_cast<const unsigned char*>(&addr->sin6_addr);
+    *address_len = kIPv6AddressSize;
+    if (port)
+      *port = base::NetToHost16(addr->sin6_port);
+    return true;
+  }
+
+  return false;  // Unrecognized |sa_family|.
+}
+
+std::string IPAddressToString(const uint8* address,
+                              size_t address_len) {
+  std::string str;
+  url_canon::StdStringCanonOutput output(&str);
+
+  if (address_len == kIPv4AddressSize) {
+    url_canon::AppendIPv4Address(address, &output);
+  } else if (address_len == kIPv6AddressSize) {
+    url_canon::AppendIPv6Address(address, &output);
+  } else {
+    CHECK(false) << "Invalid IP address with length: " << address_len;
+  }
+
+  output.Complete();
+  return str;
+}
+
+std::string IPAddressToStringWithPort(const uint8* address,
+                                      size_t address_len,
+                                      uint16 port) {
+  std::string address_str = IPAddressToString(address, address_len);
+
+  if (address_len == kIPv6AddressSize) {
+    // Need to bracket IPv6 addresses since they contain colons.
+    return base::StringPrintf("[%s]:%d", address_str.c_str(), port);
+  }
+  return base::StringPrintf("%s:%d", address_str.c_str(), port);
+}
+
+std::string NetAddressToString(const struct sockaddr* sa,
+                               socklen_t sock_addr_len) {
+  const uint8* address;
+  size_t address_len;
+  if (!GetIPAddressFromSockAddr(sa, sock_addr_len, &address,
+                                &address_len, NULL)) {
+    NOTREACHED();
+    return "";
+  }
+  return IPAddressToString(address, address_len);
+}
+
+std::string NetAddressToStringWithPort(const struct sockaddr* sa,
+                                       socklen_t sock_addr_len) {
+  const uint8* address;
+  size_t address_len;
+  uint16 port;
+  if (!GetIPAddressFromSockAddr(sa, sock_addr_len, &address,
+                                &address_len, &port)) {
+    NOTREACHED();
+    return "";
+  }
+  return IPAddressToStringWithPort(address, address_len, port);
+}
+
+std::string IPAddressToString(const IPAddressNumber& addr) {
+  return IPAddressToString(&addr.front(), addr.size());
+}
+
+std::string IPAddressToStringWithPort(const IPAddressNumber& addr,
+                                      uint16 port) {
+  return IPAddressToStringWithPort(&addr.front(), addr.size(), port);
 }
 
 std::string GetHostName() {

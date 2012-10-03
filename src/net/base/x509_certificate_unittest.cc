@@ -186,7 +186,7 @@ void CheckGoogleCert(const scoped_refptr<X509Certificate>& google_cert,
   const Time& valid_expiry = google_cert->valid_expiry();
   EXPECT_EQ(valid_to, valid_expiry.ToDoubleT());
 
-  const SHA1Fingerprint& fingerprint = google_cert->fingerprint();
+  const SHA1HashValue& fingerprint = google_cert->fingerprint();
   for (size_t i = 0; i < 20; ++i)
     EXPECT_EQ(expected_fingerprint[i], fingerprint.data[i]);
 
@@ -243,7 +243,7 @@ TEST(X509CertificateTest, WebkitCertParsing) {
   const Time& valid_expiry = webkit_cert->valid_expiry();
   EXPECT_EQ(1300491319, valid_expiry.ToDoubleT());  // Mar 18 23:35:19 2011 GMT
 
-  const SHA1Fingerprint& fingerprint = webkit_cert->fingerprint();
+  const SHA1HashValue& fingerprint = webkit_cert->fingerprint();
   for (size_t i = 0; i < 20; ++i)
     EXPECT_EQ(webkit_fingerprint[i], fingerprint.data[i]);
 
@@ -298,7 +298,7 @@ TEST(X509CertificateTest, ThawteCertParsing) {
   const Time& valid_expiry = thawte_cert->valid_expiry();
   EXPECT_EQ(1263772799, valid_expiry.ToDoubleT());  // Jan 17 23:59:59 2010 GMT
 
-  const SHA1Fingerprint& fingerprint = thawte_cert->fingerprint();
+  const SHA1HashValue& fingerprint = thawte_cert->fingerprint();
   for (size_t i = 0; i < 20; ++i)
     EXPECT_EQ(thawte_fingerprint[i], fingerprint.data[i]);
 
@@ -680,6 +680,8 @@ TEST(X509CertificateTest, IntermediateCertificates) {
   X509Certificate::FreeOSCertHandle(google_handle);
 }
 
+#if !defined(OS_IOS)
+// TODO(ios): Not yet implemented on iOS.
 #if defined(OS_MACOSX)
 TEST(X509CertificateTest, IsIssuedBy) {
   FilePath certs_dir = GetTestCertsDirectory();
@@ -726,7 +728,9 @@ TEST(X509CertificateTest, IsIssuedBy) {
   EXPECT_FALSE(mit_davidben_cert->IsIssuedBy(foaf_issuers));
 }
 #endif  // defined(OS_MACOSX)
+#endif  // !defined(OS_IOS)
 
+#if !defined(OS_IOS)  // TODO(ios): Unable to create certificates.
 #if defined(USE_NSS) || defined(OS_WIN) || defined(OS_MACOSX)
 // This test creates a self-signed cert from a private key and then verify the
 // content of the certificate.
@@ -850,6 +854,7 @@ TEST(X509CertificateTest, GetDEREncoded) {
   EXPECT_FALSE(der_cert.empty());
 }
 #endif
+#endif  // !defined(OS_IOS)
 
 class X509CertificateParseTest
     : public testing::TestWithParam<CertificateFormatTestData> {
@@ -888,7 +893,7 @@ TEST_P(X509CertificateParseTest, CanParseFormat) {
     // Compare the parsed certificate with the expected certificate, by
     // comparing fingerprints.
     const X509Certificate* cert = certs[i];
-    const SHA1Fingerprint& actual_fingerprint = cert->fingerprint();
+    const SHA1HashValue& actual_fingerprint = cert->fingerprint();
     uint8* expected_fingerprint = test_data_.chain_fingerprints[i];
 
     for (size_t j = 0; j < 20; ++j)

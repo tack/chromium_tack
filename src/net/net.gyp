@@ -25,8 +25,13 @@
       ['OS=="ios"', {
         # Websockets and socket stream are not used on iOS.
         'enable_websockets%': 0,
+        # iOS does not use V8.
+        'use_v8_in_net%': 0,
+        'enable_built_in_dns%': 0,
       }, {
         'enable_websockets%': 1,
+        'use_v8_in_net%': 1,
+        'enable_built_in_dns%': 1,
       }],
     ],
   },
@@ -55,8 +60,8 @@
         'android/net_jni_registrar.h',
         'android/network_change_notifier_android.cc',
         'android/network_change_notifier_android.h',
-        'android/network_change_notifier_factory.cc',
-        'android/network_change_notifier_factory.h',
+        'android/network_change_notifier_factory_android.cc',
+        'android/network_change_notifier_factory_android.h',
         'android/network_library.cc',
         'android/network_library.h',
         'base/address_family.h',
@@ -77,6 +82,7 @@
         'base/cache_type.h',
         'base/cert_database.cc',
         'base/cert_database.h',
+        'base/cert_database_ios.cc',
         'base/cert_database_mac.cc',
         'base/cert_database_nss.cc',
         'base/cert_database_openssl.cc',
@@ -207,6 +213,8 @@
         'base/network_config_watcher_mac.h',
         'base/network_delegate.cc',
         'base/network_delegate.h',
+        'base/nss_cert_database.cc',
+        'base/nss_cert_database.h',
         'base/nss_memio.c',
         'base/nss_memio.h',
         'base/openssl_memory_private_key_store.cc',
@@ -271,12 +279,18 @@
         'base/transport_security_state_static.h',
         'base/unix_domain_socket_posix.cc',
         'base/unix_domain_socket_posix.h',
+        'base/upload_bytes_element_reader.cc',
+        'base/upload_bytes_element_reader.h',
         'base/upload_data.cc',
         'base/upload_data.h',
         'base/upload_data_stream.cc',
         'base/upload_data_stream.h',
         'base/upload_element.cc',
         'base/upload_element.h',
+        'base/upload_element_reader.cc',
+        'base/upload_element_reader.h',
+        'base/upload_file_element_reader.cc',
+        'base/upload_file_element_reader.h',
         'base/upload_progress.h',
         'base/winsock_init.cc',
         'base/winsock_init.h',
@@ -288,6 +302,7 @@
         'base/x509_cert_types_win.cc',
         'base/x509_certificate.cc',
         'base/x509_certificate.h',
+        'base/x509_certificate_ios.cc',
         'base/x509_certificate_mac.cc',
         'base/x509_certificate_net_log_param.cc',
         'base/x509_certificate_net_log_param.h',
@@ -295,6 +310,8 @@
         'base/x509_certificate_openssl.cc',
         'base/x509_certificate_win.cc',
         'base/x509_util.h',
+        'base/x509_util_ios.cc',
+        'base/x509_util_ios.h',
         'base/x509_util_mac.cc',
         'base/x509_util_mac.h',
         'base/x509_util_nss.cc',
@@ -532,6 +549,8 @@
         'http/http_vary_data.cc',
         'http/http_vary_data.h',
         'http/http_version.h',
+        'http/infinite_cache.cc',
+        'http/infinite_cache.h',
         'http/md4.cc',
         'http/md4.h',
         'http/partial_data.cc',
@@ -693,6 +712,8 @@
         'spdy/spdy_frame_reader.h',
         'spdy/spdy_framer.cc',
         'spdy/spdy_framer.h',
+        'spdy/spdy_header_block.cc',
+        'spdy/spdy_header_block.h',
         'spdy/spdy_http_stream.cc',
         'spdy/spdy_http_stream.h',
         'spdy/spdy_http_utils.cc',
@@ -900,18 +921,28 @@
             'disk_cache/mapped_file_avoid_mmap_posix.cc',
           ],
         }],
-        [ 'disable_ftp_support==1', {
-            'sources/': [
-              ['exclude', '^ftp/'],
-            ],
-            'sources!': [
-              'url_request/ftp_protocol_handler.cc',
-              'url_request/ftp_protocol_handler.h',
-              'url_request/url_request_ftp_job.cc',
-              'url_request/url_request_ftp_job.h',
-            ],
-          },
-        ],
+        ['disable_ftp_support==1', {
+          'sources/': [
+            ['exclude', '^ftp/'],
+          ],
+          'sources!': [
+            'url_request/ftp_protocol_handler.cc',
+            'url_request/ftp_protocol_handler.h',
+            'url_request/url_request_ftp_job.cc',
+            'url_request/url_request_ftp_job.h',
+          ],
+        }],
+        ['enable_built_in_dns==1', {
+          'defines': [
+            'ENABLE_BUILT_IN_DNS',
+          ]
+        }, { # else
+          'sources!': [
+            'dns/address_sorter_posix.cc',
+            'dns/address_sorter_posix.h',
+            'dns/dns_client.cc',
+          ],
+        }],
         ['use_openssl==1', {
             'sources!': [
               'base/cert_database_nss.cc',
@@ -921,6 +952,8 @@
               'base/dnssec_keyset.cc',
               'base/dnssec_keyset.h',
               'base/keygen_handler_nss.cc',
+              'base/nss_cert_database.cc',
+              'base/nss_cert_database.h',
               'base/nss_memio.c',
               'base/nss_memio.h',
               'base/test_root_certs_nss.cc',
@@ -1004,6 +1037,8 @@
               'base/cert_database_nss.cc',
               'base/crypto_module_nss.cc',
               'base/keygen_handler_nss.cc',
+              'base/nss_cert_database.cc',
+              'base/nss_cert_database.h',
               'base/test_root_certs_nss.cc',
               'base/x509_certificate_nss.cc',
               'ocsp/nss_ocsp.cc',
@@ -1082,10 +1117,15 @@
           },
         ],
         [ 'OS == "ios"', {
+            'dependencies': [
+              '../third_party/nss/nss.gyp:nss',
+              'third_party/nss/ssl.gyp:libssl',
+            ],
             'link_settings': {
               'libraries': [
                 '$(SDKROOT)/System/Library/Frameworks/CFNetwork.framework',
                 '$(SDKROOT)/System/Library/Frameworks/MobileCoreServices.framework',
+                '$(SDKROOT)/System/Library/Frameworks/Security.framework',
                 '$(SDKROOT)/System/Library/Frameworks/SystemConfiguration.framework',
                 '$(SDKROOT)/usr/lib/libresolv.dylib',
               ],
@@ -1095,8 +1135,10 @@
               # compiled on iOS, just enough to bring up the dependencies needed
               # by the ui target.
               ['exclude', '.*'],
+              ['include', '^base/asn1_util\\.'],
               ['include', '^base/dns_util\\.'],
               ['include', '^base/escape\\.'],
+              ['include', '^base/ev_root_ca_metadata\\.'],
               ['include', '^base/ip_endpoint\\.'],
               ['include', '^base/mime_util\\.'],
               ['include', '^base/net_errors\\.'],
@@ -1108,7 +1150,13 @@
               ['include', '^base/net_util\\.'],
               ['include', '^base/net_util_posix\\.cc$'],
               ['include', '^base/platform_mime_util\\.h$'],
+              ['include', '^base/pem_tokenizer\\.cc$'],
+              ['include', '^base/pem_tokenizer\\.h$'],
               ['include', '^base/registry_controlled_domains/registry_controlled_domain\\.'],
+              ['include', '^base/x509_certificate\\.'],
+              ['include', '^base/x509_certificate_ios\\.'],
+              ['include', '^base/x509_cert_types\\.'],
+              ['include', '^base/x509_util_ios\\.'],
               ['include', '^http/http_byte_range\\.'],
               ['include', '^http/http_content_disposition\\.'],
               ['include', '^http/http_util\\.'],
@@ -1123,6 +1171,14 @@
             ],
           },
         ],
+        ['OS=="android" and _toolset=="target"', {
+          'dependencies': [
+             'net_java',
+          ],
+          'export_dependent_settings': [
+            'net_java',
+          ],
+        }],
         [ 'OS == "android"', {
             'dependencies': [
               '../third_party/openssl/openssl.gyp:openssl',
@@ -1159,41 +1215,22 @@
         }],
         ['OS == "ios"', {
           'sources/': [
-            ['include', 'base/network_change_notifier_mac\\.cc$'],
-            ['include', 'base/network_config_watcher_mac\\.cc$'],
-            ['include', 'base/platform_mime_util_mac\\.mm$'],
-            ['include', 'proxy/proxy_resolver_mac\\.cc$'],
+            ['include', '^base/network_change_notifier_mac\\.cc$'],
+            ['include', '^base/network_config_watcher_mac\\.cc$'],
+            ['include', '^base/platform_mime_util_mac\\.mm$'],
+            ['include', '^proxy/proxy_resolver_mac\\.cc$'],
+            # The iOS implementation only partially uses NSS and thus does not
+            # defines |use_nss|. In particular the |USE_NSS| preprocessor
+            # definition is not used. The following files are needed though:
+            ['include', '^base/cert_verify_proc_nss\\.cc$'],
+            ['include', '^base/cert_verify_proc_nss\\.h$'],
+            ['include', '^base/test_root_certs_nss\\.cc$'],
+            ['include', '^base/x509_util_nss\\.cc$'],
+            ['include', '^base/x509_util_nss\\.h$'],
+            ['include', '^ocsp/nss_ocsp\\.cc$'],
+            ['include', '^ocsp/nss_ocsp\\.h$'],
           ],
         }],
-      ],
-    },
-    {
-      'target_name': 'net_with_v8',
-      'type': '<(component)',
-      'variables': { 'enable_wexit_time_destructors': 1, },
-      'dependencies': [
-        '../base/base.gyp:base',
-        '../build/temp_gyp/googleurl.gyp:googleurl',
-        'net'
-      ],
-      'defines': [
-        'NET_IMPLEMENTATION',
-      ],
-      'sources': [
-        'proxy/proxy_resolver_v8.cc',
-        'proxy/proxy_resolver_v8.h',
-        'proxy/proxy_service_v8.cc',
-        'proxy/proxy_service_v8.h',
-      ],
-      'conditions': [
-        ['OS != "ios"',
-          {
-            'dependencies': [
-              # The v8 gyp file is not available in the iOS tree.
-              '../v8/tools/gyp/v8.gyp:v8',
-            ],
-          }
-        ],
       ],
     },
     {
@@ -1210,14 +1247,13 @@
         '../third_party/zlib/zlib.gyp:zlib',
         'net',
         'net_test_support',
-        'net_with_v8',
       ],
       'sources': [
+        'android/network_change_notifier_android_unittest.cc',
         'base/address_list_unittest.cc',
         'base/address_tracker_linux_unittest.cc',
         'base/backoff_entry_unittest.cc',
         'base/big_endian_unittest.cc',
-        'base/cert_database_nss_unittest.cc',
         'base/cert_verify_proc_unittest.cc',
         'base/crl_set_unittest.cc',
         'base/data_url_unittest.cc',
@@ -1248,6 +1284,7 @@
         'base/net_util_unittest.cc',
         'base/network_change_notifier_linux_unittest.cc',
         'base/network_change_notifier_win_unittest.cc',
+        'base/nss_cert_database_unittest.cc',
         'base/pem_tokenizer_unittest.cc',
         'base/prioritized_dispatcher_unittest.cc',
         'base/priority_queue_unittest.cc',
@@ -1266,7 +1303,9 @@
         'base/test_completion_callback_unittest.cc',
         'base/transport_security_state_unittest.cc',
         'base/unix_domain_socket_posix_unittest.cc',
+        'base/upload_bytes_element_reader_unittest.cc',
         'base/upload_data_stream_unittest.cc',
+        'base/upload_file_element_reader_unittest.cc',
         'base/x509_certificate_unittest.cc',
         'base/x509_cert_types_unittest.cc',
         'base/x509_util_nss_unittest.cc',
@@ -1345,6 +1384,7 @@
         'http/http_transaction_unittest.h',
         'http/http_util_unittest.cc',
         'http/http_vary_data_unittest.cc',
+        'http/infinite_cache_unittest.cc',
         'http/mock_allow_url_security_manager.cc',
         'http/mock_allow_url_security_manager.h',
         'http/mock_gssapi_library_posix.cc',
@@ -1396,6 +1436,7 @@
         'spdy/spdy_credential_state_unittest.cc',
         'spdy/spdy_frame_reader_test.cc',
         'spdy/spdy_framer_test.cc',
+        'spdy/spdy_header_block_unittest.cc',
         'spdy/spdy_http_stream_spdy3_unittest.cc',
         'spdy/spdy_http_stream_spdy2_unittest.cc',
         'spdy/spdy_http_utils_unittest.cc',
@@ -1461,9 +1502,9 @@
             'dependencies': [
               '../build/linux/system.gyp:ssl',
             ],
-          }, {  # else: OS is not in the above list
+          }, {  # else use_glib == 0: !posix || mac
             'sources!': [
-              'base/cert_database_nss_unittest.cc',
+              'base/nss_cert_database_unittest.cc',
             ],
           },
         ],
@@ -1500,8 +1541,8 @@
             #               functionality is ported to OpenSSL.
             'sources!': [
               'base/x509_util_nss_unittest.cc',
-              'base/cert_database_nss_unittest.cc',
               'base/dnssec_unittest.cc',
+              'base/nss_cert_database_unittest.cc',
             ],
           }, {  # else !use_openssl: remove the unneeded files
             'sources!': [
@@ -1522,6 +1563,23 @@
             ],
             'sources!': [
               'url_request/url_request_ftp_job_unittest.cc',
+            ],
+          },
+        ],
+        [ 'enable_built_in_dns!=1', {
+            'sources!': [
+              'dns/address_sorter_posix_unittest.cc',
+              'dns/address_sorter_unittest.cc',
+            ],
+          },
+        ],
+        [ 'use_v8_in_net==1', {
+            'dependencies': [
+              'net_with_v8',
+            ],
+          }, {  # else: !use_v8_in_net
+            'sources!': [
+              'proxy/proxy_resolver_v8_unittest.cc',
             ],
           },
         ],
@@ -1548,25 +1606,28 @@
             ],
           },
         ],
-        ['OS == "ios"', {
-          # TODO: For now this only tests the subset of code that is enabled in
-          # the net target.
-          'dependencies': [
-            '../testing/gtest.gyp:gtest_main',
-          ],
-          'sources/': [
-            ['exclude', '.*'],
-            ['include', '^base/dns_util_unittest\\.cc$'],
-            ['include', '^base/escape_unittest\\.cc$'],
-            ['include', '^base/ip_endpoint_unittest\\.cc$'],
-            ['include', '^base/mime_util_unittest\\.cc$'],
-            ['include', '^base/net_log_unittest\\.cc$'],
-            ['include', '^base/registry_controlled_domains/registry_controlled_domain_unittest\\.cc$'],
-            ['include', '^http/http_byte_range_unittest\\.cc$'],
-            ['include', '^http/http_content_disposition_unittest\\.cc$'],
-            ['include', '^http/http_util_unittest\\.cc$'],
-            ['include', '^proxy/proxy_config_service_common_unittest\\.cc$'],
-          ],
+        [ 'OS == "ios"', {
+            # TODO: For now this only tests the subset of code that is enabled
+            # in the net target.
+            'dependencies': [
+              '../third_party/nss/nss.gyp:nss',
+              '../testing/gtest.gyp:gtest_main',
+            ],
+            'sources/': [
+              ['exclude', '.*'],
+              ['include', '^base/dns_util_unittest\\.cc$'],
+              ['include', '^base/escape_unittest\\.cc$'],
+              ['include', '^base/ip_endpoint_unittest\\.cc$'],
+              ['include', '^base/mime_util_unittest\\.cc$'],
+              ['include', '^base/net_log_unittest\\.cc$'],
+              ['include', '^base/pem_tokenizer_unittest\\.cc$'],
+              ['include', '^base/registry_controlled_domains/registry_controlled_domain_unittest\\.cc$'],
+              ['include', '^base/x509_certificate_unittest\\.cc$'],
+              ['include', '^http/http_byte_range_unittest\\.cc$'],
+              ['include', '^http/http_content_disposition_unittest\\.cc$'],
+              ['include', '^http/http_util_unittest\\.cc$'],
+              ['include', '^proxy/proxy_config_service_common_unittest\\.cc$'],
+            ],
         }],
         [ 'OS == "linux"', {
             'dependencies': [
@@ -1607,7 +1668,6 @@
         '../testing/gtest.gyp:gtest',
         'net',
         'net_test_support',
-        'net_with_v8',
       ],
       'sources': [
         'cookies/cookie_monster_perftest.cc',
@@ -1615,6 +1675,16 @@
         'proxy/proxy_resolver_perftest.cc',
       ],
       'conditions': [
+        [ 'use_v8_in_net==1', {
+            'dependencies': [
+              'net_with_v8',
+            ],
+          }, {  # else: !use_v8_in_net
+            'sources!': [
+              'proxy/proxy_resolver_perftest.cc',
+            ],
+          },
+        ],
         # This is needed to trigger the dll copy step on windows.
         # TODO(mark): Specifying this here shouldn't be necessary.
         [ 'OS == "win"', {
@@ -1643,7 +1713,6 @@
         '../base/base.gyp:test_support_base',
         '../testing/gtest.gyp:gtest',
         'net',
-        'net_with_v8',
       ],
       'export_dependent_settings': [
         '../base/base.gyp:base',
@@ -1744,6 +1813,17 @@
             'test/spawner_communicator.h',
           ],
         }],
+        ['OS == "ios"', {
+          'dependencies': [
+            '../third_party/nss/nss.gyp:nss',
+          ],
+        }],
+        [ 'use_v8_in_net==1', {
+            'dependencies': [
+              'net_with_v8',
+            ],
+          },
+        ],
       ],
     },
     {
@@ -1784,6 +1864,30 @@
     },
   ],
   'conditions': [
+    ['use_v8_in_net == 1', {
+      'targets': [
+        {
+          'target_name': 'net_with_v8',
+          'type': '<(component)',
+          'variables': { 'enable_wexit_time_destructors': 1, },
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../build/temp_gyp/googleurl.gyp:googleurl',
+            '../v8/tools/gyp/v8.gyp:v8',
+            'net'
+          ],
+          'defines': [
+            'NET_IMPLEMENTATION',
+          ],
+          'sources': [
+            'proxy/proxy_resolver_v8.cc',
+            'proxy/proxy_resolver_v8.h',
+            'proxy/proxy_service_v8.cc',
+            'proxy/proxy_service_v8.h',
+          ],
+        },
+      ],
+    }],
     ['OS != "ios"', {
       'targets': [
         # iOS doesn't have the concept of simple executables, these targets
@@ -2095,10 +2199,11 @@
             'java_in_dir': '../net/android/java',
           },
           'dependencies': [
-            '../base/base.gyp:base_java',
+            '../base/base.gyp:base',
+            'net_errors_java',
           ],
           'export_dependent_settings': [
-            '../base/base.gyp:base_java',
+            '../base/base.gyp:base',
           ],
           'includes': [ '../build/java.gypi' ],
         },
@@ -2110,14 +2215,50 @@
             'java_in_dir': '../net/android/javatests',
           },
           'dependencies': [
-            '../base/base.gyp:base_java',
+            '../base/base.gyp:base',
             '../base/base.gyp:base_java_test_support',
+            'net_java',
           ],
           'export_dependent_settings': [
-            '../base/base.gyp:base_java',
+            '../base/base.gyp:base',
             '../base/base.gyp:base_java_test_support',
+            'net_java',
           ],
           'includes': [ '../build/java.gypi' ],
+        },
+        {
+          # This should be extracted to a gypi file and parameterized if
+          # we have more use cases of using the preprocessor to build java files.
+          'target_name': 'net_errors_java',
+          'type': 'none',
+          'direct_dependent_settings': {
+            'variables': {
+              'generated_src_dirs': ['<(SHARED_INTERMEDIATE_DIR)/net/template/'],
+              'additional_input_paths': ['<(SHARED_INTERMEDIATE_DIR)/net/template/NetError.java'],
+            },
+          },
+          'actions': [
+            {
+              'action_name': 'generate_net_errors_java',
+              'inputs': [
+                'android/java/net_errors_java.template',
+              ],
+              'outputs': [
+                '<(SHARED_INTERMEDIATE_DIR)/net/template/NetError.java',
+              ],
+              'action': [
+                'gcc',
+                '-x', 'c-header',
+                '-E', '-P',
+                '-I', '..',
+                '-o',
+                '<@(_outputs)',
+                '<@(_inputs)',
+              ],
+              'message': 'Preprocessing <(_inputs)',
+              'process_outputs_as_sources': 1,
+            },
+          ],
         },
       ],
     }],

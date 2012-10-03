@@ -2254,6 +2254,29 @@ TEST(NetUtilTest, GetHostAndOptionalPort) {
   }
 }
 
+TEST(NetUtilTest, IPAddressToString) {
+  uint8 addr1[4] = {0, 0, 0, 0};
+  EXPECT_EQ("0.0.0.0", IPAddressToString(addr1, sizeof(addr1)));
+
+  uint8 addr2[4] = {192, 168, 0, 1};
+  EXPECT_EQ("192.168.0.1", IPAddressToString(addr2, sizeof(addr2)));
+
+  uint8 addr3[16] = {0xFE, 0xDC, 0xBA, 0x98};
+  EXPECT_EQ("fedc:ba98::", IPAddressToString(addr3, sizeof(addr3)));
+}
+
+TEST(NetUtilTest, IPAddressToStringWithPort) {
+  uint8 addr1[4] = {0, 0, 0, 0};
+  EXPECT_EQ("0.0.0.0:3", IPAddressToStringWithPort(addr1, sizeof(addr1), 3));
+
+  uint8 addr2[4] = {192, 168, 0, 1};
+  EXPECT_EQ("192.168.0.1:99",
+            IPAddressToStringWithPort(addr2, sizeof(addr2), 99));
+
+  uint8 addr3[16] = {0xFE, 0xDC, 0xBA, 0x98};
+  EXPECT_EQ("[fedc:ba98::]:8080",
+            IPAddressToStringWithPort(addr3, sizeof(addr3), 8080));
+}
 
 TEST(NetUtilTest, NetAddressToString_IPv4) {
   const struct {
@@ -2286,11 +2309,8 @@ TEST(NetUtilTest, NetAddressToString_IPv6) {
   for (size_t i = 0; i < ARRAYSIZE_UNSAFE(tests); ++i) {
     SockaddrStorage storage;
     MakeIPv6Address(tests[i].addr, 80, &storage);
-    std::string result = NetAddressToString(storage.addr, storage.addr_len);
-    // Allow NetAddressToString() to fail, in case the system doesn't
-    // support IPv6.
-    if (!result.empty())
-      EXPECT_EQ(std::string(tests[i].result), result);
+    EXPECT_EQ(std::string(tests[i].result),
+        NetAddressToString(storage.addr, storage.addr_len));
   }
 }
 
@@ -3027,6 +3047,7 @@ TEST(NetUtilTest, ParseIPLiteralToNumber_IPv4) {
   IPAddressNumber number;
   EXPECT_TRUE(ParseIPLiteralToNumber("192.168.0.1", &number));
   EXPECT_EQ("192,168,0,1", DumpIPNumber(number));
+  EXPECT_EQ("192.168.0.1", IPAddressToString(number));
 }
 
 // Test parsing an IPv6 literal.
@@ -3034,6 +3055,7 @@ TEST(NetUtilTest, ParseIPLiteralToNumber_IPv6) {
   IPAddressNumber number;
   EXPECT_TRUE(ParseIPLiteralToNumber("1:abcd::3:4:ff", &number));
   EXPECT_EQ("0,1,171,205,0,0,0,0,0,0,0,3,0,4,0,255", DumpIPNumber(number));
+  EXPECT_EQ("1:abcd::3:4:ff", IPAddressToString(number));
 }
 
 // Test mapping an IPv4 address to an IPv6 address.
@@ -3044,9 +3066,10 @@ TEST(NetUtilTest, ConvertIPv4NumberToIPv6Number) {
   IPAddressNumber ipv6_number =
       ConvertIPv4NumberToIPv6Number(ipv4_number);
 
-  // ::ffff:192.168.1.1
+  // ::ffff:192.168.0.1
   EXPECT_EQ("0,0,0,0,0,0,0,0,0,0,255,255,192,168,0,1",
             DumpIPNumber(ipv6_number));
+  EXPECT_EQ("::ffff:c0a8:1", IPAddressToString(ipv6_number));
 }
 
 TEST(NetUtilTest, IsIPv4Mapped) {

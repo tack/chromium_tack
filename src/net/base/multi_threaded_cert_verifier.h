@@ -34,7 +34,7 @@ class NET_EXPORT_PRIVATE MultiThreadedCertVerifier
       NON_EXPORTED_BASE(public base::NonThreadSafe),
       public CertDatabase::Observer {
  public:
-  MultiThreadedCertVerifier();
+  explicit MultiThreadedCertVerifier(CertVerifyProc* verify_proc);
 
   // When the verifier is destroyed, all certificate verifications requests are
   // canceled, and their completion callbacks will not be called.
@@ -66,8 +66,8 @@ class NET_EXPORT_PRIVATE MultiThreadedCertVerifier
 
   // Input parameters of a certificate verification request.
   struct NET_EXPORT_PRIVATE RequestParams {
-    RequestParams(const SHA1Fingerprint& cert_fingerprint_arg,
-                  const SHA1Fingerprint& ca_fingerprint_arg,
+    RequestParams(const SHA1HashValue& cert_fingerprint_arg,
+                  const SHA1HashValue& ca_fingerprint_arg,
                   const std::string& hostname_arg,
                   int flags_arg);
 
@@ -88,8 +88,8 @@ class NET_EXPORT_PRIVATE MultiThreadedCertVerifier
       return hostname < other.hostname;
     }
 
-    SHA1Fingerprint cert_fingerprint;
-    SHA1Fingerprint ca_fingerprint;
+    SHA1HashValue cert_fingerprint;
+    SHA1HashValue ca_fingerprint;
     std::string hostname;
     int flags;
   };
@@ -143,7 +143,6 @@ class NET_EXPORT_PRIVATE MultiThreadedCertVerifier
   uint64 cache_hits() const { return cache_hits_; }
   uint64 requests() const { return requests_; }
   uint64 inflight_joins() const { return inflight_joins_; }
-  void SetCertVerifyProc(CertVerifyProc* verify_proc);
 
   // cache_ maps from a request to a cached result.
   CertVerifierCache cache_;

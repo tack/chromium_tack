@@ -7,12 +7,13 @@
 
 #include "build/build_config.h"
 
-#if defined(USE_NSS)
+#if defined(USE_NSS) || defined(OS_IOS)
 #include <secoidt.h>
 #endif
 
 #include <map>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "net/base/net_export.h"
@@ -29,7 +30,7 @@ namespace net {
 // extended-validation (EV) certificates.
 class NET_EXPORT_PRIVATE EVRootCAMetadata {
  public:
-#if defined(USE_NSS)
+#if defined(USE_NSS) || defined(OS_IOS)
   typedef SECOidTag PolicyOID;
 #elif defined(OS_WIN)
   typedef const char* PolicyOID;
@@ -37,24 +38,24 @@ class NET_EXPORT_PRIVATE EVRootCAMetadata {
 
   static EVRootCAMetadata* GetInstance();
 
-#if defined(USE_NSS) || defined(OS_WIN)
+#if defined(USE_NSS) || defined(OS_WIN) || defined(OS_IOS)
   // Returns true if policy_oid is an EV policy OID of some root CA.
   bool IsEVPolicyOID(PolicyOID policy_oid) const;
 
   // Returns true if the root CA with the given certificate fingerprint has
   // the EV policy OID policy_oid.
-  bool HasEVPolicyOID(const SHA1Fingerprint& fingerprint,
+  bool HasEVPolicyOID(const SHA1HashValue& fingerprint,
                       PolicyOID policy_oid) const;
 #endif
 
   // AddEVCA adds an EV CA to the list of known EV CAs with the given policy.
   // |policy| is expressed as a string of dotted numbers. It returns true on
   // success.
-  bool AddEVCA(const SHA1Fingerprint& fingerprint, const char* policy);
+  bool AddEVCA(const SHA1HashValue& fingerprint, const char* policy);
 
   // RemoveEVCA removes an EV CA that was previously added by AddEVCA. It
   // returns true on success.
-  bool RemoveEVCA(const SHA1Fingerprint& fingerprint);
+  bool RemoveEVCA(const SHA1HashValue& fingerprint);
 
  private:
   friend struct base::DefaultLazyInstanceTraits<EVRootCAMetadata>;
@@ -62,9 +63,9 @@ class NET_EXPORT_PRIVATE EVRootCAMetadata {
   EVRootCAMetadata();
   ~EVRootCAMetadata();
 
-#if defined(USE_NSS)
-  typedef std::map<SHA1Fingerprint, std::vector<PolicyOID>,
-                   SHA1FingerprintLessThan> PolicyOIDMap;
+#if defined(USE_NSS) || defined(OS_IOS)
+  typedef std::map<SHA1HashValue, std::vector<PolicyOID>,
+                   SHA1HashValueLessThan> PolicyOIDMap;
 
   // RegisterOID registers |policy|, a policy OID in dotted string form, and
   // writes the memoized form to |*out|. It returns true on success.
@@ -73,8 +74,8 @@ class NET_EXPORT_PRIVATE EVRootCAMetadata {
   PolicyOIDMap ev_policy_;
   std::set<PolicyOID> policy_oids_;
 #elif defined(OS_WIN)
-  typedef std::map<SHA1Fingerprint, std::string,
-                   SHA1FingerprintLessThan> ExtraEVCAMap;
+  typedef std::map<SHA1HashValue, std::string,
+                   SHA1HashValueLessThan> ExtraEVCAMap;
 
   // extra_cas_ contains any EV CA metadata that was added at runtime.
   ExtraEVCAMap extra_cas_;

@@ -1,7 +1,7 @@
 K 25
 svn:wc:ra_dav:version-url
 V 57
-/chrome/!svn/ver/147222/trunk/src/chrome/browser/net/gaia
+/chrome/!svn/ver/155312/trunk/src/chrome/browser/net/gaia
 END
 gaia_oauth_consumer.h
 K 25
@@ -13,19 +13,19 @@ gaia_oauth_fetcher_unittest.cc
 K 25
 svn:wc:ra_dav:version-url
 V 88
-/chrome/!svn/ver/147222/trunk/src/chrome/browser/net/gaia/gaia_oauth_fetcher_unittest.cc
+/chrome/!svn/ver/155312/trunk/src/chrome/browser/net/gaia/gaia_oauth_fetcher_unittest.cc
 END
 gaia_oauth_fetcher.cc
 K 25
 svn:wc:ra_dav:version-url
 V 79
-/chrome/!svn/ver/146324/trunk/src/chrome/browser/net/gaia/gaia_oauth_fetcher.cc
+/chrome/!svn/ver/155312/trunk/src/chrome/browser/net/gaia/gaia_oauth_fetcher.cc
 END
 gaia_oauth_fetcher.h
 K 25
 svn:wc:ra_dav:version-url
 V 78
-/chrome/!svn/ver/146163/trunk/src/chrome/browser/net/gaia/gaia_oauth_fetcher.h
+/chrome/!svn/ver/155312/trunk/src/chrome/browser/net/gaia/gaia_oauth_fetcher.h
 END
 OWNERS
 K 25
