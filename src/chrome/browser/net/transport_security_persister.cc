@@ -204,7 +204,8 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
                       SPKIHashesToListValue(domain_state.dynamic_spki_hashes));
     }
 
-    toplevel.Set(HashedDomainToExternalString(hostname), serialized);
+    //TREVNOHASH toplevel.Set(HashedDomainToExternalString(hostname), serialized);
+    toplevel.Set(hostname, serialized);
   }
 
   base::JSONWriter::WriteWithOptions(&toplevel,

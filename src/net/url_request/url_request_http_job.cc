@@ -699,16 +699,21 @@ void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
     domain_state.upgrade_mode =
         TransportSecurityState::DomainState::MODE_FORCE_HTTPS;
 
-  HttpResponseHeaders* headers = GetResponseHeaders();
-  std::string value;
-  void* iter = NULL;
+  //TREVFAKEHSTS HttpResponseHeaders* headers = GetResponseHeaders();
+  //TREVFAKEHSTS std::string value;
+  //TREVFAKEHSTS void* iter = NULL;
   base::Time now = base::Time::Now();
 
+  /* TREVFAKEHSTS
   while (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value)) {
     TransportSecurityState::DomainState domain_state;
     if (domain_state.ParseSTSHeader(now, value))
       security_state->EnableHost(host, domain_state);
   }
+  */
+  //TREVFAKEHSTS:
+  if (domain_state.ParseSTSHeader(now, "max-age=1000"))
+      security_state->EnableHost(host, domain_state);
 }
 
 void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {

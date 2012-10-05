@@ -48,9 +48,10 @@ namespace net {
 const long int TransportSecurityState::kMaxHSTSAgeSecs = 86400 * 365;  // 1 year
 
 static std::string HashHost(const std::string& canonicalized_host) {
-  char hashed[crypto::kSHA256Length];
-  crypto::SHA256HashString(canonicalized_host, hashed, sizeof(hashed));
-  return std::string(hashed, sizeof(hashed));
+  //TREVNOHASH char hashed[crypto::kSHA256Length];
+  //TREVNOHASH crypto::SHA256HashString(canonicalized_host, hashed, sizeof(hashed));
+  //TREVNOHASH return std::string(hashed, sizeof(hashed));
+  return std::string(canonicalized_host);
 }
 
 TransportSecurityState::Iterator::Iterator(const TransportSecurityState& state)
