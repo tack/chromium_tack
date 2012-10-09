@@ -107,7 +107,7 @@
 #include "net/socket/ssl_error_params.h"
 
 #include "net/third_party/tackc/src/TackStoreDefault.h"
-#include "net/third_party/tackc/src/TackNss.h"
+#include "net/third_party/tackc/src/TackChromium.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -3535,7 +3535,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         // Check connection is well-formed
         TackProcessingContext ctx;
         retval = tackProcessWellFormed(&ctx, tackExt, tackExtLen, keyHash,
-                                       currentTime, tackNss);
+                                       currentTime, tackChromium);
         if (retval != TACK_OK) {
             LOG(WARNING) << "TACK: Connection ERROR - not well-formed: " << name <<
                 ", " << tackRetvalString(retval);

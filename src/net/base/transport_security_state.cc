@@ -36,8 +36,7 @@
 #include "net/base/x509_certificate.h"
 #include "net/http/http_util.h"
 #include "base/build_time.h"
-
-#include "net/third_party/tackc/src/TackNss.h"
+#include "net/third_party/tackc/src/TackChromium.h"
 
 #if defined(USE_OPENSSL)
 #include "crypto/openssl_util.h"
@@ -853,8 +852,8 @@ struct HSTSPreload {
 TransportSecurityState::TransportSecurityState()
     : delegate_(NULL), tackStaticDelegate_(NULL), tackDynamicDelegate_(NULL) 
 {
-    staticStore_.setCryptoFuncs(tackNss);
-    dynamicStore_.setCryptoFuncs(tackNss);
+    staticStore_.setCryptoFuncs(tackChromium);
+    dynamicStore_.setCryptoFuncs(tackChromium);
     dynamicStore_.setPinActivation(true);
 }
 
