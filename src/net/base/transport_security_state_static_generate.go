@@ -46,6 +46,7 @@ type pin struct {
 // following are used by the "json" package to parse the file. See the comments
 // in transport_security_state_static.json for details.
 type preloaded struct {
+	TackKeys map [string] int `json:"tack_keys"`
 	Pinsets []pinset `json:"pinsets"`
 	Entries []hsts   `json:"entries"`
 }
@@ -62,6 +63,7 @@ type hsts struct {
 	Mode       string `json:"mode"`
 	Pins       string `json:"pins"`
 	SNIOnly    bool   `json:"snionly"`
+	TackKey    string `json:"tack_key"`
 }
 
 func main() {
@@ -128,6 +130,7 @@ func process(jsonFileName, certsFileName string) error {
 
 	out := bufio.NewWriter(outFile)
 	writeHeader(out)
+	writeTackKeysOutput(out, preloaded.TackKeys)
 	writeCertsOutput(out, pins)
 	writeHSTSOutput(out, preloaded)
 	writeFooter(out)
@@ -401,7 +404,7 @@ func checkCertsInPinsets(pinsets []pinset, pins []pin) error {
 
 func checkNoopEntries(entries []hsts) error {
 	for _, e := range entries {
-		if len(e.Mode) == 0 && len(e.Pins) == 0 {
+		if len(e.Mode) == 0 && len(e.Pins) == 0 && e.TackKey == "" {
 			switch e.Name {
 			// This entry is deliberately used as an exclusion.
 			case "learn.doubleclick.net":
@@ -510,15 +513,26 @@ func domainConstant(s string) string {
 	return fmt.Sprintf("DOMAIN_%s_%s", domain, gtld)
 }
 
+func writeTackKeysOutput(out *bufio.Writer, tackKeys map[string] int) {
+	out.WriteString("// These are TACK key fingerprints and their min_generation values.\n\n")
+	out.WriteString("static const struct TackKeyPreload kPreloadedTackKeys[] = {\n")
+	for key, minGeneration := range tackKeys {
+		fmt.Fprintf(out, "  {\"%s\", %d},\n", key, minGeneration)
+	}
+	out.WriteString("};\n\n")
+}
+
 func writeHSTSEntry(out *bufio.Writer, entry hsts) {
 	dnsName, dnsLen := toDNS(entry.Name)
 	domain := "DOMAIN_NOT_PINNED"
 	pinsetName := "kNoPins"
 	if len(entry.Pins) > 0 {
 		pinsetName = fmt.Sprintf("k%sPins", uppercaseFirstLetter(entry.Pins))
+	}
+	if len(entry.Pins) > 0 || entry.TackKey != "" {
 		domain = domainConstant(entry.Name)
 	}
-	fmt.Fprintf(out, "  {%d, %t, \"%s\", %t, %s, %s },\n", dnsLen, entry.Subdomains, dnsName, entry.Mode == "force-https", pinsetName, domain)
+	fmt.Fprintf(out, "  {%d, %t, \"%s\", %t, %s, \"%s\", %s },\n", dnsLen, entry.Subdomains, dnsName, entry.Mode == "force-https", pinsetName, entry.TackKey, domain)
 }
 
 func writeHSTSOutput(out *bufio.Writer, hsts preloaded) error {

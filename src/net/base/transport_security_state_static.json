@@ -32,6 +32,12 @@
 //       an unfortunate result of SSLv3 fallback.
 
 {
+  "tack_keys": {
+    "k2wgv.l24nx.yiqyc.zjir5.md474": 255,
+    "j6det.kfbj5.oweph.mdyxi.wvbch": 0,
+    "6i7l7.gw7zx.kuza6.skvzy.6alwa": 3
+  },
+
   "pinsets": [
     {
       "name": "test",
@@ -533,6 +539,9 @@
     { "name": "www.gmail.com", "mode": "force-https", "pins": "google", "snionly": true },
     { "name": "www.googlemail.com", "mode": "force-https", "pins": "google", "snionly": true },
     { "name": "google-analytics.com", "include_subdomains": true, "pins": "google", "snionly": true },
-    { "name": "googlegroups.com", "include_subdomains": true, "pins": "google", "snionly": true }
+    { "name": "googlegroups.com", "include_subdomains": true, "pins": "google", "snionly": true },
+
+    // TACK-pin-only entries
+    { "name": "test.tack.io", "tack_key": "j6det.kfbj5.oweph.mdyxi.wvbch"}
   ]
 }

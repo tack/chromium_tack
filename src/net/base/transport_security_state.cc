@@ -826,6 +826,8 @@ enum SecondLevelDomainName {
   DOMAIN_GOOGLE_VU,
   DOMAIN_GOOGLE_WS,
 
+  DOMAIN_TACK_IO,
+
   // Boundary value for UMA_HISTOGRAM_ENUMERATION:
   DOMAIN_NUM_EVENTS
 };
@@ -844,6 +846,7 @@ struct HSTSPreload {
   char dns_name[34];
   bool https_required;
   PublicKeyPins pins;
+  char tack_key[30];
   SecondLevelDomainName second_level_domain_name;
 };
 
