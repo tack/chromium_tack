@@ -3522,12 +3522,19 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
         DCHECK_EQ(rv, SECSuccess);
         
-        // Get key hash
-        uint8 keyHash[32];
-        CERTCertificate* cert = SSL_PeerCertificate(nss_fd_);
-        rv = HASH_HashBuf(HASH_AlgSHA256, keyHash,
-                          cert->derPublicKey.data, cert->derPublicKey.len);
-        DCHECK_EQ(rv, SECSuccess);
+        // Get key hash (first SHA256 element in s_c_v_r.public_key_hashes)
+        uint8* keyHash = NULL;
+        for (size_t count = 0; count < server_cert_verify_result_.public_key_hashes.size(); 
+             count++) {
+            HashValue* hashValue = &server_cert_verify_result_.public_key_hashes[count];
+            if (hashValue->tag == HASH_VALUE_SHA256) {
+                keyHash = hashValue->data();
+                break;
+            }
+        }
+        if (keyHash == NULL) {
+            LOG(WARNING) << "TACK: couldn't find key hash?!?!";
+        }   
         
         // Get current time (in uint32_t for minutes since epoch)
         uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
