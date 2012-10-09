@@ -36,6 +36,7 @@
 #include "net/base/x509_certificate.h"
 #include "net/http/http_util.h"
 #include "base/build_time.h"
+#include "net/base/cert_verify_result.h"
 #include "net/third_party/tackc/src/TackChromium.h"
 
 #if defined(USE_OPENSSL)
@@ -1057,8 +1058,24 @@ TransportSecurityState::DomainState::DomainState()
 TransportSecurityState::DomainState::~DomainState() {
 }
 
+bool TransportSecurityState::VerifyConnection(const std::string& host,
+                                              bool sni_enabled,
+                                              CertVerifyResult* result) {
+    // Check HSTS and public-key-pins
+    TransportSecurityState::DomainState domain_state;
+    if (GetDomainState(host, sni_enabled, &domain_state) && 
+        domain_state.HasPins() &&
+        !domain_state.IsChainOfPublicKeysPermitted(result->public_key_hashes))
+        return false;
+      
+    // Check TACK
+    return true;
+}
+
+
 bool TransportSecurityState::DomainState::IsChainOfPublicKeysPermitted(
     const HashValueVector& hashes) const {
+
   // Validate that hashes is not empty. By the time this code is called (in
   // production), that should never happen, but it's good to be defensive.
   // And, hashes *can* be empty in some test scenarios.

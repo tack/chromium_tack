@@ -201,6 +201,10 @@ class NET_EXPORT TransportSecurityState
   // Deletes all records created since a given time.
   void DeleteSince(const base::Time& time);
 
+  bool VerifyConnection(const std::string& host,
+                        bool sni_enabled,
+                        CertVerifyResult* result);
+
   // Returns true and updates |*result| iff there is a DomainState for
   // |host|.
   //

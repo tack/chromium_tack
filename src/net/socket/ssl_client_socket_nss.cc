@@ -3470,6 +3470,8 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
       const std::string& host = host_and_port_.host();
 
+#define OFFICIAL_BUILD // !!!! FOR TESTING ONLY !!!
+
 #if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
   // Take care of any mandates for public key pinning.
   //
@@ -3484,12 +3486,9 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         ssl_config_.version_max >= SSL_PROTOCOL_VERSION_TLS1 ||
         ssl_config_.version_fallback;
 
-    TransportSecurityState::DomainState domain_state;
-    if (transport_security_state_->GetDomainState(host, sni_available,
-                                                  &domain_state) &&
-        domain_state.HasPins()) {
-      if (!domain_state.IsChainOfPublicKeysPermitted(
-               server_cert_verify_result_.public_key_hashes)) {
+    if (!transport_security_state_->VerifyConnection(host, sni_available, 
+                                                     &server_cert_verify_result_)) {
+
         const base::Time build_time = base::GetBuildTime();
         // Pins are not enforced if the build is sufficiently old. Chrome
         // users should get updates every six weeks or so, but it's possible
@@ -3501,7 +3500,6 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
           UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
           TransportSecurityState::ReportUMAOnPinFailure(host);
         }
-      }
     }
 #endif
 
