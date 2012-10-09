@@ -850,6 +850,11 @@ struct HSTSPreload {
   SecondLevelDomainName second_level_domain_name;
 };
 
+struct TackKeyPreload {
+  char tack_key[30];
+  uint8 min_generation;
+};
+
 #include "net/base/transport_security_state_static.h"
 
 TransportSecurityState::TransportSecurityState()
