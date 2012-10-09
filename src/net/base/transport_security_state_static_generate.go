@@ -54,7 +54,6 @@ type pinset struct {
 	Name    string   `json:"name"`
 	Include []string `json:"static_spki_hashes"`
 	Exclude []string `json:"bad_static_spki_hashes"`
-        Tack    []string `json:"tack_pin"`
 }
 
 type hsts struct {
@@ -543,18 +542,13 @@ static const char* const kNoRejectedPublicKeys[] = {
 			rejectedListName = fmt.Sprintf("k%sRejectedCerts", name)
 			writeListOfPins(out, rejectedListName, pinset.Exclude)
 		}
-
-                tackStr := ""
-                if len(pinset.Tack)>0 {
-                   tackStr = fmt.Sprintf(" \\\n  \"%s\", %s", pinset.Tack[0], pinset.Tack[1])
-                }
                    
 		fmt.Fprintf(out, `#define k%sPins { \
   %s, \
-  %s,%s \
+  %s, \
 }
 
-`, name, acceptableListName, rejectedListName, tackStr)
+`, name, acceptableListName, rejectedListName)
 	}
 
 	out.WriteString(`#define kNoPins {\
