@@ -185,6 +185,21 @@ class NET_EXPORT TransportSecurityState
   void SetDelegate(Delegate* delegate);
   void SetTackDelegate(bool dynamic, TackDelegate* delegate);
 
+  // Returns true and updates |*result| iff there is a DomainState for
+  // |host|.
+  //
+  // If |sni_enabled| is true, searches the static pins defined for
+  // SNI-using hosts as well as the rest of the pins.
+  //
+  // If |host| matches both an exact entry and is a subdomain of another
+  // entry, the exact match determines the return value.
+  //
+  // Note that this method is not const because it opportunistically removes
+  // entries that have expired.
+  bool GetInternalDomainState(const std::string& host,
+                              bool sni_enabled,
+                              DomainState* result);
+
   // Enable TransportSecurity for |host|. |state| supercedes any previous
   // state for the |host|, including static entries.
   //
@@ -201,44 +216,13 @@ class NET_EXPORT TransportSecurityState
   // Deletes all records created since a given time.
   void DeleteSince(const base::Time& time);
 
-  bool VerifyConnection(const std::string& host,
-                        bool sni_enabled,
-                        HashValueVector& hashes,
-                        uint8* tackExt, uint32_t tackExtLen);
+  bool ShouldUpgrade(const std::string& host);
 
-  // Returns true and updates |*result| iff there is a DomainState for
-  // |host|.
-  //
-  // If |sni_enabled| is true, searches the static pins defined for
-  // SNI-using hosts as well as the rest of the pins.
-  //
-  // If |host| matches both an exact entry and is a subdomain of another
-  // entry, the exact match determines the return value.
-  //
-  // Note that this method is not const because it opportunistically removes
-  // entries that have expired.
-  bool GetDomainState(const std::string& host,
-                      bool sni_enabled,
-                      DomainState* result);
+  bool IsStrictOnErrors(const std::string& host);
 
-  // Returns true and updates |*result| iff there is a static DomainState for
-  // |host|.
-  //
-  // |GetStaticDomainState| is identical to |GetDomainState| except that it
-  // searches only the statically-defined transport security state, ignoring
-  // all dynamically-added DomainStates.
-  //
-  // If |sni_enabled| is true, searches the static pins defined for
-  // SNI-using hosts as well as the rest of the pins.
-  //
-  // If |host| matches both an exact entry and is a subdomain of another
-  // entry, the exact match determines the return value.
-  //
-  // Note that this method is not const because it opportunistically removes
-  // entries that have expired.
-  bool GetStaticDomainState(const std::string& host,
-                            bool sni_enabled,
-                            DomainState* result);
+  bool CheckPins(const std::string& host,
+                 HashValueVector& hashes,
+                 uint8* tackExt, uint32_t tackExtLen);
 
   // Removed all DomainState records.
   void Clear() { enabled_hosts_.clear(); }
@@ -277,10 +261,31 @@ class NET_EXPORT TransportSecurityState
   // The maximum number of seconds for which we'll cache an HSTS request.
   static const long int kMaxHSTSAgeSecs;
 
-  // Converts |hostname| from dotted form ("www.google.com") to the form
-  // used in DNS: "\x03www\x06google\x03com", lowercases that, and returns
-  // the result.
-  static std::string CanonicalizeHost(const std::string& hostname);
+  static const char* HashValueLabel(const HashValue& hash_value);
+
+  TackStoreDefault* GetTackStaticStore() {return &staticStore_;};
+  TackStoreDefault* GetTackDynamicStore() {return &dynamicStore_;};
+
+ private:
+
+  // Returns true and updates |*result| iff there is a static DomainState for
+  // |host|.
+  //
+  // |GetStaticDomainState| is identical to |GetDomainState| except that it
+  // searches only the statically-defined transport security state, ignoring
+  // all dynamically-added DomainStates.
+  //
+  // If |sni_enabled| is true, searches the static pins defined for
+  // SNI-using hosts as well as the rest of the pins.
+  //
+  // If |host| matches both an exact entry and is a subdomain of another
+  // entry, the exact match determines the return value.
+  //
+  // Note that this method is not const because it opportunistically removes
+  // entries that have expired.
+  bool GetStaticDomainState(const std::string& host,
+                            bool sni_enabled,
+                            DomainState* result);
 
   // Send an UMA report on pin validation failure, if the host is in a
   // statically-defined list of domains.
@@ -292,18 +297,13 @@ class NET_EXPORT TransportSecurityState
   // to the caller with |GetStaticDomainState|.
   static void ReportUMAOnPinFailure(const std::string& host);
 
-  TackStore* GetTackStaticStore() {return &staticStore_;}
-  TackStore* GetTackDynamicStore() {return &dynamicStore_;}
-
-  void TackDirtyNotify(bool dynamic);
-
-  static const char* HashValueLabel(const HashValue& hash_value);
-
- private:
+  static std::string CanonicalizeHost(const std::string& hostname);
 
   // If a Delegate is present, notify it that the internal state has
   // changed.
   void DirtyNotify();
+
+  void TackDirtyNotify(bool dynamic);
 
   // The set of hosts that have enabled TransportSecurity.
   std::map<std::string, DomainState> enabled_hosts_;

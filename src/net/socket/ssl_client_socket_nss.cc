@@ -3479,11 +3479,6 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
   // merges into a SPDY connection to www.example.com, and gets a different
   // certificate.
 
-    // Get sni_available 
-    bool sni_available =
-        ssl_config_.version_max >= SSL_PROTOCOL_VERSION_TLS1 ||
-        ssl_config_.version_fallback;
-
     // Get tackExt
     uint8_t* tackExt = NULL;
     uint32_t tackExtLen = 0;
@@ -3492,7 +3487,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
     LOG(WARNING) << "TREV: ABOUT TO CALL VERIFYCONNECTION " << host;
 
-    if (!transport_security_state_->VerifyConnection(host, sni_available, 
+    if (!transport_security_state_->CheckPins(host, 
             server_cert_verify_result_.public_key_hashes, tackExt, tackExtLen))
         return false;
 #endif

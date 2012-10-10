@@ -693,7 +693,7 @@ void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
 
   bool sni_available =
       SSLConfigService::IsSNIAvailable(ctx->ssl_config_service());
-  if (!security_state->GetDomainState(host, sni_available, &domain_state))
+  if (!security_state->GetInternalDomainState(host, sni_available, &domain_state))
     // |GetDomainState| may have altered |domain_state| while searching. If
     // not found, start with a fresh state.
     domain_state.upgrade_mode =
@@ -735,7 +735,7 @@ void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
 
   bool sni_available =
       SSLConfigService::IsSNIAvailable(ctx->ssl_config_service());
-  if (!security_state->GetDomainState(host, sni_available, &domain_state))
+  if (!security_state->GetInternalDomainState(host, sni_available, &domain_state))
     // |GetDomainState| may have altered |domain_state| while searching. If
     // not found, start with a fresh state.
     domain_state.upgrade_mode =
@@ -820,10 +820,7 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
     const URLRequestContext* context = request_->context();
     const bool fatal =
         context->transport_security_state() &&
-        context->transport_security_state()->GetDomainState(
-            request_info_.url.host(),
-            SSLConfigService::IsSNIAvailable(context->ssl_config_service()),
-            &domain_state);
+        context->transport_security_state()->IsStrictOnErrors(request_info_.url.host());
     NotifySSLCertificateError(transaction_->GetResponseInfo()->ssl_info, fatal);
   } else if (result == ERR_SSL_CLIENT_AUTH_CERT_NEEDED) {
     NotifyCertificateRequested(

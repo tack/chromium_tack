@@ -90,7 +90,7 @@ void TransportSecurityState::EnableHost(const std::string& host,
   // that statically-defined states have no |created| date. Therefore, we do
   // not bother to search the SNI-only static states.)
   DomainState state_copy(state);
-  if (GetDomainState(host, false /* sni_enabled */, &existing_state) &&
+  if (GetInternalDomainState(host, false /* sni_enabled */, &existing_state) &&
       !existing_state.created.is_null()) {
     state_copy.created = existing_state.created;
   }
@@ -120,7 +120,7 @@ bool TransportSecurityState::DeleteHost(const std::string& host) {
   return false;
 }
 
-bool TransportSecurityState::GetDomainState(const std::string& host,
+bool TransportSecurityState::GetInternalDomainState(const std::string& host,
                                             bool sni_enabled,
                                             DomainState* result) {
   DCHECK(CalledOnValidThread());
@@ -841,11 +841,11 @@ struct TackKeyPreload {
 #include "net/base/transport_security_state_static.h"
 
 TransportSecurityState::TransportSecurityState()
-    : delegate_(NULL), tackStaticDelegate_(NULL), tackDynamicDelegate_(NULL) 
+    : delegate_(NULL), tackStaticDelegate_(NULL), tackDynamicDelegate_(NULL)
 {
-    staticStore_.setCryptoFuncs(tackChromium);
-    dynamicStore_.setCryptoFuncs(tackChromium);
-    dynamicStore_.setPinActivation(true);
+  staticStore_.setCryptoFuncs(tackChromium);
+  dynamicStore_.setCryptoFuncs(tackChromium);
+  dynamicStore_.setPinActivation(true);
 }
 
 static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
@@ -1049,16 +1049,26 @@ TransportSecurityState::DomainState::DomainState()
 TransportSecurityState::DomainState::~DomainState() {
 }
 
-bool TransportSecurityState::VerifyConnection(const std::string& host,
-                                              bool sni_enabled,
-                                              HashValueVector& hashes,
-                                              uint8* tackExt,
-                                              uint32_t tackExtLen) {
+bool TransportSecurityState::ShouldUpgrade(const std::string& host) {
+    TransportSecurityState::DomainState domain_state;
+    return GetInternalDomainState(host, true, &domain_state) && 
+        domain_state.ShouldRedirectHTTPToHTTPS();  
+}
+
+bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
+    TransportSecurityState::DomainState domain_state;
+    return GetInternalDomainState(host, true, &domain_state);  
+}
+
+bool TransportSecurityState::CheckPins(const std::string& host,
+                                       HashValueVector& hashes,
+                                       uint8* tackExt,
+                                       uint32_t tackExtLen) {
     // Check HSTS and public-key-pins
     TransportSecurityState::DomainState domain_state;
     LOG(WARNING) << "TREV: VERIFY CONNECTION " << host;
 
-    if (GetDomainState(host, sni_enabled, &domain_state) && 
+    if (GetInternalDomainState(host, true, &domain_state) && 
         domain_state.HasPins() &&
         !domain_state.IsChainOfPublicKeysPermitted(hashes)) {
 
