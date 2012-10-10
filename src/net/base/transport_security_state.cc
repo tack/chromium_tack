@@ -546,42 +546,8 @@ void TransportSecurityState::TackDirtyNotify(bool dynamic) {
 
 // static
 std::string TransportSecurityState::CanonicalizeHost(const std::string& host) {
-  // We cannot perform the operations as detailed in the spec here as |host|
-  // has already undergone IDN processing before it reached us. Thus, we check
-  // that there are no invalid characters in the host and lowercase the result.
-
-  // TREV: WHAT IS THE POINT OF THE RFC 3490 CHECKS?
-  // IF THE NAME IS INVALID, IT WON'T MATCH ANY PINS, RIGHT?
-
-  std::string new_host;
-  if (!DNSDomainFromDot(host, &new_host)) {
-    // DNSDomainFromDot can fail if any label is > 63 bytes or if the whole
-    // name is >255 bytes. However, search terms can have those properties.
-    return std::string();
-  }
-
-  for (size_t i = 0; new_host[i]; i += new_host[i] + 1) {
-    const unsigned label_length = static_cast<unsigned>(new_host[i]);
-    if (!label_length)
-      break;
-
-    for (size_t j = 0; j < label_length; ++j) {
-      // RFC 3490, 4.1, step 3
-      if (!IsSTD3ASCIIValidCharacter(new_host[i + 1 + j]))
-        return std::string();
-
-      new_host[i + 1 + j] = tolower(new_host[i + 1 + j]);
-    }
-
-    // step 3(b)
-    if (new_host[i + 1] == '-' ||
-        new_host[i + label_length] == '-') {
-      return std::string();
-    }
-  }
-
   std::string name(host);
-  std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+  std::transform(name.begin(), name.end(), name.begin(), tolower);
   return name;
 }
 
@@ -1114,8 +1080,7 @@ bool TransportSecurityState::VerifyConnection(const std::string& host,
     TACK_RETVAL retval = TACK_ERR;
 
     // Canonicalize hostname to lowercase
-    std::string name(host);
-    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+    std::string name = CanonicalizeHost(host);
         
     // Get end-entity key hash (ASSUMPTION: first SHA256 element in hashes??)
     uint8* keyHash = NULL;
