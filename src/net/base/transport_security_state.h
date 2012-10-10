@@ -203,7 +203,8 @@ class NET_EXPORT TransportSecurityState
 
   bool VerifyConnection(const std::string& host,
                         bool sni_enabled,
-                        CertVerifyResult* result);
+                        HashValueVector& hashes,
+                        uint8* tackExt, uint32_t tackExtLen);
 
   // Returns true and updates |*result| iff there is a DomainState for
   // |host|.

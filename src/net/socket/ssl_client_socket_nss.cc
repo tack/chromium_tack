@@ -106,9 +106,6 @@
 #include "net/socket/nss_ssl_util.h"
 #include "net/socket/ssl_error_params.h"
 
-#include "net/third_party/tackc/src/TackStoreDefault.h"
-#include "net/third_party/tackc/src/TackChromium.h"
-
 #if defined(OS_WIN)
 #include <windows.h>
 #include <wincrypt.h>
@@ -3482,122 +3479,21 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
   // merges into a SPDY connection to www.example.com, and gets a different
   // certificate.
 
+    // Get sni_available 
     bool sni_available =
         ssl_config_.version_max >= SSL_PROTOCOL_VERSION_TLS1 ||
         ssl_config_.version_fallback;
 
+    // Get tackExt
+    uint8_t* tackExt = NULL;
+    uint32_t tackExtLen = 0;
+    SECStatus rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
+    DCHECK_EQ(rv, SECSuccess);
+
     if (!transport_security_state_->VerifyConnection(host, sni_available, 
-                                                     &server_cert_verify_result_)) {
-
-        const base::Time build_time = base::GetBuildTime();
-        // Pins are not enforced if the build is sufficiently old. Chrome
-        // users should get updates every six weeks or so, but it's possible
-        // that some users will stop getting updates for some reason. We
-        // don't want those users building up as a pool of people with bad
-        // pins.
-        if ((base::Time::Now() - build_time).InDays() < 70 /* 10 weeks */) {
-          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-          UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
-          TransportSecurityState::ReportUMAOnPinFailure(host);
-        }
-    }
+            server_cert_verify_result_.public_key_hashes, tackExt, tackExtLen))
+        return false;
 #endif
-
-    // TACK
-    if (result != ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN) {
-        TACK_RETVAL retval = TACK_ERR;
-        SECStatus rv;
-        TackStore* staticStore = transport_security_state_->GetTackStaticStore();
-        TackStore* dynamicStore = transport_security_state_->GetTackDynamicStore();
-        
-        // Canonicalize hostname to lowercase
-        std::string name(host);
-        std::transform(name.begin(), name.end(), name.begin(), ::tolower);
- 
-        // Get TACK Extension
-        uint8_t* tackExt = NULL;
-        uint32_t tackExtLen = 0;
-        rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
-        DCHECK_EQ(rv, SECSuccess);
-        
-        // Get key hash (first SHA256 element in s_c_v_r.public_key_hashes)
-        uint8* keyHash = NULL;
-        for (size_t count = 0; count < server_cert_verify_result_.public_key_hashes.size(); 
-             count++) {
-            HashValue* hashValue = &server_cert_verify_result_.public_key_hashes[count];
-            if (hashValue->tag == HASH_VALUE_SHA256) {
-                keyHash = hashValue->data();
-                break;
-            }
-        }
-        if (keyHash == NULL) {
-            LOG(WARNING) << "TACK: couldn't find key hash?!?!";
-        }   
-        
-        // Get current time (in uint32_t for minutes since epoch)
-        uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
-        
-        // Check connection is well-formed
-        TackProcessingContext ctx;
-        retval = tackProcessWellFormed(&ctx, tackExt, tackExtLen, keyHash,
-                                       currentTime, tackChromium);
-        if (retval != TACK_OK) {
-            LOG(WARNING) << "TACK: Connection ERROR - not well-formed: " << name <<
-                ", " << tackRetvalString(retval);
-            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-        }
-        
-        // Check static store
-        retval = staticStore->process(&ctx, name, currentTime);
-        if (retval < TACK_OK) {
-            LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
-                ", " << tackRetvalString(retval);
-            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-        }
-        if (retval == TACK_OK_REJECTED) {
-            LOG(WARNING) << "TACK: Connection REJECTED by TACK static store: " << name;
-        }
-        if (retval == TACK_OK_ACCEPTED) {
-            LOG(INFO) << "TACK: Connection ACCEPTED by TACK static store: " << name;
-        }
-        if (retval == TACK_OK_UNPINNED) {
-            LOG(INFO) << "TACK: Connection unpinned by TACK static store: " << name;
-        }
-        TACK_RETVAL staticRetval = retval;
-
-        // Check dynamic store
-        retval = dynamicStore->process(&ctx, name, currentTime);
-        if (retval < TACK_OK) {
-            LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
-                ", " << tackRetvalString(retval);
-            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-        }
-        if (retval == TACK_OK_REJECTED) {
-            LOG(WARNING) << "TACK: Connection REJECTED by TACK dynamic store: " << name;
-        }
-        if (retval == TACK_OK_ACCEPTED) {
-            LOG(INFO) << "TACK: Connection ACCEPTED by TACK dynamic store: " << name;
-        }
-        if (retval == TACK_OK_UNPINNED) {
-            LOG(INFO) << "TACK: Connection unpinned by TACK dynamic store: " << name;
-        }
-
-        // Write out store contents if changed
-        if (staticStore->getDirtyFlag()) {
-            LOG(INFO) << "TACK: Static store is DIRTY, time: " << currentTime;
-            transport_security_state_->TackDirtyNotify(false);
-            staticStore->setDirtyFlag(false);
-        }
-        if (dynamicStore->getDirtyFlag()) {
-            LOG(INFO) << "TACK: Dynamic store is DIRTY, time: " << currentTime;
-            transport_security_state_->TackDirtyNotify(true);
-            dynamicStore->setDirtyFlag(false);
-        }
-        
-        // Reject the connection if indicated
-        if (retval == TACK_OK_REJECTED || staticRetval == TACK_OK_REJECTED)
-            return ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-    }
   }
 
   // Exit DoHandshakeLoop and return the result to the caller to Connect.

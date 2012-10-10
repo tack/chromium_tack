@@ -36,8 +36,9 @@
 #include "net/base/x509_certificate.h"
 #include "net/http/http_util.h"
 #include "base/build_time.h"
-#include "net/base/cert_verify_result.h"
+#include "net/third_party/tackc/src/TackStoreDefault.h"
 #include "net/third_party/tackc/src/TackChromium.h"
+
 
 #if defined(USE_OPENSSL)
 #include "crypto/openssl_util.h"
@@ -1060,15 +1061,112 @@ TransportSecurityState::DomainState::~DomainState() {
 
 bool TransportSecurityState::VerifyConnection(const std::string& host,
                                               bool sni_enabled,
-                                              CertVerifyResult* result) {
+                                              HashValueVector& hashes,
+                                              uint8* tackExt,
+                                              uint32_t tackExtLen) {
     // Check HSTS and public-key-pins
     TransportSecurityState::DomainState domain_state;
     if (GetDomainState(host, sni_enabled, &domain_state) && 
         domain_state.HasPins() &&
-        !domain_state.IsChainOfPublicKeysPermitted(result->public_key_hashes))
-        return false;
+        !domain_state.IsChainOfPublicKeysPermitted(hashes)) {
+
+
+        const base::Time build_time = base::GetBuildTime();
+        // Pins are not enforced if the build is sufficiently old. Chrome
+        // users should get updates every six weeks or so, but it's possible
+        // that some users will stop getting updates for some reason. We
+        // don't want those users building up as a pool of people with bad
+        // pins.
+        if ((base::Time::Now() - build_time).InDays() < 70 /* 10 weeks */) {
+          UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
+          ReportUMAOnPinFailure(host);
+          return false;
+        }
+    }
       
     // Check TACK
+    TACK_RETVAL retval = TACK_ERR;
+
+    // Canonicalize hostname to lowercase
+    std::string name(host);
+    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+        
+    // Get end-entity key hash (ASSUMPTION: first SHA256 element in hashes??)
+    uint8* keyHash = NULL;
+    for (size_t count = 0; count < hashes.size(); count++) {
+        HashValue& hashValue = hashes[count];
+        if (hashValue.tag == HASH_VALUE_SHA256) {
+            keyHash = hashValue.data();
+            break;
+        }
+    }
+    if (keyHash == NULL) // Shouldn't happen !!! better error?
+        return false;
+        
+    // Get current time (in uint32_t for minutes since epoch)
+    uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
+
+    // Check connection is well-formed
+    TackProcessingContext ctx;
+    retval = tackProcessWellFormed(&ctx, tackExt, tackExtLen, keyHash,
+                                   currentTime, tackChromium);
+    if (retval != TACK_OK) {
+        LOG(WARNING) << "TACK: Connection ERROR not well-formed: " << name <<
+            ", " << tackRetvalString(retval);
+        return false;
+    }
+        
+    // Check static store
+    retval = staticStore_.process(&ctx, name, currentTime);
+    if (retval < TACK_OK) {
+        LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
+            ", " << tackRetvalString(retval);
+        return false;
+    }
+    if (retval == TACK_OK_REJECTED) {
+        LOG(WARNING) << "TACK: Connection REJECTED by TACK static store: " << name;
+    }
+    if (retval == TACK_OK_ACCEPTED) {
+        LOG(INFO) << "TACK: Connection ACCEPTED by TACK static store: " << name;
+    }
+    if (retval == TACK_OK_UNPINNED) {
+        LOG(INFO) << "TACK: Connection unpinned by TACK static store: " << name;
+    }
+    TACK_RETVAL staticRetval = retval;
+    
+    // Check dynamic store
+    retval = dynamicStore_.process(&ctx, name, currentTime);
+    if (retval < TACK_OK) {
+        LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
+            ", " << tackRetvalString(retval);
+        return false;
+    }
+    if (retval == TACK_OK_REJECTED) {
+        LOG(WARNING) << "TACK: Connection REJECTED by TACK dynamic store: " << name;
+    }
+    if (retval == TACK_OK_ACCEPTED) {
+        LOG(INFO) << "TACK: Connection ACCEPTED by TACK dynamic store: " << name;
+    }
+    if (retval == TACK_OK_UNPINNED) {
+        LOG(INFO) << "TACK: Connection unpinned by TACK dynamic store: " << name;
+    }
+    
+    // Write out store contents if changed
+    if (staticStore_.getDirtyFlag()) {
+        LOG(INFO) << "TACK: Static store is DIRTY, time: " << currentTime;
+        TackDirtyNotify(false);
+        staticStore_.setDirtyFlag(false);
+    }
+    if (dynamicStore_.getDirtyFlag()) {
+        LOG(INFO) << "TACK: Dynamic store is DIRTY, time: " << currentTime;
+        TackDirtyNotify(true);
+        dynamicStore_.setDirtyFlag(false);
+    }
+    
+    // Reject the connection if indicated
+    if (retval == TACK_OK_REJECTED || staticRetval == TACK_OK_REJECTED)
+        return false;
+    
     return true;
 }
 
