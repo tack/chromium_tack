@@ -3490,6 +3490,8 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
     SECStatus rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
     DCHECK_EQ(rv, SECSuccess);
 
+    LOG(WARNING) << "TREV: ABOUT TO CALL VERIFYCONNECTION " << host;
+
     if (!transport_security_state_->VerifyConnection(host, sni_available, 
             server_cert_verify_result_.public_key_hashes, tackExt, tackExtLen))
         return false;

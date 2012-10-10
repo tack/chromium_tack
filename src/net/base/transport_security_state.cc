@@ -134,9 +134,19 @@ bool TransportSecurityState::GetDomainState(const std::string& host,
                                           &state);
   std::string canonicalized_preload = CanonicalizeHost(state.domain);
 
+  if (has_preload) {
+      LOG(WARNING) << "TREV: PRELOAD FOR " << canonicalized_host << " IS " << canonicalized_preload;
+  }
+  else
+    LOG(WARNING) << "TREV: NO PRELOAD FOR " << canonicalized_host;
+
   base::Time current_time(base::Time::Now());
 
-  for (size_t i = 0; canonicalized_host[i]; i += canonicalized_host[i] + 1) {
+  for (size_t i = 0; canonicalized_host[i]; i++) {
+    if (i !=0 && canonicalized_host[i] != '.')
+      continue;
+    if (i != 0)
+      i++;
     std::string host_sub_chunk(&canonicalized_host[i],
                                canonicalized_host.size() - i);
     // Exact match of a preload always wins.
@@ -158,7 +168,7 @@ bool TransportSecurityState::GetDomainState(const std::string& host,
     }
 
     state = j->second;
-    state.domain = DNSDomainToString(host_sub_chunk);
+    state.domain = host_sub_chunk;
 
     // Succeed if we matched the domain exactly or if subdomain matches are
     // allowed.
@@ -540,6 +550,9 @@ std::string TransportSecurityState::CanonicalizeHost(const std::string& host) {
   // has already undergone IDN processing before it reached us. Thus, we check
   // that there are no invalid characters in the host and lowercase the result.
 
+  // TREV: WHAT IS THE POINT OF THE RFC 3490 CHECKS?
+  // IF THE NAME IS INVALID, IT WON'T MATCH ANY PINS, RIGHT?
+
   std::string new_host;
   if (!DNSDomainFromDot(host, &new_host)) {
     // DNSDomainFromDot can fail if any label is > 63 bytes or if the whole
@@ -567,7 +580,9 @@ std::string TransportSecurityState::CanonicalizeHost(const std::string& host) {
     }
   }
 
-  return new_host;
+  std::string name(host);
+  std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+  return name;
 }
 
 // |ReportUMAOnPinFailure| uses these to report which domain was associated
@@ -914,7 +929,12 @@ static const struct HSTSPreload* GetHSTSPreload(
     const std::string& canonicalized_host,
     const struct HSTSPreload* entries,
     size_t num_entries) {
-  for (size_t i = 0; canonicalized_host[i]; i += canonicalized_host[i] + 1) {
+
+  for (size_t i = 0; canonicalized_host[i] != 0; i++) {
+    if (i !=0 && canonicalized_host[i] != '.')
+      continue;
+    if (i != 0)
+      i++;
     for (size_t j = 0; j < num_entries; j++) {
       const struct HSTSPreload* entry = entries + j;
 
@@ -1000,14 +1020,18 @@ bool TransportSecurityState::GetStaticDomainState(
   out->upgrade_mode = DomainState::MODE_FORCE_HTTPS;
   out->include_subdomains = false;
 
-  for (size_t i = 0; canonicalized_host[i]; i += canonicalized_host[i] + 1) {
+  for (size_t i = 0; canonicalized_host[i]; i++) {
+    if (i !=0 && canonicalized_host[i] != '.')
+      continue;
+    if (i != 0)
+      i++;
     std::string host_sub_chunk(&canonicalized_host[i],
                                canonicalized_host.size() - i);
-    out->domain = DNSDomainToString(host_sub_chunk);
+    out->domain = host_sub_chunk;
     std::string hashed_host(HashHost(host_sub_chunk));
     if (forced_hosts_.find(hashed_host) != forced_hosts_.end()) {
       *out = forced_hosts_[hashed_host];
-      out->domain = DNSDomainToString(host_sub_chunk);
+      out->domain = host_sub_chunk;
       return true;
     }
     bool ret;
@@ -1066,6 +1090,8 @@ bool TransportSecurityState::VerifyConnection(const std::string& host,
                                               uint32_t tackExtLen) {
     // Check HSTS and public-key-pins
     TransportSecurityState::DomainState domain_state;
+    LOG(WARNING) << "TREV: VERIFY CONNECTION " << host;
+
     if (GetDomainState(host, sni_enabled, &domain_state) && 
         domain_state.HasPins() &&
         !domain_state.IsChainOfPublicKeysPermitted(hashes)) {

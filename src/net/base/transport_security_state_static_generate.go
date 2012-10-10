@@ -486,21 +486,7 @@ func writeListOfPins(w io.Writer, name string, pinNames []string) {
 // length-prefixed form and also returns the length of the interpreted string.
 // i.e. for an input "example.com" it will return "\\007example\\003com", 13.
 func toDNS(s string) (string, int) {
-	labels := strings.Split(s, ".")
-
-	var name string
-	var l int
-	for _, label := range labels {
-		if len(label) > 63 {
-			panic("DNS label too long")
-		}
-		name += fmt.Sprintf("\\%03o", len(label))
-		name += label
-		l += len(label) + 1
-	}
-	l += 1 // For the length of the root label.
-
-	return name, l
+	return s, len(s)
 }
 
 // domainConstant converts the domain name |s| into a string of the form
