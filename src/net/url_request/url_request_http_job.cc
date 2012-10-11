@@ -676,83 +676,40 @@ void URLRequestHttpJob::FetchResponseCookies(
 // should resolve the conflict in favor of the more strict policy.
 void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
   DCHECK(response_info_);
-
-  const URLRequestContext* ctx = request_->context();
+  TransportSecurityState* security_state = \
+                                   request_->context()->transport_security_state();
   const SSLInfo& ssl_info = response_info_->ssl_info;
 
-  // Only accept strict transport security headers on HTTPS connections that
-  // have no certificate errors.
-  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) ||
-      !ctx->transport_security_state()) {
+  // Only accept HSTS headers on HTTPS connections that have no certificate errors.
+  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) || !security_state)
     return;
-  }
 
-  TransportSecurityState* security_state = ctx->transport_security_state();
-  TransportSecurityState::DomainState domain_state;
-  const std::string& host = request_info_.url.host();
-
-  bool sni_available =
-      SSLConfigService::IsSNIAvailable(ctx->ssl_config_service());
-  if (!security_state->GetInternalDomainState(host, sni_available, &domain_state))
-    // |GetDomainState| may have altered |domain_state| while searching. If
-    // not found, start with a fresh state.
-    domain_state.upgrade_mode =
-        TransportSecurityState::DomainState::MODE_FORCE_HTTPS;
-
-  //TREVFAKEHSTS HttpResponseHeaders* headers = GetResponseHeaders();
-  //TREVFAKEHSTS std::string value;
-  //TREVFAKEHSTS void* iter = NULL;
-  base::Time now = base::Time::Now();
-
-  /* TREVFAKEHSTS
-  while (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value)) {
-    TransportSecurityState::DomainState domain_state;
-    if (domain_state.ParseSTSHeader(now, value))
-      security_state->EnableHost(host, domain_state);
-  }
+  /* TREVFAKE
+  HttpResponseHeaders* headers = GetResponseHeaders();
+  void* iter = NULL;
+  std::string value;
+  if (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value))
+    security_state->ProcessHSTSHeader(request_info_.url.host(), value);
   */
-  //TREVFAKEHSTS:
-  if (domain_state.ParseSTSHeader(now, "max-age=1000"))
-      security_state->EnableHost(host, domain_state);
+  // TREVFAKE:
+  security_state->ProcessHSTSHeader(request_info_.url.host(), "max-age=1000");
 }
 
 void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
   DCHECK(response_info_);
-
-  const URLRequestContext* ctx = request_->context();
+  TransportSecurityState* security_state = \
+                                   request_->context()->transport_security_state();
   const SSLInfo& ssl_info = response_info_->ssl_info;
 
-  // Only accept public key pins headers on HTTPS connections that have no
-  // certificate errors.
-  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) ||
-      !ctx->transport_security_state()) {
+  // Only accept HPKP headers on HTTPS connections that have no certificate errors.
+  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) || !security_state)
     return;
-  }
-
-  TransportSecurityState* security_state = ctx->transport_security_state();
-  TransportSecurityState::DomainState domain_state;
-  const std::string& host = request_info_.url.host();
-
-  bool sni_available =
-      SSLConfigService::IsSNIAvailable(ctx->ssl_config_service());
-  if (!security_state->GetInternalDomainState(host, sni_available, &domain_state))
-    // |GetDomainState| may have altered |domain_state| while searching. If
-    // not found, start with a fresh state.
-    domain_state.upgrade_mode =
-        TransportSecurityState::DomainState::MODE_DEFAULT;
 
   HttpResponseHeaders* headers = GetResponseHeaders();
   void* iter = NULL;
   std::string value;
-  base::Time now = base::Time::Now();
-
-  while (headers->EnumerateHeader(&iter, "Public-Key-Pins", &value)) {
-    // Note that ParsePinsHeader updates |domain_state| (iff the header parses
-    // correctly), but does not completely overwrite it. It just updates the
-    // dynamic pinning metadata.
-    if (domain_state.ParsePinsHeader(now, value, ssl_info))
-      security_state->EnableHost(host, domain_state);
-  }
+  if (headers->EnumerateHeader(&iter, "Public-Key-Pins", &value))
+    security_state->ProcessHPKPHeader(request_info_.url.host(), value, ssl_info);
 }
 
 void URLRequestHttpJob::OnStartCompleted(int result) {

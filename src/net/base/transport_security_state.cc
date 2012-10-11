@@ -76,8 +76,8 @@ void TransportSecurityState::SetTackDelegate(bool dynamic,
 }
 
 
-void TransportSecurityState::EnableHost(const std::string& host,
-                                        const DomainState& state) {
+void TransportSecurityState::SetInternalDomainState(const std::string& host,
+                                                    const DomainState& state) {
   DCHECK(CalledOnValidThread());
 
   const std::string canonicalized_host = CanonicalizeHost(host);
@@ -103,7 +103,7 @@ void TransportSecurityState::EnableHost(const std::string& host,
   DirtyNotify();
 }
 
-bool TransportSecurityState::DeleteHost(const std::string& host) {
+bool TransportSecurityState::DeleteInternalDomainState(const std::string& host) {
   DCHECK(CalledOnValidThread());
 
   const std::string canonicalized_host = CanonicalizeHost(host);
@@ -1171,6 +1171,26 @@ bool TransportSecurityState::CheckPins(const std::string& host,
     return true;
 }
 
+void TransportSecurityState::ProcessHSTSHeader(const std::string& host, 
+                                               const std::string& value)
+{
+  base::Time now = base::Time::Now();
+  TransportSecurityState::DomainState domain_state;
+  GetInternalDomainState(host, true, &domain_state);
+  if (domain_state.ParseSTSHeader(now, value))
+    SetInternalDomainState(host, domain_state);
+}
+
+void TransportSecurityState::ProcessHPKPHeader(const std::string& host, 
+                                               const std::string& value,
+                                               const SSLInfo& ssl_info)
+{
+  base::Time now = base::Time::Now();
+  TransportSecurityState::DomainState domain_state;
+  GetInternalDomainState(host, true, &domain_state);
+  if (domain_state.ParsePinsHeader(now, value, ssl_info))
+    SetInternalDomainState(host, domain_state);
+}
 
 bool TransportSecurityState::DomainState::IsChainOfPublicKeysPermitted(
     const HashValueVector& hashes) const {

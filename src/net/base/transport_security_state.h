@@ -204,17 +204,18 @@ class NET_EXPORT TransportSecurityState
   // state for the |host|, including static entries.
   //
   // The new state for |host| is persisted using the Delegate (if any).
-  void EnableHost(const std::string& host, const DomainState& state);
+  void SetInternalDomainState(const std::string& host, const DomainState& state);
 
   // Delete any entry for |host|. If |host| doesn't have an exact entry then
   // no action is taken. Does not delete static entries. Returns true iff an
   // entry was deleted.
   //
   // The new state for |host| is persisted using the Delegate (if any).
-  bool DeleteHost(const std::string& host);
+  bool DeleteInternalDomainState(const std::string& host);
 
   // Deletes all records created since a given time.
   void DeleteSince(const base::Time& time);
+
 
   bool ShouldUpgrade(const std::string& host);
 
@@ -223,6 +224,11 @@ class NET_EXPORT TransportSecurityState
   bool CheckPins(const std::string& host,
                  HashValueVector& hashes,
                  uint8* tackExt, uint32_t tackExtLen);
+
+  void ProcessHSTSHeader(const std::string& host, const std::string& value);
+
+  void ProcessHPKPHeader(const std::string& host, const std::string& value,
+                         const SSLInfo& ssl_info);
 
   // Removed all DomainState records.
   void Clear() { enabled_hosts_.clear(); }
