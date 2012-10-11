@@ -205,7 +205,7 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
     }
 
     //TREVNOHASH toplevel.Set(HashedDomainToExternalString(hostname), serialized);
-    toplevel.Set(hostname, serialized);
+    toplevel.SetWithoutPathExpansion(hostname, serialized);
   }
 
   base::JSONWriter::WriteWithOptions(&toplevel,
