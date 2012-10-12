@@ -180,7 +180,10 @@ bool TransportSecurityState::CheckTack(const std::string& host,
         ", " << tackRetvalString(retval);
     return false;
   }
-        
+
+  return true;
+
+#if 0        
   // Check static store
   retval = staticStore_.process(&ctx, name, currentTime);
   if (retval < TACK_OK) {
@@ -233,6 +236,7 @@ bool TransportSecurityState::CheckTack(const std::string& host,
       return false;
   
   return true;
+#endif
 }
 
 bool TransportSecurityState::AddHSTSHeader(const std::string& host, 
@@ -260,13 +264,12 @@ void TransportSecurityState::AddHPKPHeader(const std::string& host,
   HashValueVector hashes;
   bool present;
   base::Time expiry;
-  bool include_subdomains;
   if (!base::ParseHPKPHeader(now, value, ssl_info, &hashes, 
-                             &present, &expiry, &include_subdomains))
+                             &present, &expiry))
     return false;
 
   DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
-  if (entry.tags_[SPKI_TAG].Merge(present, include_subdomains, now, expiry)) {
+  if (entry.tags_[SPKI_TAG].Merge(present, false, now, expiry)) {
     entry.hashes_ = hashes;
     DirtyNotify();
   }
@@ -286,17 +289,19 @@ bool TransportSecurityState::GetPreloadSpki(std::string& host, HashValueVector* 
   if (entry->hashes_) {
     const char* const* hash = entry->hashes_;
     while (*hash) {
-      bool ok = AddHash(*hash, hashes);
-      DCHECK(ok) << " failed to parse " << *hash;
+      HashValue hash_value(HASH_VALUE_SHA1);
+      memcpy(hash_value.data(), hash, 20);
+      hashes->push_back(hash_value);
       hash++;
     }
   }
   if (entry->bad_hashes) {
-    const char* const* hash = entry->bad_hashes_;
-    while (*hash) {
-      bool ok = AddHash(*hash, bad_hashes);
-      DCHECK(ok) << " failed to parse " << *hash;
-      hash++;
+    const char* const* bad_hash = entry->bad_hashes_;
+    while (*bad_hash) {
+      HashValue bad_hash_value(HASH_VALUE_SHA1);
+      memcpy(bad_hash_value.data(), bad_hash, 20);
+      bad_hashes->push_back(bad_hash_value);
+      bad_hash++;
     }
   }
   return true;    
@@ -394,8 +399,8 @@ PreloadEntry* TransportSecurityState::GetPreloadEntry(TagIndex tag_index,
 
       // Does the entry name match the search name?
       // If it's a full match, or the entry name has include_subdomains...
-      if (entry->length == name.size()  && 
-          memcmp(entry->dns_name, name.data(), entry->length) == 0 &&          
+      if (entry->name_length == name.size()  && 
+          memcmp(entry->name, name.data(), entry->name_length) == 0 &&          
           (iter.IsFullHostname() || entry->include_subdomains)) {
 
         // This entry is in scope, see if it has relevant data
@@ -471,288 +476,6 @@ bool TransportSecurityState::DynamicTag::Merge(bool present, bool include_subdom
   return false;
 }
 
-
-// |ReportUMAOnPinFailure| uses these to report which domain was associated
-// with the public key pinning failure.
-//
-// DO NOT CHANGE THE ORDERING OF THESE NAMES OR REMOVE ANY OF THEM. Add new
-// domains at the END of the listing (but before DOMAIN_NUM_EVENTS).
-enum SecondLevelDomainName {
-  DOMAIN_NOT_PINNED,
-
-  DOMAIN_GOOGLE_COM,
-  DOMAIN_ANDROID_COM,
-  DOMAIN_GOOGLE_ANALYTICS_COM,
-  DOMAIN_GOOGLEPLEX_COM,
-  DOMAIN_YTIMG_COM,
-  DOMAIN_GOOGLEUSERCONTENT_COM,
-  DOMAIN_YOUTUBE_COM,
-  DOMAIN_GOOGLEAPIS_COM,
-  DOMAIN_GOOGLEADSERVICES_COM,
-  DOMAIN_GOOGLECODE_COM,
-  DOMAIN_APPSPOT_COM,
-  DOMAIN_GOOGLESYNDICATION_COM,
-  DOMAIN_DOUBLECLICK_NET,
-  DOMAIN_GSTATIC_COM,
-  DOMAIN_GMAIL_COM,
-  DOMAIN_GOOGLEMAIL_COM,
-  DOMAIN_GOOGLEGROUPS_COM,
-
-  DOMAIN_TORPROJECT_ORG,
-
-  DOMAIN_TWITTER_COM,
-  DOMAIN_TWIMG_COM,
-
-  DOMAIN_AKAMAIHD_NET,
-
-  DOMAIN_TOR2WEB_ORG,
-
-  DOMAIN_YOUTU_BE,
-  DOMAIN_GOOGLECOMMERCE_COM,
-  DOMAIN_URCHIN_COM,
-  DOMAIN_GOO_GL,
-  DOMAIN_G_CO,
-  DOMAIN_GOOGLE_AC,
-  DOMAIN_GOOGLE_AD,
-  DOMAIN_GOOGLE_AE,
-  DOMAIN_GOOGLE_AF,
-  DOMAIN_GOOGLE_AG,
-  DOMAIN_GOOGLE_AM,
-  DOMAIN_GOOGLE_AS,
-  DOMAIN_GOOGLE_AT,
-  DOMAIN_GOOGLE_AZ,
-  DOMAIN_GOOGLE_BA,
-  DOMAIN_GOOGLE_BE,
-  DOMAIN_GOOGLE_BF,
-  DOMAIN_GOOGLE_BG,
-  DOMAIN_GOOGLE_BI,
-  DOMAIN_GOOGLE_BJ,
-  DOMAIN_GOOGLE_BS,
-  DOMAIN_GOOGLE_BY,
-  DOMAIN_GOOGLE_CA,
-  DOMAIN_GOOGLE_CAT,
-  DOMAIN_GOOGLE_CC,
-  DOMAIN_GOOGLE_CD,
-  DOMAIN_GOOGLE_CF,
-  DOMAIN_GOOGLE_CG,
-  DOMAIN_GOOGLE_CH,
-  DOMAIN_GOOGLE_CI,
-  DOMAIN_GOOGLE_CL,
-  DOMAIN_GOOGLE_CM,
-  DOMAIN_GOOGLE_CN,
-  DOMAIN_CO_AO,
-  DOMAIN_CO_BW,
-  DOMAIN_CO_CK,
-  DOMAIN_CO_CR,
-  DOMAIN_CO_HU,
-  DOMAIN_CO_ID,
-  DOMAIN_CO_IL,
-  DOMAIN_CO_IM,
-  DOMAIN_CO_IN,
-  DOMAIN_CO_JE,
-  DOMAIN_CO_JP,
-  DOMAIN_CO_KE,
-  DOMAIN_CO_KR,
-  DOMAIN_CO_LS,
-  DOMAIN_CO_MA,
-  DOMAIN_CO_MZ,
-  DOMAIN_CO_NZ,
-  DOMAIN_CO_TH,
-  DOMAIN_CO_TZ,
-  DOMAIN_CO_UG,
-  DOMAIN_CO_UK,
-  DOMAIN_CO_UZ,
-  DOMAIN_CO_VE,
-  DOMAIN_CO_VI,
-  DOMAIN_CO_ZA,
-  DOMAIN_CO_ZM,
-  DOMAIN_CO_ZW,
-  DOMAIN_COM_AF,
-  DOMAIN_COM_AG,
-  DOMAIN_COM_AI,
-  DOMAIN_COM_AR,
-  DOMAIN_COM_AU,
-  DOMAIN_COM_BD,
-  DOMAIN_COM_BH,
-  DOMAIN_COM_BN,
-  DOMAIN_COM_BO,
-  DOMAIN_COM_BR,
-  DOMAIN_COM_BY,
-  DOMAIN_COM_BZ,
-  DOMAIN_COM_CN,
-  DOMAIN_COM_CO,
-  DOMAIN_COM_CU,
-  DOMAIN_COM_CY,
-  DOMAIN_COM_DO,
-  DOMAIN_COM_EC,
-  DOMAIN_COM_EG,
-  DOMAIN_COM_ET,
-  DOMAIN_COM_FJ,
-  DOMAIN_COM_GE,
-  DOMAIN_COM_GH,
-  DOMAIN_COM_GI,
-  DOMAIN_COM_GR,
-  DOMAIN_COM_GT,
-  DOMAIN_COM_HK,
-  DOMAIN_COM_IQ,
-  DOMAIN_COM_JM,
-  DOMAIN_COM_JO,
-  DOMAIN_COM_KH,
-  DOMAIN_COM_KW,
-  DOMAIN_COM_LB,
-  DOMAIN_COM_LY,
-  DOMAIN_COM_MT,
-  DOMAIN_COM_MX,
-  DOMAIN_COM_MY,
-  DOMAIN_COM_NA,
-  DOMAIN_COM_NF,
-  DOMAIN_COM_NG,
-  DOMAIN_COM_NI,
-  DOMAIN_COM_NP,
-  DOMAIN_COM_NR,
-  DOMAIN_COM_OM,
-  DOMAIN_COM_PA,
-  DOMAIN_COM_PE,
-  DOMAIN_COM_PH,
-  DOMAIN_COM_PK,
-  DOMAIN_COM_PL,
-  DOMAIN_COM_PR,
-  DOMAIN_COM_PY,
-  DOMAIN_COM_QA,
-  DOMAIN_COM_RU,
-  DOMAIN_COM_SA,
-  DOMAIN_COM_SB,
-  DOMAIN_COM_SG,
-  DOMAIN_COM_SL,
-  DOMAIN_COM_SV,
-  DOMAIN_COM_TJ,
-  DOMAIN_COM_TN,
-  DOMAIN_COM_TR,
-  DOMAIN_COM_TW,
-  DOMAIN_COM_UA,
-  DOMAIN_COM_UY,
-  DOMAIN_COM_VC,
-  DOMAIN_COM_VE,
-  DOMAIN_COM_VN,
-  DOMAIN_GOOGLE_CV,
-  DOMAIN_GOOGLE_CZ,
-  DOMAIN_GOOGLE_DE,
-  DOMAIN_GOOGLE_DJ,
-  DOMAIN_GOOGLE_DK,
-  DOMAIN_GOOGLE_DM,
-  DOMAIN_GOOGLE_DZ,
-  DOMAIN_GOOGLE_EE,
-  DOMAIN_GOOGLE_ES,
-  DOMAIN_GOOGLE_FI,
-  DOMAIN_GOOGLE_FM,
-  DOMAIN_GOOGLE_FR,
-  DOMAIN_GOOGLE_GA,
-  DOMAIN_GOOGLE_GE,
-  DOMAIN_GOOGLE_GG,
-  DOMAIN_GOOGLE_GL,
-  DOMAIN_GOOGLE_GM,
-  DOMAIN_GOOGLE_GP,
-  DOMAIN_GOOGLE_GR,
-  DOMAIN_GOOGLE_GY,
-  DOMAIN_GOOGLE_HK,
-  DOMAIN_GOOGLE_HN,
-  DOMAIN_GOOGLE_HR,
-  DOMAIN_GOOGLE_HT,
-  DOMAIN_GOOGLE_HU,
-  DOMAIN_GOOGLE_IE,
-  DOMAIN_GOOGLE_IM,
-  DOMAIN_GOOGLE_INFO,
-  DOMAIN_GOOGLE_IQ,
-  DOMAIN_GOOGLE_IS,
-  DOMAIN_GOOGLE_IT,
-  DOMAIN_IT_AO,
-  DOMAIN_GOOGLE_JE,
-  DOMAIN_GOOGLE_JO,
-  DOMAIN_GOOGLE_JOBS,
-  DOMAIN_GOOGLE_JP,
-  DOMAIN_GOOGLE_KG,
-  DOMAIN_GOOGLE_KI,
-  DOMAIN_GOOGLE_KZ,
-  DOMAIN_GOOGLE_LA,
-  DOMAIN_GOOGLE_LI,
-  DOMAIN_GOOGLE_LK,
-  DOMAIN_GOOGLE_LT,
-  DOMAIN_GOOGLE_LU,
-  DOMAIN_GOOGLE_LV,
-  DOMAIN_GOOGLE_MD,
-  DOMAIN_GOOGLE_ME,
-  DOMAIN_GOOGLE_MG,
-  DOMAIN_GOOGLE_MK,
-  DOMAIN_GOOGLE_ML,
-  DOMAIN_GOOGLE_MN,
-  DOMAIN_GOOGLE_MS,
-  DOMAIN_GOOGLE_MU,
-  DOMAIN_GOOGLE_MV,
-  DOMAIN_GOOGLE_MW,
-  DOMAIN_GOOGLE_NE,
-  DOMAIN_NE_JP,
-  DOMAIN_GOOGLE_NET,
-  DOMAIN_GOOGLE_NL,
-  DOMAIN_GOOGLE_NO,
-  DOMAIN_GOOGLE_NR,
-  DOMAIN_GOOGLE_NU,
-  DOMAIN_OFF_AI,
-  DOMAIN_GOOGLE_PK,
-  DOMAIN_GOOGLE_PL,
-  DOMAIN_GOOGLE_PN,
-  DOMAIN_GOOGLE_PS,
-  DOMAIN_GOOGLE_PT,
-  DOMAIN_GOOGLE_RO,
-  DOMAIN_GOOGLE_RS,
-  DOMAIN_GOOGLE_RU,
-  DOMAIN_GOOGLE_RW,
-  DOMAIN_GOOGLE_SC,
-  DOMAIN_GOOGLE_SE,
-  DOMAIN_GOOGLE_SH,
-  DOMAIN_GOOGLE_SI,
-  DOMAIN_GOOGLE_SK,
-  DOMAIN_GOOGLE_SM,
-  DOMAIN_GOOGLE_SN,
-  DOMAIN_GOOGLE_SO,
-  DOMAIN_GOOGLE_ST,
-  DOMAIN_GOOGLE_TD,
-  DOMAIN_GOOGLE_TG,
-  DOMAIN_GOOGLE_TK,
-  DOMAIN_GOOGLE_TL,
-  DOMAIN_GOOGLE_TM,
-  DOMAIN_GOOGLE_TN,
-  DOMAIN_GOOGLE_TO,
-  DOMAIN_GOOGLE_TP,
-  DOMAIN_GOOGLE_TT,
-  DOMAIN_GOOGLE_US,
-  DOMAIN_GOOGLE_UZ,
-  DOMAIN_GOOGLE_VG,
-  DOMAIN_GOOGLE_VU,
-  DOMAIN_GOOGLE_WS,
-
-  DOMAIN_TACK_IO,
-
-  // Boundary value for UMA_HISTOGRAM_ENUMERATION:
-  DOMAIN_NUM_EVENTS
-};
-
-struct PreloadEntry {
-  uint8 length;
-  bool include_subdomains;
-  char dns_name[34];
-  bool upgrade;
-  const char* const* hashes;
-  const char* const* bad_hashes;
-  const char* tack_key;
-  SecondLevelDomainName second_level_domain_name;
-};
-
-struct PreloadTackKey {
-  char tack_key[30];
-  uint8 min_generation;
-};
-
 #include "net/base/transport_security_state_static.h"
-
 
 }  // namespace

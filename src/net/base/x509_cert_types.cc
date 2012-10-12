@@ -47,6 +47,32 @@ bool IsSHA1HashInSortedArray(const SHA1HashValue& hash,
                          CompareSHA1Hashes);
 }
 
+bool HashesIntersect(const HashValueVector& a,
+                     const HashValueVector& b) {
+  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
+    HashValueVector::const_iterator j =
+      std::find_if(b.begin(), b.end(), HashValuesEqualPredicate(*i));
+    if (j != b.end())
+      return true;
+  }
+  return false;
+}
+
+std::string HashesToBase64String(
+  const HashValueVector& hashes) {
+  std::vector<std::string> hashes_strs;
+  for (HashValueVector::const_iterator
+         i = hashes.begin(); i != hashes.end(); i++) {
+    std::string s;
+    const std::string hash_str(reinterpret_cast<const char*>(i->data()),
+                               i->size());
+    base::Base64Encode(hash_str, &s);
+    hashes_strs.push_back(s);
+  }
+  return JoinString(hashes_strs, ',');
+}
+
+
 CertPrincipal::CertPrincipal() {
 }
 

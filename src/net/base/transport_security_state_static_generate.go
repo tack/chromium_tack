@@ -457,7 +457,11 @@ func writeCertsOutput(out *bufio.Writer, pins []pin) {
 
 	for _, pin := range pins {
 		fmt.Fprintf(out, "static const char kSPKIHash_%s[] =\n", pin.name)
-		fmt.Fprintf(out, "    \"%s/%s\";\n\n", pin.spkiHashFunc, base64.StdEncoding.EncodeToString(pin.spkiHash))
+		var s string
+		for _,c := range pin.spkiHash {
+			s += fmt.Sprintf("\\x%02x", c)
+		}
+		fmt.Fprintf(out, "    \"%s\";\n\n", s)
 	}
 }
 
@@ -510,15 +514,15 @@ func writeTackKeysOutput(out *bufio.Writer, tackKeys map[string] int) {
 
 func writeHSTSEntry(out *bufio.Writer, entry hsts) {
 	dnsName, dnsLen := toDNS(entry.Name)
-	domain := "DOMAIN_NOT_PINNED"
+	//domain := "DOMAIN_NOT_PINNED"
 	pinsetName := "kNoPins"
 	if len(entry.Pins) > 0 {
 		pinsetName = fmt.Sprintf("k%sPins", uppercaseFirstLetter(entry.Pins))
 	}
-	if len(entry.Pins) > 0 || entry.TackKey != "" {
-		domain = domainConstant(entry.Name)
-	}
-	fmt.Fprintf(out, "  {%d, %t, \"%s\", %t, %s, \"%s\", %s },\n", dnsLen, entry.Subdomains, dnsName, entry.Mode == "force-https", pinsetName, entry.TackKey, domain)
+	//if len(entry.Pins) > 0 || entry.TackKey != "" {
+	//	domain = domainConstant(entry.Name)
+	//}
+	fmt.Fprintf(out, "  {%t, %d, \"%s\", %t, %s, \"%s\"},\n", entry.Subdomains, dnsLen, dnsName, entry.Mode == "force-https", pinsetName, entry.TackKey)
 }
 
 func writeHSTSOutput(out *bufio.Writer, hsts preloaded) error {

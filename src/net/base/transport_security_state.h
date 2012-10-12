@@ -84,9 +84,6 @@ class NET_EXPORT TransportSecurityState
   bool GetDynamicSpki(std::string& host, HashValueVector* hashes);
   bool GetDynamicTacks(std::string& host, std::string tack_keys[2]);
 
-  // The maximum number of seconds for which we'll cache an HSTS request.
-  static const long int kMaxHSTSAgeSecs = 86400 * 365;  // 1 year;
-
  private:
 
   void DirtyNotify();
@@ -100,16 +97,16 @@ class NET_EXPORT TransportSecurityState
 
   std::string CanonicalizeHost(const std::string& host);
 
-  // DATA MEMBERS
-  //---------------------------
+  // Declarations for internal members
+  //-----------------------------------
   // The main structure for dynamic data is a map of names -> DynamicEntries
   // Each DynamicEntry has an array of "tags" storing metadata for the possible
   // data types the entry might contain (UPDATE, SPKI, TACK_0, TACK_1)
 
   enum {UPDATE_TAG, SPKI_TAG, TACK_0_TAG, TACK_1_TAG, TOTAL_TAGS} TagIndex;
 
-  struct Tag {
-  DynamicTag():present(false){}
+  struct DynamicTag {
+    DynamicTag() : present(false){}
     bool Merge(bool present, bool include_subdomains, 
                const base::Time& now, const base::Time& expiry);
 
@@ -125,6 +122,23 @@ class NET_EXPORT TransportSecurityState
     std::string tack_keys_[2];   // TACK_0_TAG, TACK_1_TAG
   };
 
+  struct PreloadEntry {
+    const bool include_subdomains;
+    const uint8 name_length;
+    const char* const name;
+    const bool upgrade;             // UPGRADE
+    const char* const* hashes;      // SPKI
+    const char* const* bad_hashes;  // SPKI
+    const char* tack_key;           // TACK_0, TACK_1
+  };
+
+  struct PreloadTackKey {
+    const char tack_key[30];
+    const uint8 min_generation;
+  };
+
+  // Data members
+  // -------------
   std::map<std::string, DynamicEntry> dynamic_entries_;
   Delegate* delegate_;
 

@@ -110,6 +110,11 @@ bool NET_EXPORT IsSHA1HashInSortedArray(const SHA1HashValue& hash,
                                         const uint8* array,
                                         size_t array_byte_len);
 
+bool NET_EXPORT HashesIntersect(const HashValueVector& a,
+                                const HashValueVector& b);
+
+std::string NET_EXPORT HashesToBase64String(const HashValueVector& hashes);
+
 // CertPrincipal represents the issuer or subject field of an X.509 certificate.
 struct NET_EXPORT CertPrincipal {
   CertPrincipal();
