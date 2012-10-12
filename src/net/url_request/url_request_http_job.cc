@@ -689,10 +689,10 @@ void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
   void* iter = NULL;
   std::string value;
   if (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value))
-    security_state->ProcessHSTSHeader(request_info_.url.host(), value);
+    security_state->AddHSTSHeader(request_info_.url.host(), value);
   */
   // TREVFAKE:
-  security_state->ProcessHSTSHeader(request_info_.url.host(), "max-age=1000");
+  security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
 }
 
 void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
@@ -709,7 +709,7 @@ void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
   void* iter = NULL;
   std::string value;
   if (headers->EnumerateHeader(&iter, "Public-Key-Pins", &value))
-    security_state->ProcessHPKPHeader(request_info_.url.host(), value, ssl_info);
+    security_state->AddHPKPHeader(request_info_.url.host(), value, ssl_info);
 }
 
 void URLRequestHttpJob::OnStartCompleted(int result) {

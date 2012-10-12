@@ -501,7 +501,7 @@ func domainConstant(s string) string {
 
 func writeTackKeysOutput(out *bufio.Writer, tackKeys map[string] int) {
 	out.WriteString("// These are TACK key fingerprints and their min_generation values.\n\n")
-	out.WriteString("static const struct TackKeyPreload kPreloadedTackKeys[] = {\n")
+	out.WriteString("static const struct PreloadTackKey kPreloadedTackKeys[] = {\n")
 	for key, minGeneration := range tackKeys {
 		fmt.Fprintf(out, "  {\"%s\", %d},\n", key, minGeneration)
 	}
@@ -543,10 +543,9 @@ static const char* const kNoRejectedPublicKeys[] = {
 			writeListOfPins(out, rejectedListName, pinset.Exclude)
 		}
                    
-		fmt.Fprintf(out, `#define k%sPins { \
+		fmt.Fprintf(out, `#define k%sPins \
   %s, \
   %s, \
-}
 
 `, name, acceptableListName, rejectedListName)
 	}
@@ -555,7 +554,7 @@ static const char* const kNoRejectedPublicKeys[] = {
   NULL, NULL, \
 }
 
-static const struct HSTSPreload kPreloadedSTS[] = {
+static const struct PreloadEntry kPreloadedSTS[] = {
 `)
 
 	for _, entry := range hsts.Entries {

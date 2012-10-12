@@ -9,10 +9,10 @@
 
 // These are TACK key fingerprints and their min_generation values.
 
-static const struct TackKeyPreload kPreloadedTackKeys[] = {
-  {"k2wgv.l24nx.yiqyc.zjir5.md474", 255},
-  {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
+static const struct PreloadTackKey kPreloadedTackKeys[] = {
   {"6i7l7.gw7zx.kuza6.skvzy.6alwa", 3},
+  {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
+  {"k2wgv.l24nx.yiqyc.zjir5.md474", 255},
 };
 
 // These are SubjectPublicKeyInfo hashes for public key pinning. The
@@ -183,10 +183,9 @@ static const char* const kTestAcceptableCerts[] = {
   kSPKIHash_TestSPKI,
   NULL,
 };
-#define kTestPins { \
+#define kTestPins \
   kTestAcceptableCerts, \
   kNoRejectedPublicKeys, \
-}
 
 static const char* const kGoogleAcceptableCerts[] = {
   kSPKIHash_VeriSignClass3,
@@ -203,10 +202,9 @@ static const char* const kGoogleRejectedCerts[] = {
   kSPKIHash_Vodafone,
   NULL,
 };
-#define kGooglePins { \
+#define kGooglePins \
   kGoogleAcceptableCerts, \
   kGoogleRejectedCerts, \
-}
 
 static const char* const kTorAcceptableCerts[] = {
   kSPKIHash_RapidSSL,
@@ -216,10 +214,9 @@ static const char* const kTorAcceptableCerts[] = {
   kSPKIHash_Tor3,
   NULL,
 };
-#define kTorPins { \
+#define kTorPins \
   kTorAcceptableCerts, \
   kNoRejectedPublicKeys, \
-}
 
 static const char* const kTwitterComAcceptableCerts[] = {
   kSPKIHash_VeriSignClass1,
@@ -243,10 +240,9 @@ static const char* const kTwitterComAcceptableCerts[] = {
   kSPKIHash_Twitter1,
   NULL,
 };
-#define kTwitterComPins { \
+#define kTwitterComPins \
   kTwitterComAcceptableCerts, \
   kNoRejectedPublicKeys, \
-}
 
 static const char* const kTwitterCDNAcceptableCerts[] = {
   kSPKIHash_VeriSignClass1,
@@ -287,26 +283,24 @@ static const char* const kTwitterCDNAcceptableCerts[] = {
   kSPKIHash_GTECyberTrustGlobalRoot,
   NULL,
 };
-#define kTwitterCDNPins { \
+#define kTwitterCDNPins \
   kTwitterCDNAcceptableCerts, \
   kNoRejectedPublicKeys, \
-}
 
 static const char* const kTor2webAcceptableCerts[] = {
   kSPKIHash_AlphaSSL_G2,
   kSPKIHash_Tor2web,
   NULL,
 };
-#define kTor2webPins { \
+#define kTor2webPins \
   kTor2webAcceptableCerts, \
   kNoRejectedPublicKeys, \
-}
 
 #define kNoPins {\
   NULL, NULL, \
 }
 
-static const struct HSTSPreload kPreloadedSTS[] = {
+static const struct PreloadEntry kPreloadedSTS[] = {
   {23, true, "pinningtest.appspot.com", false, kTestPins, "", DOMAIN_APPSPOT_COM },
   {10, true, "google.com", false, kGooglePins, "", DOMAIN_GOOGLE_COM },
   {17, true, "health.google.com", true, kGooglePins, "", DOMAIN_GOOGLE_COM },

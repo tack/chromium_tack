@@ -813,6 +813,9 @@ int CertVerifyProcNSS::VerifyInternal(X509Certificate* cert,
                         cvout[cvout_trust_anchor_index].value.pointer.cert,
                         &verify_result->public_key_hashes);
 
+  SECStatus rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
+
+
   verify_result->is_issued_by_known_root =
       IsKnownRoot(cvout[cvout_trust_anchor_index].value.pointer.cert);
 

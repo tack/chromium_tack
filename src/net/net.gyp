@@ -163,6 +163,8 @@
         'base/host_resolver_impl.h',
         'base/host_resolver_proc.cc',
         'base/host_resolver_proc.h',
+        'base/http_security_headers.cc',
+        'base/http_security_headers.h',
         'base/io_buffer.cc',
         'base/io_buffer.h',
         'base/ip_endpoint.cc',
