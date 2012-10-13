@@ -240,8 +240,8 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
   bool present;
   base::Time expiry;
   bool include_subdomains;
-  if (!net::ParseHSTSHeader(now, value, 
-                            &present, &expiry, &include_subdomains))
+  if (!ParseHSTSHeader(now, value, 
+                       &present, &expiry, &include_subdomains))
     return false;
 
   DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
@@ -258,8 +258,8 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   HashValueVector hashes;
   bool present;
   base::Time expiry;
-  if (!net::ParseHPKPHeader(now, value, ssl_info, &hashes, 
-                            &present, &expiry))
+  if (!ParseHPKPHeader(now, value, ssl_info, &hashes, 
+                       &present, &expiry))
     return false;
 
   DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
@@ -278,7 +278,7 @@ bool TransportSecurityState::GetPreloadSpki(const std::string& host,
                                             HashValueVector* hashes, 
                                             HashValueVector* bad_hashes, 
                                             bool exact_match) {
-  PreloadEntry* entry;
+  const PreloadEntry* entry;
   if (!(entry = GetPreloadEntry(SPKI_TAG, host, exact_match)))
     return false;
   if (entry->hashes) {
@@ -305,7 +305,7 @@ bool TransportSecurityState::GetPreloadSpki(const std::string& host,
 bool TransportSecurityState::GetPreloadTack(const std::string& host, 
                                             std::string* tack_key, 
                                             bool exact_match) {
-  PreloadEntry* entry;
+  const PreloadEntry* entry;
   if (!(entry = GetPreloadEntry(TACK_0_TAG, host, exact_match)))
       return false;
   *tack_key = entry->tack_key;
@@ -383,7 +383,7 @@ struct DomainNameIterator {
   bool exact_match_;
 };
 
-TransportSecurityState::PreloadEntry* TransportSecurityState::GetPreloadEntry(
+const PreloadEntry* TransportSecurityState::GetPreloadEntry(
   TagIndex tag_index, 
   const std::string& host, 
   bool exact_match) {
@@ -391,10 +391,10 @@ TransportSecurityState::PreloadEntry* TransportSecurityState::GetPreloadEntry(
     std::string name = iter.GetName();
 
     // Find a preload entry matching the name
-    struct PreloadEntry* entries = kPreloadedSTS;
+    const PreloadEntry* entries = kPreloadedSTS;
     size_t num_entries = kNumPreloadedSTS;    
     for (size_t index = 0; index < num_entries; index++) {
-      PreloadEntry* entry = &entries[index];
+      const PreloadEntry* entry = &entries[index];
 
       // Does the entry name match the search name?
       // If it's a full match, or the entry name has include_subdomains...

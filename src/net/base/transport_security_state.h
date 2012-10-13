@@ -23,6 +23,8 @@ namespace net {
 
 class SSLInfo;
 class Delegate;
+struct PreloadEntry;
+
 
 // Tracks which hosts have enabled strict transport security and/or public
 // key pins.
@@ -81,22 +83,21 @@ class NET_EXPORT TransportSecurityState
 
   static std::string CanonicalizeHostname(const std::string& host);
 
-  // PRIVATE *************************************************************
-  // *********************************************************************
+
  private:
 
   void DirtyNotify();
 
   // Lowest-level lookup of PreloadEntries and DynamicEntries
   enum TagIndex {UPGRADE_TAG, SPKI_TAG, TACK_0_TAG, TACK_1_TAG, TOTAL_TAGS};
-  struct PreloadEntry;
   struct DynamicEntry;
-  PreloadEntry* GetPreloadEntry(TagIndex tag_index, const std::string& host, 
-                                bool exact_match = false);
+
+  const PreloadEntry* GetPreloadEntry(TagIndex tag_index, const std::string& host, 
+                                      bool exact_match = false);
   bool GetDynamicEntry(TagIndex tag_index, const std::string& host, DynamicEntry* entry,
                        bool exact_match = false);
 
-  // Declarations for internal members
+  // Declarations
   struct DynamicTag {
     DynamicTag() : present_(false){}
     bool Merge(bool present, bool include_subdomains, 
@@ -116,33 +117,32 @@ class NET_EXPORT TransportSecurityState
     std::string tack_keys_[2];   // TACK_0_TAG, TACK_1_TAG
   };
 
- typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
-
-  struct PreloadEntry {
-    const bool include_subdomains;
-    const uint8 name_length;
-    const char* const name;
-    const bool upgrade;             // UPGRADE
-    const char* const* hashes;      // SPKI
-    const char* const* bad_hashes;  // SPKI
-    const char* tack_key;           // TACK_0, TACK_1
-  };
-
-  struct PreloadTackKey {
-    const char tack_key[30];
-    const uint8 min_generation;
-  };
-
   // Data members
+  typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
   std::map<std::string, DynamicEntry> dynamic_entries_;
   Delegate* delegate_;
 
-  // Preload static data
-  // static const struct TransportSecurityState::PreloadTackKey kPreloadedTackKeys[];
-  // static const struct TransportSecurityState::PreloadEntry kPreloadedSTS[];
-
   DISALLOW_COPY_AND_ASSIGN(TransportSecurityState);
 };
+
+// Preload declarations
+struct PreloadEntry {
+  const bool include_subdomains;
+  const uint8 name_length;
+  const char* const name;
+  const bool upgrade;             // UPGRADE
+  const char* const* hashes;      // SPKI
+  const char* const* bad_hashes;  // SPKI
+  const char* const tack_key;     // TACK_0, TACK_1
+};
+
+struct PreloadTackKey {
+  const char tack_key[30];
+  const uint8 min_generation;
+};
+
+//extern const struct PreloadTackKey kPreloadedTackKeys[];
+//extern const struct PreloadEntry kPreloadedSTS[];
 
 }  // namespace net
 

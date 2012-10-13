@@ -1258,7 +1258,6 @@ int SocketStream::HandleCertificateError(int result) {
   SSLInfo ssl_info;
   ssl_socket->GetSSLInfo(&ssl_info);
 
-  TransportSecurityState::DomainState domain_state;
   DCHECK(context_);
   const bool fatal =
       context_->transport_security_state() &&

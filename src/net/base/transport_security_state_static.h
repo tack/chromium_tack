@@ -9,10 +9,10 @@
 
 // These are TACK key fingerprints and their min_generation values.
 
-static const struct net::TransportSecurityState::PreloadTackKey kPreloadedTackKeys[] = {
+static const net::PreloadTackKey kPreloadedTackKeys[] = {
+  {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
   {"6i7l7.gw7zx.kuza6.skvzy.6alwa", 3},
   {"k2wgv.l24nx.yiqyc.zjir5.md474", 255},
-  {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
 };
 
 // These are SubjectPublicKeyInfo hashes for public key pinning. The
@@ -185,7 +185,7 @@ static const char* const kTestAcceptableCerts[] = {
 };
 #define kTestPins \
   kTestAcceptableCerts, \
-  kNoRejectedPublicKeys, \
+  kNoRejectedPublicKeys
 
 static const char* const kGoogleAcceptableCerts[] = {
   kSPKIHash_VeriSignClass3,
@@ -204,7 +204,7 @@ static const char* const kGoogleRejectedCerts[] = {
 };
 #define kGooglePins \
   kGoogleAcceptableCerts, \
-  kGoogleRejectedCerts, \
+  kGoogleRejectedCerts
 
 static const char* const kTorAcceptableCerts[] = {
   kSPKIHash_RapidSSL,
@@ -216,7 +216,7 @@ static const char* const kTorAcceptableCerts[] = {
 };
 #define kTorPins \
   kTorAcceptableCerts, \
-  kNoRejectedPublicKeys, \
+  kNoRejectedPublicKeys
 
 static const char* const kTwitterComAcceptableCerts[] = {
   kSPKIHash_VeriSignClass1,
@@ -242,7 +242,7 @@ static const char* const kTwitterComAcceptableCerts[] = {
 };
 #define kTwitterComPins \
   kTwitterComAcceptableCerts, \
-  kNoRejectedPublicKeys, \
+  kNoRejectedPublicKeys
 
 static const char* const kTwitterCDNAcceptableCerts[] = {
   kSPKIHash_VeriSignClass1,
@@ -285,7 +285,7 @@ static const char* const kTwitterCDNAcceptableCerts[] = {
 };
 #define kTwitterCDNPins \
   kTwitterCDNAcceptableCerts, \
-  kNoRejectedPublicKeys, \
+  kNoRejectedPublicKeys
 
 static const char* const kTor2webAcceptableCerts[] = {
   kSPKIHash_AlphaSSL_G2,
@@ -294,13 +294,11 @@ static const char* const kTor2webAcceptableCerts[] = {
 };
 #define kTor2webPins \
   kTor2webAcceptableCerts, \
-  kNoRejectedPublicKeys, \
+  kNoRejectedPublicKeys
 
-#define kNoPins {\
-  NULL, NULL, \
-}
+#define kNoPins NULL, NULL
 
-static const struct net::TransportSecurityState::PreloadEntry kPreloadedSTS[] = {
+static const net::PreloadEntry kPreloadedSTS[] = {
   {true, 23, "pinningtest.appspot.com", false, kTestPins, ""},
   {true, 10, "google.com", false, kGooglePins, ""},
   {true, 17, "health.google.com", true, kGooglePins, ""},
@@ -672,7 +670,7 @@ static const struct net::TransportSecurityState::PreloadEntry kPreloadedSTS[] = 
 };
 static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
 
-static const struct HSTSPreload kPreloadedSNISTS[] = {
+static const net::PreloadEntry kPreloadedSNISTS[] = {
   {false, 9, "gmail.com", true, kGooglePins, ""},
   {false, 14, "googlemail.com", true, kGooglePins, ""},
   {false, 13, "www.gmail.com", true, kGooglePins, ""},

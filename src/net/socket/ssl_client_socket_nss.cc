@@ -3478,7 +3478,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
   // TODO(agl): we might have an issue here where a request for foo.example.com
   // merges into a SPDY connection to www.example.com, and gets a different
   // certificate.
-  if (!transport_security_state_->CheckPins(host, 
+  if (!transport_security_state_->CheckSpki(host, 
                                             server_cert_verify_result_.public_key_hashes))
     return false;
 
@@ -3486,7 +3486,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
   uint32_t tackExtLen = 0;
   SECStatus rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
   DCHECK_EQ(rv, SECSuccess);
-  if (!transport_security_state_->CheckTACK(host, 
+  if (!transport_security_state_->CheckTack(host, 
                                             server_cert_verify_result_.public_key_hashes, 
                                             tackExt, tackExtLen))
     return false;

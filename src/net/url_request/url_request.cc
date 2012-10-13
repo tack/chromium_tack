@@ -815,7 +815,6 @@ bool URLRequest::GetHSTSRedirect(GURL* redirect_url) const {
   const GURL& url = this->url();
   if (!url.SchemeIs("http"))
     return false;
-  TransportSecurityState::DomainState domain_state;
   if (context()->transport_security_state() && 
       context()->transport_security_state()->ShouldUpgrade(url.host())) {
     url_canon::Replacements<char> replacements;

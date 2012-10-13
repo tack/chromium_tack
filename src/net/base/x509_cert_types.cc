@@ -12,6 +12,7 @@
 #include "base/sha1.h"
 #include "base/string_number_conversions.h"
 #include "base/string_piece.h"
+#include "base/string_util.h"
 #include "base/time.h"
 #include "net/base/x509_certificate.h"
 
