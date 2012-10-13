@@ -99,7 +99,7 @@ class NET_EXPORT TransportSecurityState
 
   // Declarations
   struct DynamicTag {
-    DynamicTag() : present_(false){}
+    DynamicTag() : present_(false) {}
     bool Merge(bool present, bool include_subdomains, 
                const base::Time& now, const base::Time& expiry);
 
@@ -116,9 +116,9 @@ class NET_EXPORT TransportSecurityState
     HashValueVector hashes_;     // SPKI_TAG
     std::string tack_keys_[2];   // TACK_0_TAG, TACK_1_TAG
   };
+  typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
 
   // Data members
-  typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
   std::map<std::string, DynamicEntry> dynamic_entries_;
   Delegate* delegate_;
 

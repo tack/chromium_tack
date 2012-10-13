@@ -19,6 +19,7 @@
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/string_util.h"
 #include "base/time.h"
 #include "base/values.h"
 #include "crypto/sha2.h"
@@ -44,6 +45,18 @@ namespace net {
 
 TransportSecurityState::TransportSecurityState() : delegate_(NULL) {}
 TransportSecurityState::~TransportSecurityState() {}
+
+void TransportSecurityState::SetDelegate(
+    TransportSecurityState::Delegate* delegate) {
+  delegate_ = delegate;
+}
+
+void TransportSecurityState::DirtyNotify() {
+  DCHECK(CalledOnValidThread());
+
+  if (delegate_)
+    delegate_->StateIsDirty(this);
+}
 
 void TransportSecurityState::Clear() { 
   dynamic_entries_.clear();
@@ -101,6 +114,7 @@ bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
 
 bool TransportSecurityState::CheckSpki(const std::string& host,
                                        HashValueVector& hashes) {
+
   HashValueVector preload_hashes, preload_bad_hashes, dynamic_hashes;
   if (!GetPreloadSpki(host, &preload_hashes, &preload_bad_hashes) && 
       !GetDynamicSpki(host, &dynamic_hashes))
@@ -240,13 +254,14 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
   bool present;
   base::Time expiry;
   bool include_subdomains;
-  if (!ParseHSTSHeader(now, value, 
-                       &present, &expiry, &include_subdomains))
+
+  if (!ParseHSTSHeader(now, value, &present, &expiry, &include_subdomains))
     return false;
 
   DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
-  if (entry.tags_[UPGRADE_TAG].Merge(present, include_subdomains, now, expiry))
+  if (entry.tags_[UPGRADE_TAG].Merge(present, include_subdomains, now, expiry)) {
     DirtyNotify();
+  }
   return true;
 }
 
@@ -258,8 +273,8 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   HashValueVector hashes;
   bool present;
   base::Time expiry;
-  if (!ParseHPKPHeader(now, value, ssl_info, &hashes, 
-                       &present, &expiry))
+
+  if (!ParseHPKPHeader(now, value, ssl_info, &hashes, &present, &expiry))
     return false;
 
   DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
@@ -271,7 +286,10 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
 }
 
 bool TransportSecurityState::GetPreloadUpgrade(const std::string& host, bool exact_match) {
-  return GetPreloadEntry(UPGRADE_TAG, host, exact_match);
+  if (!GetPreloadEntry(UPGRADE_TAG, host, exact_match)) {
+    return false;
+  }
+  return true;
 }
 
 bool TransportSecurityState::GetPreloadSpki(const std::string& host, 
@@ -315,8 +333,9 @@ bool TransportSecurityState::GetPreloadTack(const std::string& host,
 bool TransportSecurityState::GetDynamicUpgrade(const std::string& host, 
                                                bool exact_match) {
   DynamicEntry entry;
-  if (!GetDynamicEntry(UPGRADE_TAG, host, &entry, exact_match))
+  if (!GetDynamicEntry(UPGRADE_TAG, host, &entry, exact_match)) {
       return false;
+  }
   return true;
 }
 
@@ -340,13 +359,6 @@ bool TransportSecurityState::GetDynamicTacks(const std::string& host,
   if (GetDynamicEntry(TACK_1_TAG, host, &entry))
     tack_keys[1] = entry.tack_keys_[1];
   return true;
-}
-
-void TransportSecurityState::DirtyNotify() {
-  DCHECK(CalledOnValidThread());
-
-  if (delegate_)
-    delegate_->StateIsDirty(this);
 }
 
 // Iterate over ("www.example.com", "example.com", "com")
@@ -387,6 +399,7 @@ const PreloadEntry* TransportSecurityState::GetPreloadEntry(
   TagIndex tag_index, 
   const std::string& host, 
   bool exact_match) {
+
   for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
     std::string name = iter.GetName();
 
@@ -417,7 +430,7 @@ const PreloadEntry* TransportSecurityState::GetPreloadEntry(
             return entry;
           break;
         default:
-          return NULL;
+          return NULL; // Bad argument
         }
       }
     }
@@ -437,7 +450,7 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
     if (find_result != dynamic_entries_.end()) {
       DynamicEntry& entry = find_result->second;
       DynamicTag& tag = entry.tags_[tag_index];
-      if (tag.present_ && base::Time::Now() > tag.expiry_ && 
+      if (tag.present_ && base::Time::Now() < tag.expiry_ && 
           (iter.IsFullHostname() || tag.include_subdomains_)) {
         *result = entry;
         return true;
@@ -449,11 +462,8 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
 
 std::string TransportSecurityState::CanonicalizeHostname(const std::string& host)
 {
-  std::string name;
-  std::transform(host.begin(), host.end(), name.begin(), tolower);
-  return name;
+  return StringToLowerASCII(host);
 }
-
 
 bool TransportSecurityState::DynamicTag::Merge(bool present, bool include_subdomains, 
                                                const base::Time& now,
@@ -461,6 +471,7 @@ bool TransportSecurityState::DynamicTag::Merge(bool present, bool include_subdom
   bool changed = false;
   if (present_ != present) {
     present_ = present;
+    created_ = now;
     changed = true;
   }
   if (include_subdomains_ != include_subdomains) {
@@ -471,11 +482,7 @@ bool TransportSecurityState::DynamicTag::Merge(bool present, bool include_subdom
     expiry_ = expiry;
     changed = true;
   }
-  if (changed) {
-    created_ = now;
-    return true;
-  }
-  return false;
+  return changed;
 }
 
 TransportSecurityState::DynamicEntry::DynamicEntry(){}
