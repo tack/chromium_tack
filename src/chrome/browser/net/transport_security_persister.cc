@@ -168,54 +168,8 @@ void TransportSecurityPersister::StateIsDirty(
 
 bool TransportSecurityPersister::SerializeData(std::string* output) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-#if 0
-  DictionaryValue toplevel;
-  base::Time now = base::Time::Now();
-  TransportSecurityState::Iterator state(*transport_security_state_);
-  for (; state.HasNext(); state.Advance()) {
-      const std::string& hostname = state.hostname();
-      
-    const TransportSecurityState::DomainState& domain_state =
-        state.domain_state();
 
-    DictionaryValue* serialized = new DictionaryValue;
-    serialized->SetBoolean(kIncludeSubdomains,
-                           domain_state.include_subdomains);
-    serialized->SetDouble(kCreated, domain_state.created.ToDoubleT());
-    serialized->SetDouble(kExpiry, domain_state.upgrade_expiry.ToDoubleT());
-    serialized->SetDouble(kDynamicSPKIHashesExpiry,
-                          domain_state.dynamic_spki_hashes_expiry.ToDoubleT());
-
-    switch (domain_state.upgrade_mode) {
-      case TransportSecurityState::DomainState::MODE_FORCE_HTTPS:
-        serialized->SetString(kMode, kForceHTTPS);
-        break;
-      case TransportSecurityState::DomainState::MODE_DEFAULT:
-        serialized->SetString(kMode, kDefault);
-        break;
-      default:
-        NOTREACHED() << "DomainState with unknown mode";
-        delete serialized;
-        continue;
-    }
-
-    serialized->Set(kStaticSPKIHashes,
-                    SPKIHashesToListValue(domain_state.static_spki_hashes));
-
-    if (now < domain_state.dynamic_spki_hashes_expiry) {
-      serialized->Set(kDynamicSPKIHashes,
-                      SPKIHashesToListValue(domain_state.dynamic_spki_hashes));
-    }
-
-    //TREVNOHASH toplevel.Set(HashedDomainToExternalString(hostname), serialized);
-    toplevel.SetWithoutPathExpansion(hostname, serialized);
-  }
-
-  base::JSONWriter::WriteWithOptions(&toplevel,
-                                     base::JSONWriter::OPTIONS_PRETTY_PRINT,
-                                     output);
-#endif
-  return true;
+  return transport_security_state_->Serialize(output);
 }
 
 bool TransportSecurityPersister::DeserializeFromCommandLine(

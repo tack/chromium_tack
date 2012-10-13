@@ -17,6 +17,8 @@
 
 #include <algorithm>
 
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/string_util.h"
@@ -284,6 +286,49 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   }
   return true;
 }
+
+bool TransportSecurityState::Serialize(std::string* output) {
+
+  DictionaryValue top_level;
+
+  ListValue* entries = new ListValue();
+  DynamicEntryIterator iter;
+  for (iter = dynamic_entries_.begin(); iter != dynamic_entries_.end(); iter++) {
+    const std::string& name = iter->first;
+    DynamicEntry& entry = iter->second;
+
+    for (size_t tag_index = UPGRADE_TAG; tag_index < TOTAL_TAGS; tag_index++) {
+      DynamicTag& tag = entry.tags_[tag_index];
+      if (tag.present_) {
+        DictionaryValue* json_entry = new DictionaryValue;
+        json_entry->SetString("name", name);
+        json_entry->SetBoolean("include_subdomains", tag.include_subdomains_);
+        json_entry->SetDouble("created", tag.created_.ToDoubleT());
+        json_entry->SetDouble("expiry", tag.expiry_.ToDoubleT());
+        switch (tag_index) {
+        case UPGRADE_TAG:
+          json_entry->SetBoolean("upgrade", "true");
+          break;
+        case SPKI_TAG:
+          break;
+        case TACK_0_TAG:
+          json_entry->SetString("tack_key", entry.tack_keys_[0]);
+          break;
+        case TACK_1_TAG:
+          json_entry->SetString("tack_key", entry.tack_keys_[1]);
+          break;
+        }
+        entries->Append(json_entry); 
+      }
+    }    
+  }
+  top_level.Set("entries", entries);
+  base::JSONWriter::WriteWithOptions(&top_level,
+                                     base::JSONWriter::OPTIONS_PRETTY_PRINT,
+                                     output);
+  return true;
+}
+
 
 bool TransportSecurityState::GetPreloadUpgrade(const std::string& host, bool exact_match) {
   if (!GetPreloadEntry(UPGRADE_TAG, host, exact_match)) {

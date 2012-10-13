@@ -68,6 +68,8 @@ class NET_EXPORT TransportSecurityState
   bool AddHPKPHeader(const std::string& host, const std::string& value,
                      const SSLInfo& ssl_info);
 
+  bool Serialize(std::string* output);
+
   // Low-level functions for looking up data from PreloadEntries / DynamicEntries
   //   USE THE HIGH-LEVEL FUNCTIONS INSTEAD OF THESE
   //   If exact_match==true, entries for superdomains are ignored

@@ -60,7 +60,7 @@ type pinset struct {
 type hsts struct {
 	Name       string `json:"name"`
 	Subdomains bool   `json:"include_subdomains"`
-	Mode       string `json:"mode"`
+	Upgrade    bool   `json:"upgrade"`
 	Pins       string `json:"pins"`
 	SNIOnly    bool   `json:"snionly"`
 	TackKey    string `json:"tack_key"`
@@ -404,7 +404,7 @@ func checkCertsInPinsets(pinsets []pinset, pins []pin) error {
 
 func checkNoopEntries(entries []hsts) error {
 	for _, e := range entries {
-		if len(e.Mode) == 0 && len(e.Pins) == 0 && e.TackKey == "" {
+		if e.Upgrade == false && len(e.Pins) == 0 && e.TackKey == "" {
 			switch e.Name {
 			// This entry is deliberately used as an exclusion.
 			case "learn.doubleclick.net":
@@ -522,7 +522,7 @@ func writeHSTSEntry(out *bufio.Writer, entry hsts) {
 	//if len(entry.Pins) > 0 || entry.TackKey != "" {
 	//	domain = domainConstant(entry.Name)
 	//}
-	fmt.Fprintf(out, "  {%t, %d, \"%s\", %t, %s, \"%s\"},\n", entry.Subdomains, dnsLen, dnsName, entry.Mode == "force-https", pinsetName, entry.TackKey)
+	fmt.Fprintf(out, "  {%t, %d, \"%s\", %t, %s, \"%s\"},\n", entry.Subdomains, dnsLen, dnsName, entry.Upgrade, pinsetName, entry.TackKey)
 }
 
 func writeHSTSOutput(out *bufio.Writer, hsts preloaded) error {
