@@ -69,7 +69,10 @@ std::string HashesToBase64String(
     const std::string hash_str(reinterpret_cast<const char*>(i->data()),
                                i->size());
     base::Base64Encode(hash_str, &s);
-    hashes_strs.push_back(s);
+    if (i->tag == HASH_VALUE_SHA1) 
+      hashes_strs.push_back(std::string("sha1/") + s);
+    else if (i->tag == HASH_VALUE_SHA256)
+      hashes_strs.push_back(std::string("sha256/") + s);
   }
   return JoinString(hashes_strs, ',');
 }

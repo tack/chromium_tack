@@ -1082,21 +1082,6 @@ void NetInternalsMessageHandler::IOThreadImpl::OnStartConnectionTests(
   connection_tester_->RunAllTests(url);
 }
 
-void SPKIHashesToString(const net::HashValueVector& hashes,
-                        std::string* string) {
-  for (net::HashValueVector::const_iterator
-       i = hashes.begin(); i != hashes.end(); ++i) {
-    base::StringPiece hash_str(reinterpret_cast<const char*>(i->data()),
-                               i->size());
-    std::string encoded;
-    base::Base64Encode(hash_str, &encoded);
-
-    if (i != hashes.begin())
-      *string += ",";
-    *string += net::TransportSecurityState::HashValueLabel(*i) + encoded;
-  }
-}
-
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
     const ListValue* list) {
   // |list| should be: [<domain to query>].
@@ -1112,6 +1097,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
     if (!transport_security_state) {
       result->SetString("error", "no TransportSecurityState active");
     } else {
+      /* 
       net::TransportSecurityState::DomainState state;
       const bool found = transport_security_state->GetInternalDomainState(
           domain, true, &state);
@@ -1133,6 +1119,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
         SPKIHashesToString(state.dynamic_spki_hashes, &hashes);
         result->SetString("dynamic_spki_hashes", hashes);
       }
+      */
     }
   }
 

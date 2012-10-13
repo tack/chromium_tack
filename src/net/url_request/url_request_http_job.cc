@@ -773,7 +773,6 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
     // We encountered an SSL certificate error.  Ask our delegate to decide
     // what we should do.
 
-    TransportSecurityState::DomainState domain_state;
     const URLRequestContext* context = request_->context();
     const bool fatal =
         context->transport_security_state() &&
