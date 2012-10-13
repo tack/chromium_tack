@@ -1,5 +1,13 @@
 
 #include "net/base/http_security_headers.h"
+#include "base/base64.h"
+#include "base/string_number_conversions.h"
+#include "base/string_tokenizer.h"
+#include "base/string_util.h"
+#include "net/http/http_util.h"
+
+
+namespace net {
 
 // MaxAgeToInt converts a string representation of a number of seconds into a
 // int. We use strtol in order to handle overflow correctly. The string may
@@ -23,8 +31,8 @@ static bool MaxAgeToInt(std::string::const_iterator begin,
 //     "max-age" "=" delta-seconds [ ";" "includeSubDomains" ]
 bool ParseHSTSHeader(
   const base::Time& now,
-  const std::string& value
-  bool present,               
+  const std::string& value,
+  bool* present,               
   base::Time* expiry,         
   bool* include_subdomains) {
   int max_age_candidate = 0;
@@ -94,36 +102,24 @@ bool ParseHSTSHeader(
   }
 
   if (state == AFTER_INCLUDE_SUBDOMAINS || state == AFTER_MAX_AGE) {
-    present = (max_age_candidate != 0);
-    expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
-    include_subdomains = (state == AFTER_INCLUDE_SUBDOMAINS);    
+    *present = (max_age_candidate != 0);
+    *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
+    *include_subdomains = (state == AFTER_INCLUDE_SUBDOMAINS);    
     return true;
   }
   return false;
 }
 
-struct HashValuesEqualPredicate {
-  explicit HashValuesEqualPredicate(const HashValue& fingerprint) :
-      fingerprint_(fingerprint) {}
-
-  bool operator()(const HashValue& other) const {
-    return fingerprint_.Equals(other);
-  }
-
-  const HashValue& fingerprint_;
-};
-
 // Returns true iff there is an item in |pins| which is not present in
 // |from_cert_chain|. Such an SPKI hash is called a "backup pin".
 static bool IsBackupPinPresent(const HashValueVector& pins,
                                const HashValueVector& from_cert_chain) {
-  for (HashValueVector::const_iterator
-       i = pins.begin(); i != pins.end(); ++i) {
+  for (HashValueVector::const_iterator i = pins.begin(); 
+       i != pins.end(); ++i) {
     HashValueVector::const_iterator j =
-        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
-                     HashValuesEqualPredicate(*i));
-      if (j == from_cert_chain.end())
-        return true;
+      std::find(from_cert_chain.begin(), from_cert_chain.end(), *i);
+    if (j == from_cert_chain.end())
+      return true;
   }
 
   return false;
@@ -204,7 +200,7 @@ bool ParseHPKPHeader(
     const std::string& value,
     const SSLInfo& ssl_info,
     HashValueVector* hashes,
-    bool present,
+    bool* present,
     base::Time* expiry) {
   bool parsed_max_age = false;
   int max_age_candidate = 0;
@@ -227,8 +223,6 @@ bool ParseHPKPHeader(
                        &max_age_candidate)) {
         return false;
       }
-      if (max_age_candidate > kMaxHSTSAgeSecs)
-        max_age_candidate = kMaxHSTSAgeSecs;
       parsed_max_age = true;
     } else if (StartsWithASCII(equals.first, "pin-", false)) {
       HashValueTag tag;
@@ -253,9 +247,9 @@ bool ParseHPKPHeader(
     return false;
   }
 
-  present = (max_age_candidate != 0);
-  if (present) {
-    expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
+  *present = (max_age_candidate != 0);
+  if (*present) {
+    *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
     for (HashValueVector::const_iterator i = pins.begin();
          i != pins.end(); ++i) {
       hashes->push_back(*i);
@@ -263,4 +257,6 @@ bool ParseHPKPHeader(
   }
 
   return true;
+}
+
 }

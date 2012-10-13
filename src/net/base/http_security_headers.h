@@ -6,6 +6,7 @@
 #include "base/time.h"
 #include "net/base/net_export.h"
 #include "net/base/x509_cert_types.h"
+#include "net/base/ssl_info.h"
 
 namespace net {
 
@@ -16,8 +17,8 @@ namespace net {
 //     "max-age" "=" delta-seconds [ ";" "includeSubDomains" ]
   bool ParseHSTSHeader(
     const base::Time& now,
-    const std::string& value
-    bool present,               // OUT (false if max-age=0)
+    const std::string& value,
+    bool* present,              // OUT (false if max-age=0)
     base::Time* expiry,         // OUT
     bool* include_subdomains);  // OUT
   
@@ -29,7 +30,7 @@ namespace net {
     const std::string& value,
     const SSLInfo& ssl_info,
     HashValueVector* hashes,    // OUT
-    bool present,               // OUT (false if max-age=0)
+    bool* present,              // OUT (false if max-age=0)
     base::Time* expiry);        // OUT
   
 }  // namespace net

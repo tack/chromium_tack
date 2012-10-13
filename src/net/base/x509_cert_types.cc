@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "base/logging.h"
+#include "base/base64.h"
 #include "base/sha1.h"
 #include "base/string_number_conversions.h"
 #include "base/string_piece.h"
@@ -51,7 +52,7 @@ bool HashesIntersect(const HashValueVector& a,
                      const HashValueVector& b) {
   for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
     HashValueVector::const_iterator j =
-      std::find_if(b.begin(), b.end(), HashValuesEqualPredicate(*i));
+      std::find(b.begin(), b.end(), *i);
     if (j != b.end())
       return true;
   }

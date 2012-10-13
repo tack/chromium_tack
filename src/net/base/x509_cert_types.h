@@ -81,6 +81,9 @@ class NET_EXPORT HashValue {
 
   HashValueTag tag;
 
+  // So it can be used with std::find()
+  bool operator==(const HashValue &other) const { return Equals(other);}
+
  private:
   union {
     SHA1HashValue sha1;

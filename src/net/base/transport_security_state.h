@@ -23,8 +23,6 @@ namespace net {
 
 class SSLInfo;
 class Delegate;
-class PreloadEntry;
-class DynamicEntry;
 
 // Tracks which hosts have enabled strict transport security and/or public
 // key pins.
@@ -64,49 +62,43 @@ class NET_EXPORT TransportSecurityState
   bool CheckTack(const std::string& host,
                  HashValueVector& hashes,
                  uint8* tackExt, uint32_t tackExtLen);
-  void AddHSTSHeader(const std::string& host, const std::string& value);
-  void AddHPKPHeader(const std::string& host, const std::string& value,
+  bool AddHSTSHeader(const std::string& host, const std::string& value);
+  bool AddHPKPHeader(const std::string& host, const std::string& value,
                      const SSLInfo& ssl_info);
 
   // Low-level functions for looking up data from PreloadEntries / DynamicEntries
   //   USE THE HIGH-LEVEL FUNCTIONS INSTEAD OF THESE
-  //
-  //   Use these function ONLY when direct access to state is required, such as
-  //   for serializing or GUI inspection of the stored state.
-  //
   //   If exact_match==true, entries for superdomains are ignored
-  bool GetPreloadUpgrade(std::string& host, bool exact_match=false);
-  bool GetPreloadSpki(std::string& host, HashValueVector* hashes, 
+  bool GetPreloadUpgrade(const std::string& host, bool exact_match=false);
+  bool GetPreloadSpki(const std::string& host, HashValueVector* hashes, 
                       HashValueVector* bad_hashes, bool exact_match=false);
-  bool GetPreloadTack(std::string& host, std::string* tack_key, bool exact_match=false);
+  bool GetPreloadTack(const std::string& host, std::string* tack_key, 
+                      bool exact_match=false);
 
-  bool GetDynamicUpgrade(std::string& host, bool exact_match=false);
-  bool GetDynamicSpki(std::string& host, HashValueVector* hashes);
-  bool GetDynamicTacks(std::string& host, std::string tack_keys[2]);
+  bool GetDynamicUpgrade(const std::string& host, bool exact_match=false);
+  bool GetDynamicSpki(const std::string& host, HashValueVector* hashes);
+  bool GetDynamicTacks(const std::string& host, std::string tack_keys[2]);
 
+  static std::string CanonicalizeHostname(const std::string& host);
+
+  // PRIVATE *************************************************************
+  // *********************************************************************
  private:
 
   void DirtyNotify();
 
   // Lowest-level lookup of PreloadEntries and DynamicEntries
-  //   (returns pointer to preload entries, but make copies of dynamic entries) 
-  PreloadEntry* GetPreloadEntry(TagType tag, const std::string& host, 
+  enum TagIndex {UPGRADE_TAG, SPKI_TAG, TACK_0_TAG, TACK_1_TAG, TOTAL_TAGS};
+  struct PreloadEntry;
+  struct DynamicEntry;
+  PreloadEntry* GetPreloadEntry(TagIndex tag_index, const std::string& host, 
                                 bool exact_match = false);
-  bool GetDynamicEntry(TagType tag, const std::string& host, DynamicEntry* result,
+  bool GetDynamicEntry(TagIndex tag_index, const std::string& host, DynamicEntry* entry,
                        bool exact_match = false);
 
-  std::string CanonicalizeHost(const std::string& host);
-
   // Declarations for internal members
-  //-----------------------------------
-  // The main structure for dynamic data is a map of names -> DynamicEntries
-  // Each DynamicEntry has an array of "tags" storing metadata for the possible
-  // data types the entry might contain (UPDATE, SPKI, TACK_0, TACK_1)
-
-  enum {UPDATE_TAG, SPKI_TAG, TACK_0_TAG, TACK_1_TAG, TOTAL_TAGS} TagIndex;
-
   struct DynamicTag {
-    DynamicTag() : present(false){}
+    DynamicTag() : present_(false){}
     bool Merge(bool present, bool include_subdomains, 
                const base::Time& now, const base::Time& expiry);
 
@@ -117,10 +109,14 @@ class NET_EXPORT TransportSecurityState
   };
 
   struct DynamicEntry {
+    DynamicEntry();
+    ~DynamicEntry();
     DynamicTag tags_[TOTAL_TAGS];
     HashValueVector hashes_;     // SPKI_TAG
     std::string tack_keys_[2];   // TACK_0_TAG, TACK_1_TAG
   };
+
+ typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
 
   struct PreloadEntry {
     const bool include_subdomains;
@@ -138,9 +134,12 @@ class NET_EXPORT TransportSecurityState
   };
 
   // Data members
-  // -------------
   std::map<std::string, DynamicEntry> dynamic_entries_;
   Delegate* delegate_;
+
+  // Preload static data
+  // static const struct TransportSecurityState::PreloadTackKey kPreloadedTackKeys[];
+  // static const struct TransportSecurityState::PreloadEntry kPreloadedSTS[];
 
   DISALLOW_COPY_AND_ASSIGN(TransportSecurityState);
 };

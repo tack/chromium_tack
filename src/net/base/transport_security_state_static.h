@@ -9,7 +9,7 @@
 
 // These are TACK key fingerprints and their min_generation values.
 
-static const struct PreloadTackKey kPreloadedTackKeys[] = {
+static const struct net::TransportSecurityState::PreloadTackKey kPreloadedTackKeys[] = {
   {"6i7l7.gw7zx.kuza6.skvzy.6alwa", 3},
   {"k2wgv.l24nx.yiqyc.zjir5.md474", 255},
   {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
@@ -300,7 +300,7 @@ static const char* const kTor2webAcceptableCerts[] = {
   NULL, NULL, \
 }
 
-static const struct PreloadEntry kPreloadedSTS[] = {
+static const struct net::TransportSecurityState::PreloadEntry kPreloadedSTS[] = {
   {true, 23, "pinningtest.appspot.com", false, kTestPins, ""},
   {true, 10, "google.com", false, kGooglePins, ""},
   {true, 17, "health.google.com", true, kGooglePins, ""},

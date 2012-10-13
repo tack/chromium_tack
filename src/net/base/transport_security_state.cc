@@ -17,27 +17,22 @@
 
 #include <algorithm>
 
-#include "base/base64.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/metrics/histogram.h"
-#include "base/sha1.h"
-#include "base/string_number_conversions.h"
-#include "base/string_tokenizer.h"
-#include "base/string_util.h"
 #include "base/time.h"
-#include "base/utf_string_conversions.h"
 #include "base/values.h"
 #include "crypto/sha2.h"
 #include "googleurl/src/gurl.h"
-#include "net/base/dns_util.h"
+#include "net/base/http_security_headers.h"
 #include "net/base/ssl_info.h"
 #include "net/base/x509_cert_types.h"
 #include "net/base/x509_certificate.h"
-#include "net/http/http_util.h"
 #include "base/build_time.h"
 #include "net/third_party/tackc/src/TackStoreDefault.h"
 #include "net/third_party/tackc/src/TackChromium.h"
+
+// Auto-generated preload file
+#include "net/base/transport_security_state_static.h"
 
 
 #if defined(USE_OPENSSL)
@@ -46,7 +41,6 @@
 
 namespace net {
 
-typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator
 
 TransportSecurityState::TransportSecurityState() : delegate_(NULL) {}
 TransportSecurityState::~TransportSecurityState() {}
@@ -69,21 +63,22 @@ void TransportSecurityState::DeleteSince(const base::Time& time) {
     //     If recent, mark as non-present and set the dirty flag
     DynamicEntry& entry = iter->second;
     bool empty_entry = true;
-    for (TagIndex tag_index = UPDATE_TAG; tag_index++; tag_index != TOTAL_TAGS) {
+    for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
       if (entry.tags_[tag_index].present_) {
         if (entry.tags_[tag_index].created_ >= time) {
           entry.tags_[tag_index].present_ = false;
           dirtied = true;
         }
         else
-          empty_entry = false
+          empty_entry = false;
+      }
+      if (empty_entry) {
+        dynamic_entries_.erase(iter++);
+        dirtied = true; // redundant unless the entry was empty to begin with
+      }
+      else
+        iter++;
     }
-    if (empty_entry) {
-      dynamic_entries_.erase(iter++);
-      dirtied = true; // redundant unless the entry was empty to begin with
-    }
-    else
-      iter++;
   }
   if (dirtied)
     DirtyNotify();
@@ -101,13 +96,11 @@ bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
     GetPreloadSpki(host, &hashes, &bad_hashes) || 
     GetDynamicSpki(host, &hashes) ||
     GetPreloadTack(host, tack_keys) || 
-    GetDynamicTack(host, tack_keys);
+    GetDynamicTacks(host, tack_keys);
 }
 
 bool TransportSecurityState::CheckSpki(const std::string& host,
-                                       HashValueVector& hashes,
-                                       uint8* tackExt,
-                                       uint32_t tackExtLen) {
+                                       HashValueVector& hashes) {
   HashValueVector preload_hashes, preload_bad_hashes, dynamic_hashes;
   if (!GetPreloadSpki(host, &preload_hashes, &preload_bad_hashes) && 
       !GetDynamicSpki(host, &dynamic_hashes))
@@ -117,12 +110,12 @@ bool TransportSecurityState::CheckSpki(const std::string& host,
   // production), that should never happen, but it's good to be defensive.
   // And, hashes *can* be empty in some test scenarios.
   if (hashes.empty()) {
-    LOG(ERROR) << "Rejecting empty public key chain for pinned domain " << domain;
+    LOG(ERROR) << "Rejecting empty public key chain for pinned domain " << host;
     return false;
   }
 
   if (HashesIntersect(preload_bad_hashes, hashes)) {
-    LOG(ERROR) << "Rejecting public key chain for domain " << domain
+    LOG(ERROR) << "Rejecting public key chain for domain " << host
                << ". Validated chain: " << HashesToBase64String(hashes)
                << ", matches one or more bad hashes: "
                << HashesToBase64String(preload_bad_hashes);
@@ -138,7 +131,7 @@ bool TransportSecurityState::CheckSpki(const std::string& host,
     return true;
   }
 
-  LOG(ERROR) << "Rejecting public key chain for domain " << domain
+  LOG(ERROR) << "Rejecting public key chain for domain " << host
              << ". Validated chain: " << HashesToBase64String(hashes)
              << ", expected: " << HashesToBase64String(dynamic_hashes)
              << " or: " << HashesToBase64String(preload_hashes);
@@ -150,10 +143,11 @@ bool TransportSecurityState::CheckTack(const std::string& host,
                                        uint8* tackExt,
                                        uint32_t tackExtLen) {
   std::string static_tack_key;
-  std::string[2] dynamic_tack_keys;
+  std::string dynamic_tack_keys[2];
+  TACK_RETVAL retval;
 
   if (!GetPreloadTack(host, &static_tack_key) &&
-      !GetDynamicTack(host, &dynamic_tack_keys))
+      !GetDynamicTacks(host, dynamic_tack_keys))
     return true;
  
   // Get end-entity key hash (ASSUMPTION: first SHA256 element in hashes??)
@@ -176,7 +170,7 @@ bool TransportSecurityState::CheckTack(const std::string& host,
   retval = tackProcessWellFormed(&ctx, tackExt, tackExtLen, keyHash,
                                  currentTime, tackChromium);
   if (retval != TACK_OK) {
-    LOG(WARNING) << "TACK: Connection ERROR not well-formed: " << name <<
+    LOG(WARNING) << "TACK: Connection ERROR not well-formed: " << host <<
         ", " << tackRetvalString(retval);
     return false;
   }
@@ -246,17 +240,17 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
   bool present;
   base::Time expiry;
   bool include_subdomains;
-  if (!base::ParseHSTSHeader(now, value, 
-                             &present, &expiry, &include_subdomains))
+  if (!net::ParseHSTSHeader(now, value, 
+                            &present, &expiry, &include_subdomains))
     return false;
 
   DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
-  if (entry.tags_[UPDATE_TAG].Merge(present, include_subdomains, now, expiry))
+  if (entry.tags_[UPGRADE_TAG].Merge(present, include_subdomains, now, expiry))
     DirtyNotify();
   return true;
 }
 
-void TransportSecurityState::AddHPKPHeader(const std::string& host, 
+bool TransportSecurityState::AddHPKPHeader(const std::string& host, 
                                                const std::string& value,
                                                const SSLInfo& ssl_info)
 {
@@ -264,8 +258,8 @@ void TransportSecurityState::AddHPKPHeader(const std::string& host,
   HashValueVector hashes;
   bool present;
   base::Time expiry;
-  if (!base::ParseHPKPHeader(now, value, ssl_info, &hashes, 
-                             &present, &expiry))
+  if (!net::ParseHPKPHeader(now, value, ssl_info, &hashes, 
+                            &present, &expiry))
     return false;
 
   DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
@@ -276,18 +270,19 @@ void TransportSecurityState::AddHPKPHeader(const std::string& host,
   return true;
 }
 
-bool TransportSecurityState::GetPreloadUpgrade(std::string& host, bool exact_match) {
+bool TransportSecurityState::GetPreloadUpgrade(const std::string& host, bool exact_match) {
   return GetPreloadEntry(UPGRADE_TAG, host, exact_match);
 }
 
-bool TransportSecurityState::GetPreloadSpki(std::string& host, HashValueVector* hashes, 
+bool TransportSecurityState::GetPreloadSpki(const std::string& host, 
+                                            HashValueVector* hashes, 
                                             HashValueVector* bad_hashes, 
-                                            bool exact_match=false) {
+                                            bool exact_match) {
   PreloadEntry* entry;
   if (!(entry = GetPreloadEntry(SPKI_TAG, host, exact_match)))
     return false;
-  if (entry->hashes_) {
-    const char* const* hash = entry->hashes_;
+  if (entry->hashes) {
+    const char* const* hash = entry->hashes;
     while (*hash) {
       HashValue hash_value(HASH_VALUE_SHA1);
       memcpy(hash_value.data(), hash, 20);
@@ -296,7 +291,7 @@ bool TransportSecurityState::GetPreloadSpki(std::string& host, HashValueVector* 
     }
   }
   if (entry->bad_hashes) {
-    const char* const* bad_hash = entry->bad_hashes_;
+    const char* const* bad_hash = entry->bad_hashes;
     while (*bad_hash) {
       HashValue bad_hash_value(HASH_VALUE_SHA1);
       memcpy(bad_hash_value.data(), bad_hash, 20);
@@ -307,7 +302,8 @@ bool TransportSecurityState::GetPreloadSpki(std::string& host, HashValueVector* 
   return true;    
 }
 
-bool TransportSecurityState::GetPreloadTack(std::string& host, std::string* tack_key, 
+bool TransportSecurityState::GetPreloadTack(const std::string& host, 
+                                            std::string* tack_key, 
                                             bool exact_match) {
   PreloadEntry* entry;
   if (!(entry = GetPreloadEntry(TACK_0_TAG, host, exact_match)))
@@ -316,15 +312,16 @@ bool TransportSecurityState::GetPreloadTack(std::string& host, std::string* tack
   return true;
 }
 
-bool TransportSecurityState::GetDynamicUpgrade(std::string& host, 
-                                               bool exact_match = false) {
+bool TransportSecurityState::GetDynamicUpgrade(const std::string& host, 
+                                               bool exact_match) {
   DynamicEntry entry;
-  if (!GetDynamicEntry(UPDATE_TAG, host, &entry, exact_match))
+  if (!GetDynamicEntry(UPGRADE_TAG, host, &entry, exact_match))
       return false;
   return true;
 }
 
-bool TransportSecurityState::GetDynamicSpki(std::string& host, HashValueVector* hashes) {
+bool TransportSecurityState::GetDynamicSpki(const std::string& host, 
+                                            HashValueVector* hashes) {
   DynamicEntry entry;
   if (!GetDynamicEntry(SPKI_TAG, host, &entry))
     return false;
@@ -332,15 +329,16 @@ bool TransportSecurityState::GetDynamicSpki(std::string& host, HashValueVector* 
   return true;
 }
 
-bool TransportSecurityState::GetDynamicTacks(std::string& host, std::string tack_keys[2]) {
+bool TransportSecurityState::GetDynamicTacks(const std::string& host, 
+                                             std::string tack_keys[2]) {
   DynamicEntry entry;
   if (!GetDynamicEntry(TACK_0_TAG, host, &entry))
       return false;
-  *result++ = entry.tack_keys_[0];
+  tack_keys[0] = entry.tack_keys_[0];
   // This will retrieve the same dynamic_entry, provided the entry
   // stores a second tack which is non-expired
   if (GetDynamicEntry(TACK_1_TAG, host, &entry))
-    *result = entry.tack_keys_[1];
+    tack_keys[1] = entry.tack_keys_[1];
   return true;
 }
 
@@ -354,8 +352,8 @@ void TransportSecurityState::DirtyNotify() {
 // Iterate over ("www.example.com", "example.com", "com")
 //   If exact_match is specified, then only returns "www.example.com"
 struct DomainNameIterator {
-  DomainNameIterator(const std::string& host, bool exact_match = false) {
-    name_ = CanonicalizeHostname(host);
+  DomainNameIterator(const std::string& host, bool exact_match) {
+    name_ = TransportSecurityState::CanonicalizeHostname(host);
     exact_match_ = exact_match;
     index_ = 0;
   }
@@ -372,7 +370,7 @@ struct DomainNameIterator {
       index_++;
   }
 
-  string::string GetName() {
+  std::string GetName() {
     return name_.substr(index_, name_.size() - index_);
   }
 
@@ -382,13 +380,14 @@ struct DomainNameIterator {
 
   std::string name_;  // The full hostname, canonicalized to lowercase
   size_t index_;      // Index into name_
-  bool exact_match_
-}
+  bool exact_match_;
+};
 
-PreloadEntry* TransportSecurityState::GetPreloadEntry(TagIndex tag_index, 
-                                                      const std::string& host, 
-                                                      bool exact_match = false) {
-  for (DomainNameIterator iter(hostname, exact_match); iter.HasNext(); iter.Advance()) {
+TransportSecurityState::PreloadEntry* TransportSecurityState::GetPreloadEntry(
+  TagIndex tag_index, 
+  const std::string& host, 
+  bool exact_match) {
+  for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
     std::string name = iter.GetName();
 
     // Find a preload entry matching the name
@@ -405,7 +404,7 @@ PreloadEntry* TransportSecurityState::GetPreloadEntry(TagIndex tag_index,
 
         // This entry is in scope, see if it has relevant data
         switch (tag_index) {
-        case UPDATE_TAG:
+        case UPGRADE_TAG:
           if (entry->upgrade)
             return entry;
           break;
@@ -414,26 +413,29 @@ PreloadEntry* TransportSecurityState::GetPreloadEntry(TagIndex tag_index,
             return entry;
           break;
         case TACK_0_TAG:
-          if (entry->tack_keys[0] != 0)
+          if (entry->tack_key[0] != 0)
             return entry;
           break;
+        default:
+          return NULL;
         }
       }
     }
   }
+  return NULL;
 }
 
 bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
                                              const std::string& host,
                                              DynamicEntry* result,
-                                             bool exact_match = false) {
-  for (DomainNameIterator iter(hostname, exact_match); iter.HasNext(); iter.Advance()) {
+                                             bool exact_match) {
+  for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
     DynamicEntryIterator find_result = dynamic_entries_.find(iter.GetName());
 
     // If an entry contains relevant data and is non-expired and either 
     // matches the full hostname or has include_subdomains, return it
-    if (find_result != dynamic_entries.end()) {
-      DynamicEntry& entry = find_result.second;
+    if (find_result != dynamic_entries_.end()) {
+      DynamicEntry& entry = find_result->second;
       DynamicTag& tag = entry.tags_[tag_index];
       if (tag.present_ && base::Time::Now() > tag.expiry_ && 
           (iter.IsFullHostname() || tag.include_subdomains_)) {
@@ -448,7 +450,7 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
 std::string TransportSecurityState::CanonicalizeHostname(const std::string& host)
 {
   std::string name;
-  std::transform(host.begin(), host.end(), name_.begin(), tolower);
+  std::transform(host.begin(), host.end(), name.begin(), tolower);
   return name;
 }
 
@@ -476,6 +478,7 @@ bool TransportSecurityState::DynamicTag::Merge(bool present, bool include_subdom
   return false;
 }
 
-#include "net/base/transport_security_state_static.h"
+TransportSecurityState::DynamicEntry::DynamicEntry(){}
+TransportSecurityState::DynamicEntry::~DynamicEntry(){}
 
 }  // namespace
