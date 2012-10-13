@@ -1099,8 +1099,6 @@
         'browser/net/ssl_config_service_manager_pref.cc',
         'browser/net/transport_security_persister.cc',
         'browser/net/transport_security_persister.h',
-        'browser/net/tack_security_persister.cc',
-        'browser/net/tack_security_persister.h',
         'browser/net/url_fixer_upper.cc',
         'browser/net/url_fixer_upper.h',
         'browser/net/url_info.cc',

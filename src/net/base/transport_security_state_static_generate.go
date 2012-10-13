@@ -451,7 +451,7 @@ func writeFooter(out *bufio.Writer) {
 
 func writeCertsOutput(out *bufio.Writer, pins []pin) {
 	out.WriteString(`// These are SubjectPublicKeyInfo hashes for public key pinning. The
-// hashes are base64 encoded, SHA1 digests.
+// hashes are SHA1 digests.
 
 `)
 

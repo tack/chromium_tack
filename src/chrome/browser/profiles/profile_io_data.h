@@ -29,7 +29,6 @@ class HostContentSettingsMap;
 class Profile;
 class ProtocolHandlerRegistry;
 class TransportSecurityPersister;
-class TackSecurityPersister;
 
 namespace chrome_browser_net {
 class LoadTimeStats;
@@ -410,9 +409,6 @@ class ProfileIOData {
 
   mutable scoped_ptr<TransportSecurityPersister>
       transport_security_persister_;
-
-  mutable scoped_ptr<TackSecurityPersister>
-      tack_security_persister_static, tack_security_persister_dynamic;
 
   // These are only valid in between LazyInitialize() and their accessor being
   // called.

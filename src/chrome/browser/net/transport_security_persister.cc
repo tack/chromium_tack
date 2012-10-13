@@ -29,7 +29,7 @@ namespace {
 
 ListValue* SPKIHashesToListValue(const HashValueVector& hashes) {
   ListValue* pins = new ListValue;
-
+#if 0 //TODO
   for (HashValueVector::const_iterator i = hashes.begin();
        i != hashes.end(); ++i) {
     std::string hash_str(reinterpret_cast<const char*>(i->data()), i->size());
@@ -38,11 +38,12 @@ ListValue* SPKIHashesToListValue(const HashValueVector& hashes) {
       pins->Append(new StringValue(TransportSecurityState::HashValueLabel(*i) +
                                    b64));
   }
-
+#endif
   return pins;
 }
 
 void SPKIHashesFromListValue(const ListValue& pins, HashValueVector* hashes) {
+#if 0 //TODO
   size_t num_pins = pins.GetSize();
   for (size_t i = 0; i < num_pins; ++i) {
     std::string type_and_base64;
@@ -52,6 +53,7 @@ void SPKIHashesFromListValue(const ListValue& pins, HashValueVector* hashes) {
       hashes->push_back(fingerprint);
     }
   }
+#endif
 }
 
 // This function converts the binary hashes to a base64 string which we can
@@ -163,9 +165,10 @@ void TransportSecurityPersister::StateIsDirty(
     writer_.ScheduleWrite(this);
 }
 
+
 bool TransportSecurityPersister::SerializeData(std::string* output) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-
+#if 0
   DictionaryValue toplevel;
   base::Time now = base::Time::Now();
   TransportSecurityState::Iterator state(*transport_security_state_);
@@ -211,6 +214,7 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
   base::JSONWriter::WriteWithOptions(&toplevel,
                                      base::JSONWriter::OPTIONS_PRETTY_PRINT,
                                      output);
+#endif
   return true;
 }
 
@@ -235,6 +239,9 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
                                              bool forced,
                                              bool* dirty,
                                              TransportSecurityState* state) {
+
+#if 0
+
   scoped_ptr<Value> value(base::JSONReader::Read(serialized));
   DictionaryValue* dict_value;
   if (!value.get() || !value->GetAsDictionary(&dict_value))
@@ -318,13 +325,17 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
       continue;
     }
 
+    /* TODO
     if (forced)
       state->AddOrUpdateForcedHosts(hashed, domain_state);
     else
       state->AddOrUpdateEnabledHosts(hashed, domain_state);
+    */
   }
 
   *dirty = dirtied;
+
+#endif
   return true;
 }
 

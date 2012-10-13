@@ -1146,6 +1146,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   if (!transport_security_state)
     return;
 
+  /* TODO!!!
   net::TransportSecurityState::DomainState state;
   state.upgrade_expiry = state.created + base::TimeDelta::FromDays(1000);
   state.include_subdomains = include_subdomains;
@@ -1165,6 +1166,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   }
 
   transport_security_state->SetInternalDomainState(domain, state);
+  */
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
@@ -1181,7 +1183,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
   if (!transport_security_state)
     return;
 
-  transport_security_state->DeleteInternalDomainState(domain);
+  //TODO transport_security_state->DeleteInternalDomainState(domain);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnGetHttpCacheInfo(

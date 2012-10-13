@@ -38,7 +38,6 @@
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/net/resource_prefetch_predictor_observer.h"
 #include "chrome/browser/net/transport_security_persister.h"
-#include "chrome/browser/net/tack_security_persister.h"
 #include "chrome/browser/notifications/desktop_notification_service_factory.h"
 #include "chrome/browser/policy/url_blacklist_manager.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
@@ -566,14 +565,6 @@ void ProfileIOData::LazyInitialize() const {
       new TransportSecurityPersister(transport_security_state_.get(),
                                      profile_params_->path,
                                      is_incognito()));
-  tack_security_persister_static.reset(
-      new TackSecurityPersister(transport_security_state_.get(),
-                                profile_params_->path,
-                                is_incognito(), false, "TackStaticPins"));
-  tack_security_persister_dynamic.reset(
-      new TackSecurityPersister(transport_security_state_.get(),
-                                profile_params_->path,
-                                is_incognito(), true, "TackDynamicPins"));
 
   const std::string& serialized =
       command_line.GetSwitchValueASCII(switches::kHstsHosts);
