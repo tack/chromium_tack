@@ -69,6 +69,7 @@ class NET_EXPORT TransportSecurityState
                      const SSLInfo& ssl_info);
 
   bool Serialize(std::string* output);
+  bool Deserialize(const std::string& input);
 
   // Low-level functions for looking up data from PreloadEntries / DynamicEntries
   //   USE THE HIGH-LEVEL FUNCTIONS INSTEAD OF THESE
@@ -83,7 +84,7 @@ class NET_EXPORT TransportSecurityState
   bool GetDynamicSpki(const std::string& host, HashValueVector* hashes);
   bool GetDynamicTacks(const std::string& host, std::string tack_keys[2]);
 
-  static std::string CanonicalizeHostname(const std::string& host);
+  static std::string CanonicalizeName(const std::string& host);
 
 
  private:
@@ -101,22 +102,22 @@ class NET_EXPORT TransportSecurityState
 
   // Declarations
   struct DynamicTag {
-    DynamicTag() : present_(false) {}
+    DynamicTag() : present(false) {}
     bool Merge(bool present, bool include_subdomains, 
                const base::Time& now, const base::Time& expiry);
 
-    bool present_;
-    bool include_subdomains_;
-    base::Time created_;    
-    base::Time expiry_;
+    bool present;
+    bool include_subdomains;
+    base::Time created;    
+    base::Time expiry;
   };
 
   struct DynamicEntry {
     DynamicEntry();
     ~DynamicEntry();
-    DynamicTag tags_[TOTAL_TAGS];
-    HashValueVector hashes_;     // SPKI_TAG
-    std::string tack_keys_[2];   // TACK_0_TAG, TACK_1_TAG
+    DynamicTag tags[TOTAL_TAGS];
+    HashValueVector hashes;     // SPKI_TAG
+    std::string tack_keys[2];   // TACK_0_TAG, TACK_1_TAG
   };
   typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
 

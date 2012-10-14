@@ -194,6 +194,7 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
                                              bool* dirty,
                                              TransportSecurityState* state) {
 
+  return state->Deserialize(serialized);
 #if 0
 
   scoped_ptr<Value> value(base::JSONReader::Read(serialized));

@@ -79,9 +79,9 @@ void TransportSecurityState::DeleteSince(const base::Time& time) {
     DynamicEntry& entry = iter->second;
     bool empty_entry = true;
     for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
-      if (entry.tags_[tag_index].present_) {
-        if (entry.tags_[tag_index].created_ >= time) {
-          entry.tags_[tag_index].present_ = false;
+      if (entry.tags[tag_index].present) {
+        if (entry.tags[tag_index].created >= time) {
+          entry.tags[tag_index].present = false;
           dirtied = true;
         }
         else
@@ -260,10 +260,13 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
   if (!ParseHSTSHeader(now, value, &present, &expiry, &include_subdomains))
     return false;
 
-  DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
-  if (entry.tags_[UPGRADE_TAG].Merge(present, include_subdomains, now, expiry)) {
+  DynamicEntry& entry = dynamic_entries_[CanonicalizeName(host)];
+  if (entry.tags[UPGRADE_TAG].Merge(present, include_subdomains, now, expiry)) {
     DirtyNotify();
   }
+  //TREVFAKETACK FOR DEBUG:
+  entry.tags[TACK_0_TAG].Merge(true, false, now, expiry);
+  entry.tack_keys[0] = std::string("j6det.kfbj5.oweph.mdyxi.wvbch");
   return true;
 }
 
@@ -279,9 +282,9 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   if (!ParseHPKPHeader(now, value, ssl_info, &hashes, &present, &expiry))
     return false;
 
-  DynamicEntry& entry = dynamic_entries_[CanonicalizeHostname(host)];
-  if (entry.tags_[SPKI_TAG].Merge(present, false, now, expiry)) {
-    entry.hashes_ = hashes;
+  DynamicEntry& entry = dynamic_entries_[CanonicalizeName(host)];
+  if (entry.tags[SPKI_TAG].Merge(present, false, now, expiry)) {
+    entry.hashes = hashes;
     DirtyNotify();
   }
   return true;
@@ -298,13 +301,13 @@ bool TransportSecurityState::Serialize(std::string* output) {
     DynamicEntry& entry = iter->second;
 
     for (size_t tag_index = UPGRADE_TAG; tag_index < TOTAL_TAGS; tag_index++) {
-      DynamicTag& tag = entry.tags_[tag_index];
-      if (tag.present_) {
+      DynamicTag& tag = entry.tags[tag_index];
+      if (tag.present) {
         DictionaryValue* json_entry = new DictionaryValue;
         json_entry->SetString("name", name);
-        json_entry->SetBoolean("include_subdomains", tag.include_subdomains_);
-        json_entry->SetDouble("created", tag.created_.ToDoubleT());
-        json_entry->SetDouble("expiry", tag.expiry_.ToDoubleT());
+        json_entry->SetBoolean("include_subdomains", tag.include_subdomains);
+        json_entry->SetDouble("created", tag.created.ToDoubleT());
+        json_entry->SetDouble("expiry", tag.expiry.ToDoubleT());
         switch (tag_index) {
         case UPGRADE_TAG:
           json_entry->SetBoolean("upgrade", "true");
@@ -312,20 +315,84 @@ bool TransportSecurityState::Serialize(std::string* output) {
         case SPKI_TAG:
           break;
         case TACK_0_TAG:
-          json_entry->SetString("tack_key", entry.tack_keys_[0]);
+          json_entry->SetString("tack_key", entry.tack_keys[0]);
           break;
         case TACK_1_TAG:
-          json_entry->SetString("tack_key", entry.tack_keys_[1]);
+          json_entry->SetString("tack_key", entry.tack_keys[1]);
           break;
         }
         entries->Append(json_entry); 
       }
     }    
   }
+  top_level.SetInteger("version", 2);
   top_level.Set("entries", entries);
   base::JSONWriter::WriteWithOptions(&top_level,
                                      base::JSONWriter::OPTIONS_PRETTY_PRINT,
                                      output);
+  return true;
+}
+
+bool TransportSecurityState::Deserialize(const std::string& input) {
+  scoped_ptr<Value> value(base::JSONReader::Read(input));
+  DictionaryValue* dict_value;
+  if (!value.get() || !value->GetAsDictionary(&dict_value))
+    return false;
+
+  int version;
+  if (!dict_value->GetInteger("version", &version)) {
+    return false;
+  }
+  else if (version != 2)
+    return false;
+
+  // Version 2, latest version:
+  ListValue* entries;
+  if (!dict_value->GetList("entries", &entries))
+    return false;
+  
+  for (ListValue::iterator iter = entries->begin(); iter != entries->end(); iter++) {
+    DictionaryValue* json_entry;
+    if (!(*iter)->GetAsDictionary(&json_entry))
+      return false;
+
+    std::string name;
+    bool include_subdomains;
+    double created_double, expiry_double;
+    
+    if (!json_entry->GetString("name", &name))
+      return false;
+    if (!json_entry->GetBoolean("include_subdomains", &include_subdomains))
+      return false;
+    if (!json_entry->GetDouble("created", &created_double))
+      return false;
+    if (!json_entry->GetDouble("expiry", &expiry_double))
+      return false;
+    
+    base::Time created = base::Time::FromDoubleT(created_double);
+    base::Time expiry = base::Time::FromDoubleT(expiry_double);
+
+    DynamicEntry& entry = dynamic_entries_[CanonicalizeName(name)];
+
+    bool upgrade = false;
+    json_entry->GetBoolean("upgrade", &upgrade);
+    if (upgrade) {
+      entry.tags[UPGRADE_TAG].Merge(true, include_subdomains, created, expiry);
+    }
+
+    std::string tack_key;
+    json_entry->GetString("tack_key", &tack_key);
+    if (tack_key.size() > 0) {
+      if (!entry.tags[TACK_0_TAG].present) {
+        entry.tags[TACK_0_TAG].Merge(true, include_subdomains, created, expiry);
+        entry.tack_keys[0] = tack_key;
+      }
+      else {
+        entry.tags[TACK_1_TAG].Merge(true, include_subdomains, created, expiry);
+        entry.tack_keys[1] = tack_key;
+      }
+    }
+  }
   return true;
 }
 
@@ -389,7 +456,7 @@ bool TransportSecurityState::GetDynamicSpki(const std::string& host,
   DynamicEntry entry;
   if (!GetDynamicEntry(SPKI_TAG, host, &entry))
     return false;
-  *hashes = entry.hashes_;
+  *hashes = entry.hashes;
   return true;
 }
 
@@ -398,11 +465,11 @@ bool TransportSecurityState::GetDynamicTacks(const std::string& host,
   DynamicEntry entry;
   if (!GetDynamicEntry(TACK_0_TAG, host, &entry))
       return false;
-  tack_keys[0] = entry.tack_keys_[0];
+  tack_keys[0] = entry.tack_keys[0];
   // This will retrieve the same dynamic_entry, provided the entry
   // stores a second tack which is non-expired
   if (GetDynamicEntry(TACK_1_TAG, host, &entry))
-    tack_keys[1] = entry.tack_keys_[1];
+    tack_keys[1] = entry.tack_keys[1];
   return true;
 }
 
@@ -410,7 +477,7 @@ bool TransportSecurityState::GetDynamicTacks(const std::string& host,
 //   If exact_match is specified, then only returns "www.example.com"
 struct DomainNameIterator {
   DomainNameIterator(const std::string& host, bool exact_match) {
-    name_ = TransportSecurityState::CanonicalizeHostname(host);
+    name_ = TransportSecurityState::CanonicalizeName(host);
     exact_match_ = exact_match;
     index_ = 0;
   }
@@ -494,9 +561,9 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
     // matches the full hostname or has include_subdomains, return it
     if (find_result != dynamic_entries_.end()) {
       DynamicEntry& entry = find_result->second;
-      DynamicTag& tag = entry.tags_[tag_index];
-      if (tag.present_ && base::Time::Now() < tag.expiry_ && 
-          (iter.IsFullHostname() || tag.include_subdomains_)) {
+      DynamicTag& tag = entry.tags[tag_index];
+      if (tag.present && base::Time::Now() < tag.expiry && 
+          (iter.IsFullHostname() || tag.include_subdomains)) {
         *result = entry;
         return true;
       }
@@ -505,26 +572,27 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
   return false;
 }
 
-std::string TransportSecurityState::CanonicalizeHostname(const std::string& host)
+std::string TransportSecurityState::CanonicalizeName(const std::string& host)
 {
   return StringToLowerASCII(host);
 }
 
-bool TransportSecurityState::DynamicTag::Merge(bool present, bool include_subdomains, 
+bool TransportSecurityState::DynamicTag::Merge(bool present_new, 
+                                               bool include_subdomains_new, 
                                                const base::Time& now,
-                                               const base::Time& expiry) {
+                                               const base::Time& expiry_new) {
   bool changed = false;
-  if (present_ != present) {
-    present_ = present;
-    created_ = now;
+  if (present != present_new) {
+    present = present_new;
+    created = now;
     changed = true;
   }
-  if (include_subdomains_ != include_subdomains) {
-    include_subdomains_ = include_subdomains;
+  if (include_subdomains != include_subdomains_new) {
+    include_subdomains = include_subdomains_new;
     changed = true;
   }
-  if (expiry_ != expiry) {
-    expiry_ = expiry;
+  if (expiry != expiry_new) {
+    expiry = expiry_new;
     changed = true;
   }
   return changed;
