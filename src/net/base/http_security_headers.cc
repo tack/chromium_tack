@@ -259,4 +259,26 @@ bool ParseHPKPHeader(
   return true;
 }
 
+bool SPKIHashesFromListValue(const ListValue& pins, HashValueVector* hashes) {
+  size_t num_pins = pins.GetSize();
+  for (size_t i = 0; i < num_pins; ++i) {
+    std::string type_and_base64;
+    HashValue fingerprint;
+    if (!pins.GetString(i, &type_and_base64))
+      return false;
+    if (!fingerprint.ParsePin(type_and_base64))
+      return false;
+      hashes->push_back(fingerprint);
+  }
+  return true;
+}
+
+ListValue* SPKIHashesToListValue(const HashValueVector& hashes) {
+  ListValue* pins = new ListValue;
+  for (HashValueVector::const_iterator i = hashes.begin(); i != hashes.end(); ++i)
+    pins->Append(new StringValue(i->WriteAsPin()));
+  return pins;
+}
+
+
 }

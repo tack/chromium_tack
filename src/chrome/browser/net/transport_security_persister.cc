@@ -27,35 +27,6 @@ using net::TransportSecurityState;
 
 namespace {
 
-ListValue* SPKIHashesToListValue(const HashValueVector& hashes) {
-  ListValue* pins = new ListValue;
-#if 0 //TODO
-  for (HashValueVector::const_iterator i = hashes.begin();
-       i != hashes.end(); ++i) {
-    std::string hash_str(reinterpret_cast<const char*>(i->data()), i->size());
-    std::string b64;
-    if (base::Base64Encode(hash_str, &b64))
-      pins->Append(new StringValue(TransportSecurityState::HashValueLabel(*i) +
-                                   b64));
-  }
-#endif
-  return pins;
-}
-
-void SPKIHashesFromListValue(const ListValue& pins, HashValueVector* hashes) {
-#if 0 //TODO
-  size_t num_pins = pins.GetSize();
-  for (size_t i = 0; i < num_pins; ++i) {
-    std::string type_and_base64;
-    HashValue fingerprint;
-    if (pins.GetString(i, &type_and_base64) &&
-        TransportSecurityState::ParsePin(type_and_base64, &fingerprint)) {
-      hashes->push_back(fingerprint);
-    }
-  }
-#endif
-}
-
 // This function converts the binary hashes to a base64 string which we can
 // include in a JSON file.
 std::string HashedDomainToExternalString(const std::string& hashed) {

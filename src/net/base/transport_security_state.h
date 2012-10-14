@@ -77,7 +77,7 @@ class NET_EXPORT TransportSecurityState
   bool GetPreloadUpgrade(const std::string& host, bool exact_match=false);
   bool GetPreloadSpki(const std::string& host, HashValueVector* hashes, 
                       HashValueVector* bad_hashes, bool exact_match=false);
-  bool GetPreloadTack(const std::string& host, std::string* tack_key, 
+  bool GetPreloadTacks(const std::string& host, std::string tack_key[2], 
                       bool exact_match=false);
 
   bool GetDynamicUpgrade(const std::string& host, bool exact_match=false);
@@ -116,8 +116,8 @@ class NET_EXPORT TransportSecurityState
     DynamicEntry();
     ~DynamicEntry();
     DynamicTag tags[TOTAL_TAGS];
-    HashValueVector hashes;     // SPKI_TAG
-    std::string tack_keys[2];   // TACK_0_TAG, TACK_1_TAG
+    HashValueVector hashes;     // SPKI
+    std::string tack_keys[2];   // TACK_0, TACK_1
   };
   typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
 
@@ -136,7 +136,8 @@ struct PreloadEntry {
   const bool upgrade;             // UPGRADE
   const char* const* hashes;      // SPKI
   const char* const* bad_hashes;  // SPKI
-  const char* const tack_key;     // TACK_0, TACK_1
+  const char* const tack_key_0;  // TACK_0
+  const char* const tack_key_1;  // TACK_1
 };
 
 struct PreloadTackKey {

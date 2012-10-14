@@ -75,6 +75,9 @@ class NET_EXPORT HashValue {
   HashValue() : tag(HASH_VALUE_SHA1) {}
 
   bool Equals(const HashValue& other) const;
+  bool ParsePin(const std::string& input);
+  std::string WriteAsPin() const;
+
   size_t size() const;
   unsigned char* data();
   const unsigned char* data() const;

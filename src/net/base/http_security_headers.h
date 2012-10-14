@@ -3,6 +3,7 @@
 
 #include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/values.h"
 #include "base/time.h"
 #include "net/base/net_export.h"
 #include "net/base/x509_cert_types.h"
@@ -32,7 +33,11 @@ namespace net {
     HashValueVector* hashes,    // OUT
     bool* present,              // OUT (false if max-age=0)
     base::Time* expiry);        // OUT
+
+bool SPKIHashesFromListValue(const ListValue& pins, HashValueVector* hashes);
+ListValue* SPKIHashesToListValue(const HashValueVector& hashes);
   
 }  // namespace net
+
 
 #endif  // NET_BASE_HTTP_SECURITY_HEADERS_H_
