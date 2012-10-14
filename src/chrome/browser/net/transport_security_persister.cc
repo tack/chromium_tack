@@ -156,7 +156,8 @@ bool TransportSecurityPersister::LoadEntries(const std::string& serialized,
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
   transport_security_state_->Clear();
-  return Deserialize(serialized, false, dirty, transport_security_state_);
+  bool ret = Deserialize(serialized, false, dirty, transport_security_state_);
+  return ret;
 }
 
 // static

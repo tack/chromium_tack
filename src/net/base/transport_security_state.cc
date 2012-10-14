@@ -45,7 +45,8 @@
 namespace net {
 
 
-TransportSecurityState::TransportSecurityState() : delegate_(NULL) {}
+TransportSecurityState::TransportSecurityState() : 
+  max_dynamic_entries_(10000), delegate_(NULL) {}
 TransportSecurityState::~TransportSecurityState() {}
 
 void TransportSecurityState::SetDelegate(
@@ -105,13 +106,13 @@ bool TransportSecurityState::ShouldUpgrade(const std::string& host) {
 
 bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
   HashValueVector hashes, bad_hashes;
-  std::string tack_keys[2];
+  std::string tack_key_0, tack_key_1;
   return GetPreloadUpgrade(host) || 
     GetDynamicUpgrade(host) ||
     GetPreloadSpki(host, &hashes, &bad_hashes) || 
     GetDynamicSpki(host, &hashes) ||
-    GetPreloadTacks(host, tack_keys) || 
-    GetDynamicTacks(host, tack_keys);
+    GetPreloadTacks(host, &tack_key_0, &tack_key_1) || 
+    GetDynamicTacks(host, &tack_key_0, &tack_key_1);
 }
 
 bool TransportSecurityState::CheckSpki(const std::string& host,
@@ -158,12 +159,14 @@ bool TransportSecurityState::CheckTack(const std::string& host,
                                        HashValueVector& hashes,
                                        uint8* tackExt,
                                        uint32_t tackExtLen) {
-  std::string static_tack_keys[2];
-  std::string dynamic_tack_keys[2];
+  std::string static_tack_key_0;
+  std::string static_tack_key_1;
+  std::string dynamic_tack_key_0;
+  std::string dynamic_tack_key_1;
   TACK_RETVAL retval;
 
-  if (!GetPreloadTacks(host, static_tack_keys) &&
-      !GetDynamicTacks(host, dynamic_tack_keys))
+  if (!GetPreloadTacks(host, &static_tack_key_0, &static_tack_key_1) &&
+      !GetDynamicTacks(host, &dynamic_tack_key_0, &dynamic_tack_key_1))
     return true;
  
   // Get end-entity key hash (ASSUMPTION: first SHA256 element in hashes??)
@@ -250,51 +253,30 @@ bool TransportSecurityState::CheckTack(const std::string& host,
 }
 
 bool TransportSecurityState::AddHSTSHeader(const std::string& host, 
-                                           const std::string& value)
-{
+                                           const std::string& value) {
+  DynamicEntry entry;
+  DynamicTag& tag = entry.tags[UPGRADE_TAG];
   base::Time now = base::Time::Now();
-  bool present;
-  base::Time expiry;
-  bool include_subdomains;
-
-  if (!ParseHSTSHeader(now, value, &present, &expiry, &include_subdomains))
-    return false;
-
-  DynamicEntry& entry = dynamic_entries_[CanonicalizeName(host)];
-  if (entry.tags[UPGRADE_TAG].Merge(present, include_subdomains, now, expiry)) {
-    DirtyNotify();
+  if (ParseHSTSHeader(now, value, &tag.present, &tag.expiry, &tag.include_subdomains)) {
+    tag.created = now;
+    MergeEntry(host, entry);
+    return true;
   }
-  //TREVFAKETACK FOR DEBUG:
-  //entry.tags[TACK_0_TAG].Merge(true, false, now, expiry);
-  //entry.tack_keys[0] = std::string("j6det.kfbj5.oweph.mdyxi.wvbch");
-
-  entry.tags[SPKI_TAG].Merge(true, false, now, expiry);
-  HashValueVector hashes; 
-  HashValueVector bad_hashes;
-  GetPreloadSpki("www.google.com", &hashes, &bad_hashes);
-  entry.hashes = hashes;
-
-  return true;
+  return false;
 }
 
 bool TransportSecurityState::AddHPKPHeader(const std::string& host, 
                                                const std::string& value,
-                                               const SSLInfo& ssl_info)
-{
+                                               const SSLInfo& ssl_info) {
+  DynamicEntry entry;
+  DynamicTag& tag = entry.tags[SPKI_TAG];
   base::Time now = base::Time::Now();
-  HashValueVector hashes;
-  bool present;
-  base::Time expiry;
-
-  if (!ParseHPKPHeader(now, value, ssl_info, &hashes, &present, &expiry))
-    return false;
-
-  DynamicEntry& entry = dynamic_entries_[CanonicalizeName(host)];
-  if (entry.tags[SPKI_TAG].Merge(present, false, now, expiry)) {
-    entry.hashes = hashes;
-    DirtyNotify();
+  if (ParseHPKPHeader(now, value, ssl_info, &entry.hashes, &tag.present, &tag.expiry)) {
+    tag.created = now;
+    MergeEntry(host, entry);
+    return true;
   }
-  return true;
+  return false;
 }
 
 bool TransportSecurityState::Serialize(std::string* output) {
@@ -323,10 +305,10 @@ bool TransportSecurityState::Serialize(std::string* output) {
           json_entry->Set("spki_hashes", SPKIHashesToListValue(entry.hashes));
           break;
         case TACK_0_TAG:
-          json_entry->SetString("tack_key_0", entry.tack_keys[0]);
+          json_entry->SetString("tack_key_0", entry.tack_key_0);
           break;
         case TACK_1_TAG:
-          json_entry->SetString("tack_key_1", entry.tack_keys[1]);
+          json_entry->SetString("tack_key_1", entry.tack_key_1);
           break;
         }
         entries->Append(json_entry); 
@@ -365,49 +347,41 @@ bool TransportSecurityState::Deserialize(const std::string& input) {
       return false;
 
     std::string name;
-    bool include_subdomains;
+    DynamicEntry entry;
+    DynamicTag tag;
+    tag.present = true;
+
     double created_double, expiry_double;
-    
     if (!json_entry->GetString("name", &name))
       return false;
-    if (!json_entry->GetBoolean("include_subdomains", &include_subdomains))
+    if (!json_entry->GetBoolean("include_subdomains", &tag.include_subdomains))
       return false;
     if (!json_entry->GetDouble("created", &created_double))
       return false;
     if (!json_entry->GetDouble("expiry", &expiry_double))
       return false;
-    
-    base::Time created = base::Time::FromDoubleT(created_double);
-    base::Time expiry = base::Time::FromDoubleT(expiry_double);
+    tag.created = base::Time::FromDoubleT(created_double);
+    tag.expiry = base::Time::FromDoubleT(expiry_double);
 
-    DynamicEntry& entry = dynamic_entries_[CanonicalizeName(name)];
-
-    bool upgrade = false;
-    json_entry->GetBoolean("upgrade", &upgrade);
-    if (upgrade) {
-      entry.tags[UPGRADE_TAG].Merge(true, include_subdomains, created, expiry);
-    }
+    bool upgrade;
+    if (json_entry->GetBoolean("upgrade", &upgrade) && upgrade)
+      entry.tags[UPGRADE_TAG] = tag;
 
     ListValue* pins_list = NULL;
-    HashValueVector hashes;
-    if (json_entry->GetList("hashes", &pins_list)) {
-      if (!SPKIHashesFromListValue(*pins_list, &hashes))
+    if (json_entry->GetList("spki_hashes", &pins_list)) {
+      if (!SPKIHashesFromListValue(*pins_list, &entry.hashes))
         return false;
-      entry.tags[SPKI_TAG].Merge(true, include_subdomains, created, expiry);
-      entry.hashes = hashes;
+      entry.tags[SPKI_TAG] = tag;
     }
 
-    std::string tack_key_0;
-    if (json_entry->GetString("tack_key_0", &tack_key_0)) {
-      entry.tags[TACK_0_TAG].Merge(true, include_subdomains, created, expiry);
-      entry.tack_keys[0] = tack_key_0;
-    }
+    // !!! Could do more syntax checking on the fingerprint
+    if (json_entry->GetString("tack_key_0", &entry.tack_key_0))
+      entry.tags[TACK_0_TAG] = tag;
 
-    std::string tack_key_1;
-    if (json_entry->GetString("tack_key_1", &tack_key_1)) {
-      entry.tags[TACK_1_TAG].Merge(true, include_subdomains, created, expiry);
-      entry.tack_keys[1] = tack_key_1;
-    }
+    if (json_entry->GetString("tack_key_1", &entry.tack_key_1))
+      entry.tags[TACK_1_TAG] = tag;
+
+    MergeEntry(name, entry);
   }
   return true;
 }
@@ -446,17 +420,18 @@ bool TransportSecurityState::GetPreloadSpki(const std::string& host,
 }
 
 bool TransportSecurityState::GetPreloadTacks(const std::string& host, 
-                                            std::string tack_keys[2], 
-                                            bool exact_match) {
+                                             std::string* tack_key_0, 
+                                             std::string* tack_key_1,
+                                             bool exact_match) {
   const PreloadEntry* entry;
   bool retval = false;
   if ((entry = GetPreloadEntry(TACK_0_TAG, host, exact_match)) != NULL) {
     retval = true;
-    tack_keys[0] = entry->tack_key_0;
+    *tack_key_0 = entry->tack_key_0;
   }
   if ((entry = GetPreloadEntry(TACK_1_TAG, host, exact_match)) != NULL) {
     retval = true;
-    tack_keys[1] = entry->tack_key_1;
+    *tack_key_1 = entry->tack_key_1;
   }
   return retval;
 }
@@ -477,16 +452,17 @@ bool TransportSecurityState::GetDynamicSpki(const std::string& host,
 }
 
 bool TransportSecurityState::GetDynamicTacks(const std::string& host, 
-                                             std::string tack_keys[2]) {
+                                             std::string* tack_key_0, 
+                                             std::string* tack_key_1) {
   DynamicEntry entry;
   bool retval = false;
   if (GetDynamicEntry(TACK_0_TAG, host, &entry, true)) {
     retval = true;
-    tack_keys[0] = entry.tack_keys[0];
+    *tack_key_0 = entry.tack_key_0;
   }
   if (GetDynamicEntry(TACK_1_TAG, host, &entry, true)) {
     retval = true;
-    tack_keys[1] = entry.tack_keys[1];
+    *tack_key_1 = entry.tack_key_0;
   }
   return retval;
 }
@@ -594,30 +570,67 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
   return false;
 }
 
+void TransportSecurityState::MergeEntry(const std::string& name, 
+                                        const DynamicEntry& new_entry) {
+  base::Time now = base::Time::Now();
+  std::string canonicalized_name = CanonicalizeName(name);
+  DynamicEntry* entry;
+
+  // If this is a new entry and the store is full, return silently
+  DynamicEntryIterator iter = dynamic_entries_.find(canonicalized_name);
+  if (iter == dynamic_entries_.end()) {
+    if (dynamic_entries_.size() >= max_dynamic_entries_)
+      return;
+    entry = &dynamic_entries_[canonicalized_name];
+  }
+  else
+    entry = &iter->second;
+
+  // Merge the new entry into the old, overwriting any data where
+  // the new entry has a present tag
+  for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
+    DynamicTag& tag = entry->tags[tag_index];
+    const DynamicTag& new_tag = new_entry.tags[tag_index];
+
+    if (new_tag.present) {
+      if (!tag.present)
+        tag.created = new_tag.created;
+      tag.present = true;
+      tag.expiry = new_tag.expiry;
+      tag.include_subdomains = new_tag.include_subdomains;
+      
+      if (tag_index == SPKI_TAG)
+        entry->hashes = new_entry.hashes;
+      else if (tag_index == TACK_0_TAG)
+        entry->tack_key_0 = new_entry.tack_key_0;
+      else if (tag_index == TACK_1_TAG)
+        entry->tack_key_1 = new_entry.tack_key_1;
+    }
+  }
+
+  // Prune any expired tags (and possibly the entire entry)
+  // (Could be expired due to new data, such as max-age=0, or old data, don't care)
+  bool entry_is_empty = true;
+  for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
+    DynamicTag& tag = entry->tags[tag_index];
+    if (tag.present) {
+      if (tag.expiry <= now)
+        tag.present = false;
+     else
+        entry_is_empty = false;
+    }
+  }
+  if (entry_is_empty)
+    dynamic_entries_.erase(canonicalized_name);
+
+  DirtyNotify();
+}
+
+
 std::string TransportSecurityState::CanonicalizeName(const std::string& host) {
   return StringToLowerASCII(host);
 }
 
-bool TransportSecurityState::DynamicTag::Merge(bool present_new, 
-                                               bool include_subdomains_new, 
-                                               const base::Time& now,
-                                               const base::Time& expiry_new) {
-  bool changed = false;
-  if (present != present_new) {
-    present = present_new;
-    created = now;
-    changed = true;
-  }
-  if (include_subdomains != include_subdomains_new) {
-    include_subdomains = include_subdomains_new;
-    changed = true;
-  }
-  if (expiry != expiry_new) {
-    expiry = expiry_new;
-    changed = true;
-  }
-  return changed;
-}
 
 TransportSecurityState::DynamicEntry::DynamicEntry(){}
 TransportSecurityState::DynamicEntry::~DynamicEntry(){}

@@ -102,7 +102,7 @@ bool ParseHSTSHeader(
   }
 
   if (state == AFTER_INCLUDE_SUBDOMAINS || state == AFTER_MAX_AGE) {
-    *present = (max_age_candidate != 0);
+    *present = true;
     *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
     *include_subdomains = (state == AFTER_INCLUDE_SUBDOMAINS);    
     return true;
@@ -247,13 +247,11 @@ bool ParseHPKPHeader(
     return false;
   }
 
-  *present = (max_age_candidate != 0);
-  if (*present) {
-    *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
-    for (HashValueVector::const_iterator i = pins.begin();
-         i != pins.end(); ++i) {
-      hashes->push_back(*i);
-    }
+  *present = true;
+  *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
+  for (HashValueVector::const_iterator i = pins.begin();
+       i != pins.end(); ++i) {
+    hashes->push_back(*i);
   }
 
   return true;

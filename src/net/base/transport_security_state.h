@@ -77,12 +77,13 @@ class NET_EXPORT TransportSecurityState
   bool GetPreloadUpgrade(const std::string& host, bool exact_match=false);
   bool GetPreloadSpki(const std::string& host, HashValueVector* hashes, 
                       HashValueVector* bad_hashes, bool exact_match=false);
-  bool GetPreloadTacks(const std::string& host, std::string tack_key[2], 
-                      bool exact_match=false);
+  bool GetPreloadTacks(const std::string& host, std::string* tack_key_0,
+                       std::string* tack_key_1, bool exact_match=false);
 
   bool GetDynamicUpgrade(const std::string& host, bool exact_match=false);
   bool GetDynamicSpki(const std::string& host, HashValueVector* hashes);
-  bool GetDynamicTacks(const std::string& host, std::string tack_keys[2]);
+  bool GetDynamicTacks(const std::string& host, std::string* tack_key_0,
+                       std::string* tack_key_1);
 
   static std::string CanonicalizeName(const std::string& host);
 
@@ -99,12 +100,11 @@ class NET_EXPORT TransportSecurityState
                                       bool exact_match = false);
   bool GetDynamicEntry(TagIndex tag_index, const std::string& host, DynamicEntry* entry,
                        bool exact_match = false);
+  void MergeEntry(const std::string& name, const DynamicEntry& new_entry);
 
   // Declarations
   struct DynamicTag {
     DynamicTag() : present(false) {}
-    bool Merge(bool present, bool include_subdomains, 
-               const base::Time& now, const base::Time& expiry);
 
     bool present;
     bool include_subdomains;
@@ -116,12 +116,14 @@ class NET_EXPORT TransportSecurityState
     DynamicEntry();
     ~DynamicEntry();
     DynamicTag tags[TOTAL_TAGS];
-    HashValueVector hashes;     // SPKI
-    std::string tack_keys[2];   // TACK_0, TACK_1
+    HashValueVector hashes;   // SPKI
+    std::string tack_key_0;   // TACK_0
+    std::string tack_key_1;   // TACK_1
   };
   typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
 
   // Data members
+  size_t max_dynamic_entries_;
   std::map<std::string, DynamicEntry> dynamic_entries_;
   Delegate* delegate_;
 
@@ -136,8 +138,8 @@ struct PreloadEntry {
   const bool upgrade;             // UPGRADE
   const char* const* hashes;      // SPKI
   const char* const* bad_hashes;  // SPKI
-  const char* const tack_key_0;  // TACK_0
-  const char* const tack_key_1;  // TACK_1
+  const char* const tack_key_0;   // TACK_0
+  const char* const tack_key_1;   // TACK_1
 };
 
 struct PreloadTackKey {
