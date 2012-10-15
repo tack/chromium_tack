@@ -59,6 +59,7 @@ class NET_EXPORT TransportSecurityState
   void DeleteSince(const base::Time& time);
   bool ShouldUpgrade(const std::string& host);
   bool IsStrictOnErrors(const std::string& host);
+  bool ShouldReportOnErrors(const std::string& host);
   bool CheckSpkiPins(const std::string& host,
                      HashValueVector& hashes);
   bool CheckTackPins(const std::string& host,
@@ -74,6 +75,7 @@ class NET_EXPORT TransportSecurityState
   // Low-level functions for looking up data from PreloadEntries / DynamicEntries
   //   USE THE HIGH-LEVEL FUNCTIONS INSTEAD OF THESE
   //   If exact_match==true, entries for superdomains are ignored
+
   bool GetPreloadUpgrade(const std::string& host, bool exact_match=false);
   bool GetPreloadSpki(const std::string& host, HashValueVector* hashes, 
                       HashValueVector* bad_hashes, bool exact_match=false);

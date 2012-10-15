@@ -66,14 +66,11 @@ void ChromeFraudulentCertificateReporter::SendReport(
     const std::string& hostname,
     const net::SSLInfo& ssl_info,
     bool sni_available) {
+  // !!! THE BELOW COMMENT IS OUT OF DATE, SEE TRANSPORT_SECURITY_STATE
   // We do silent/automatic reporting ONLY for Google properties. For other
   // domains (when we start supporting that), we will ask for user permission.
-  /* TODO
-  if (!net::TransportSecurityState::IsGooglePinnedProperty(hostname,
-                                                           sni_available)) {
+  if (!request_context_->transport_security_state()->ShouldReportOnErrors(hostname))
     return;
-  }
-  */
 
   std::string report = BuildReport(hostname, ssl_info);
 

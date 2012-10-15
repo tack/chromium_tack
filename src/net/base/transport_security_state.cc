@@ -129,6 +129,13 @@ bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
     GetDynamicTacks(host, &tack_key_0, &tack_key_1);
 }
 
+bool TransportSecurityState::ShouldReportOnErrors(const std::string& host) {
+  HashValueVector hashes, bad_hashes;
+  std::string tack_key_0, tack_key_1;
+  return GetPreloadSpki(host, &hashes, &bad_hashes) || 
+    GetPreloadTacks(host, &tack_key_0, &tack_key_1);
+}
+
 bool TransportSecurityState::CheckSpkiPins(const std::string& host,
                                            HashValueVector& hashes) {
 
