@@ -102,7 +102,8 @@ class NET_EXPORT TransportSecurityState
                                       bool exact_match = false);
   bool GetDynamicEntry(TagIndex tag_index, const std::string& host, DynamicEntry* entry,
                        bool exact_match = false);
-  void MergeEntry(const std::string& name, const DynamicEntry& new_entry);
+  void MergeEntry(const std::string& name, const DynamicEntry& new_entry,
+                  bool old_format = false);
 
   // Declarations
   struct DynamicTag {
@@ -122,11 +123,14 @@ class NET_EXPORT TransportSecurityState
     std::string tack_key_0;   // TACK_0
     std::string tack_key_1;   // TACK_1
   };
-  typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
+  typedef std::map<std::string, DynamicEntry> DynamicEntries;
+  typedef std::map<std::string, DynamicEntry>::iterator DynamicEntriesIterator;
 
   // Data members
+  // dynamic_entries_[0] is the main list
+  // dynamic_entries_[1] stores hashed-name entries, from older serializations
   size_t max_dynamic_entries_;
-  std::map<std::string, DynamicEntry> dynamic_entries_;
+  std::map<std::string, DynamicEntry> dynamic_entries_[2];
   Delegate* delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(TransportSecurityState);

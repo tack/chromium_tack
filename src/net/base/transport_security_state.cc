@@ -18,6 +18,7 @@
 
 #include <algorithm>
 
+#include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -27,6 +28,7 @@
 #include "base/values.h"
 #include "crypto/sha2.h"
 #include "googleurl/src/gurl.h"
+#include "net/base/dns_util.h"
 #include "net/base/http_security_headers.h"
 #include "net/base/ssl_info.h"
 #include "net/base/x509_cert_types.h"
@@ -77,7 +79,8 @@ void TransportSecurityState::DirtyNotify() {
 }
 
 void TransportSecurityState::Clear() { 
-  dynamic_entries_.clear();
+  dynamic_entries_[0].clear();
+  dynamic_entries_[1].clear();
   DirtyNotify();
 }
 
@@ -87,28 +90,32 @@ void TransportSecurityState::DeleteSince(const base::Time& time) {
   bool dirtied = false;
 
   // Iterate through dynamic entries...
-  DynamicEntryIterator iter = dynamic_entries_.begin();
-  while (iter != dynamic_entries_.end()) {
-    // Check each tag in the entry
-    //   If the data is present, check it for recency
-    //     If recent, mark as non-present and set the dirty flag
-    DynamicEntry& entry = iter->second;
-    bool empty_entry = true;
-    for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
-      if (entry.tags[tag_index].present) {
-        if (entry.tags[tag_index].created >= time) {
-          entry.tags[tag_index].present = false;
-          dirtied = true;
+  for (int count = 0; count < 2; count++) {
+    DynamicEntries* dynamic_entries = &dynamic_entries_[count];
+
+    DynamicEntriesIterator iter = dynamic_entries->begin();
+    while (iter != dynamic_entries->end()) {
+      // Check each tag in the entry
+      //   If the data is present, check it for recency
+      //     If recent, mark as non-present and set the dirty flag
+      DynamicEntry& entry = iter->second;
+      bool empty_entry = true;
+      for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
+        if (entry.tags[tag_index].present) {
+          if (entry.tags[tag_index].created >= time) {
+            entry.tags[tag_index].present = false;
+            dirtied = true;
+          }
+          else
+            empty_entry = false;
+        }
+        if (empty_entry) {
+          dynamic_entries->erase(iter++);
+          dirtied = true; // redundant unless the entry was empty to begin with
         }
         else
-          empty_entry = false;
+          iter++;
       }
-      if (empty_entry) {
-        dynamic_entries_.erase(iter++);
-        dirtied = true; // redundant unless the entry was empty to begin with
-      }
-      else
-        iter++;
     }
   }
   if (dirtied)
@@ -309,115 +316,6 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   return false;
 }
 
-bool TransportSecurityState::Serialize(std::string* output) {
-
-  DictionaryValue top_level;
-
-  ListValue* entries = new ListValue();
-  DynamicEntryIterator iter;
-  for (iter = dynamic_entries_.begin(); iter != dynamic_entries_.end(); iter++) {
-    const std::string& name = iter->first;
-    DynamicEntry& entry = iter->second;
-
-    for (size_t tag_index = UPGRADE_TAG; tag_index < TOTAL_TAGS; tag_index++) {
-      DynamicTag& tag = entry.tags[tag_index];
-      if (tag.present) {
-        DictionaryValue* json_entry = new DictionaryValue;
-        json_entry->SetString("name", name);
-        json_entry->SetBoolean("include_subdomains", tag.include_subdomains);
-        json_entry->SetDouble("created", floor(tag.created.ToDoubleT()));
-        json_entry->SetDouble("expiry", floor(tag.expiry.ToDoubleT()));
-        switch (tag_index) {
-        case UPGRADE_TAG:
-          json_entry->SetBoolean("upgrade", "true");
-          break;
-        case SPKI_TAG:
-          json_entry->Set("spki_hashes", SPKIHashesToListValue(entry.hashes));
-          break;
-        case TACK_0_TAG:
-          json_entry->SetString("tack_key_0", entry.tack_key_0);
-          break;
-        case TACK_1_TAG:
-          json_entry->SetString("tack_key_1", entry.tack_key_1);
-          break;
-        }
-        entries->Append(json_entry); 
-      }
-    }    
-  }
-  top_level.SetInteger("version", 2);
-  top_level.Set("entries", entries);
-  base::JSONWriter::WriteWithOptions(&top_level,
-                                 base::JSONWriter::OPTIONS_PRETTY_PRINT | 
-                                 base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION,
-                                 output);
-  return true;
-}
-
-bool TransportSecurityState::Deserialize(const std::string& input) {
-  scoped_ptr<Value> value(base::JSONReader::Read(input));
-  DictionaryValue* dict_value;
-  if (!value.get() || !value->GetAsDictionary(&dict_value))
-    return false;
-
-  int version;
-  if (!dict_value->GetInteger("version", &version)) {
-    return false;
-  }
-  else if (version != 2)
-    return false;
-
-  // Version 2, latest version:
-  ListValue* entries;
-  if (!dict_value->GetList("entries", &entries))
-    return false;
-  
-  for (ListValue::iterator iter = entries->begin(); iter != entries->end(); iter++) {
-    DictionaryValue* json_entry;
-    if (!(*iter)->GetAsDictionary(&json_entry))
-      return false;
-
-    std::string name;
-    DynamicEntry entry;
-    DynamicTag tag;
-    tag.present = true;
-
-    double created_double, expiry_double;
-    if (!json_entry->GetString("name", &name))
-      return false;
-    if (!json_entry->GetBoolean("include_subdomains", &tag.include_subdomains))
-      return false;
-    if (!json_entry->GetDouble("created", &created_double))
-      return false;
-    if (!json_entry->GetDouble("expiry", &expiry_double))
-      return false;
-    tag.created = base::Time::FromDoubleT(created_double);
-    tag.expiry = base::Time::FromDoubleT(expiry_double);
-
-    bool upgrade;
-    if (json_entry->GetBoolean("upgrade", &upgrade) && upgrade)
-      entry.tags[UPGRADE_TAG] = tag;
-
-    ListValue* pins_list = NULL;
-    if (json_entry->GetList("spki_hashes", &pins_list)) {
-      if (!SPKIHashesFromListValue(*pins_list, &entry.hashes))
-        return false;
-      entry.tags[SPKI_TAG] = tag;
-    }
-
-    // !!! Could do more syntax checking on the fingerprint
-    if (json_entry->GetString("tack_key_0", &entry.tack_key_0))
-      entry.tags[TACK_0_TAG] = tag;
-
-    if (json_entry->GetString("tack_key_1", &entry.tack_key_1))
-      entry.tags[TACK_1_TAG] = tag;
-
-    MergeEntry(name, entry);
-  }
-  return true;
-}
-
-
 bool TransportSecurityState::GetPreloadUpgrade(const std::string& host, bool exact_match) {
   return GetPreloadEntry(UPGRADE_TAG, host, exact_match);
 }
@@ -601,18 +499,36 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
                                              const std::string& host,
                                              DynamicEntry* result,
                                              bool exact_match) {
-  for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
-    DynamicEntryIterator find_result = dynamic_entries_.find(iter.GetName());
 
-    // If an entry contains relevant data and is non-expired and either 
-    // matches the full hostname or has include_subdomains, return it
-    if (find_result != dynamic_entries_.end()) {
-      DynamicEntry& entry = find_result->second;
-      DynamicTag& tag = entry.tags[tag_index];
-      if (tag.present && base::Time::Now() < tag.expiry && 
-          (iter.IsFullHostname() || tag.include_subdomains)) {
-        *result = entry;
-        return true;
+  for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
+    
+    for (int count = 0; count < 2; count++) {
+      DynamicEntries* dynamic_entries = &dynamic_entries_[count];
+      
+      std::string lookup_name = iter.GetName();
+      if (count == 1) {
+        std::string old_style_canonicalized_name;
+        if (!DNSDomainFromDot(lookup_name, &old_style_canonicalized_name))
+          continue;
+        char hashed[crypto::kSHA256Length];
+        crypto::SHA256HashString(old_style_canonicalized_name, hashed, sizeof(hashed));
+        base::Base64Encode(std::string(hashed, sizeof(hashed)), &lookup_name);
+      }
+      
+      // If an entry contains relevant data and is non-expired and either 
+      // matches the full hostname or has include_subdomains, return it
+      DynamicEntriesIterator find_result = dynamic_entries->find(lookup_name);
+      if (find_result != dynamic_entries->end()) {
+        DynamicEntry& entry = find_result->second;
+        DynamicTag& tag = entry.tags[tag_index];
+        if (tag.present && base::Time::Now() < tag.expiry && 
+            (iter.IsFullHostname() || tag.include_subdomains)) {
+          *result = entry;
+          if (count == 1) {
+            LOG(WARNING) << "TREV WOOHOO FOUND IT! "<< lookup_name << " " << host;
+          }
+          return true;
+        }
       }
     }
   }
@@ -620,17 +536,28 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
 }
 
 void TransportSecurityState::MergeEntry(const std::string& name, 
-                                        const DynamicEntry& new_entry) {
+                                        const DynamicEntry& new_entry,
+                                        bool old_format) {
   base::Time now = base::Time::Now();
-  std::string canonicalized_name = CanonicalizeName(name);
+  DynamicEntries *dynamic_entries;
   DynamicEntry* entry;
+  std::string lookup_name;
 
+  if (old_format) {
+    lookup_name = name;
+    dynamic_entries = &dynamic_entries_[1];
+  }
+  else {
+    lookup_name = CanonicalizeName(name);
+    dynamic_entries = &dynamic_entries_[0];
+  }
+      
   // If this is a new entry and the store is full, return silently
-  DynamicEntryIterator iter = dynamic_entries_.find(canonicalized_name);
-  if (iter == dynamic_entries_.end()) {
-    if (dynamic_entries_.size() >= max_dynamic_entries_)
+  DynamicEntriesIterator iter = dynamic_entries->find(lookup_name);
+  if (iter == dynamic_entries->end()) {
+    if (dynamic_entries->size() >= max_dynamic_entries_)
       return;
-    entry = &dynamic_entries_[canonicalized_name];
+    entry = &((*dynamic_entries)[lookup_name]);
   }
   else
     entry = &iter->second;
@@ -669,8 +596,9 @@ void TransportSecurityState::MergeEntry(const std::string& name,
         entry_is_empty = false;
     }
   }
-  if (entry_is_empty)
-    dynamic_entries_.erase(canonicalized_name);
+  if (entry_is_empty) {
+    dynamic_entries->erase(lookup_name);
+  }
 
   DirtyNotify();
 }
@@ -680,6 +608,188 @@ std::string TransportSecurityState::CanonicalizeName(const std::string& host) {
   return StringToLowerASCII(host);
 }
 
+bool TransportSecurityState::Serialize(std::string* output) {
+
+  DictionaryValue top_level;
+
+  ListValue* entries = new ListValue();
+
+  for (int count = 0; count < 2; count++) {
+    DynamicEntries* dynamic_entries = &dynamic_entries_[count];
+
+    DynamicEntriesIterator iter;
+    for (iter = dynamic_entries->begin(); iter != dynamic_entries->end(); iter++) {
+      const std::string& name = iter->first;
+      DynamicEntry& entry = iter->second;
+      
+      for (size_t tag_index = UPGRADE_TAG; tag_index < TOTAL_TAGS; tag_index++) {
+        DynamicTag& tag = entry.tags[tag_index];
+        if (tag.present) {
+          DictionaryValue* json_entry = new DictionaryValue;
+          if (count == 0)
+            json_entry->SetString("name", name);
+          else if (count == 1) {
+            json_entry->SetString("name_old_format", name);
+          }
+          json_entry->SetBoolean("include_subdomains", tag.include_subdomains);
+          json_entry->SetDouble("created", floor(tag.created.ToDoubleT()));
+          json_entry->SetDouble("expiry", floor(tag.expiry.ToDoubleT()));
+          switch (tag_index) {
+          case UPGRADE_TAG:
+            json_entry->SetBoolean("upgrade", "true");
+            break;
+          case SPKI_TAG:
+            json_entry->Set("spki_hashes", SPKIHashesToListValue(entry.hashes));
+            break;
+          case TACK_0_TAG:
+            json_entry->SetString("tack_key_0", entry.tack_key_0);
+            break;
+          case TACK_1_TAG:
+            json_entry->SetString("tack_key_1", entry.tack_key_1);
+            break;
+          }
+          entries->Append(json_entry); 
+        }
+      }    
+    }
+  }
+  top_level.SetInteger("version", 2);
+  top_level.Set("entries", entries);
+  base::JSONWriter::WriteWithOptions(&top_level,
+                                 base::JSONWriter::OPTIONS_PRETTY_PRINT | 
+                                 base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION,
+                                 output);
+  return true;
+}
+
+bool TransportSecurityState::Deserialize(const std::string& input) {
+  scoped_ptr<Value> value(base::JSONReader::Read(input));
+  DictionaryValue* dict_value;
+  if (!value.get() || !value->GetAsDictionary(&dict_value))
+    return false;
+
+  // If we can't find the version field, we parse the old version of the file
+  int version;
+  if (!dict_value->GetInteger("version", &version)) {
+
+    // This code is copied mostly intact from old version, preserving
+    // somewhat legacy names and style...
+    const char kIncludeSubdomains[] = "include_subdomains";
+    const char kMode[] = "mode";
+    const char kExpiry[] = "expiry";
+    const char kForceHTTPS[] = "force-https";
+    const char kStrict[] = "strict";
+    const char kDefault[] = "default";
+    const char kPinningOnly[] = "pinning-only";
+    const char kCreated[] = "created";
+
+    for (DictionaryValue::key_iterator i = dict_value->begin_keys();
+         i != dict_value->end_keys(); ++i) {
+      DictionaryValue* parsed;
+      if (!dict_value->GetDictionary(*i, &parsed)) {
+        LOG(WARNING) << "Could not parse entry " << *i << "; skipping entry";
+        continue;
+      }
+      
+      std::string mode_string;
+      double created;
+      double expiry;
+
+      // CODE CHANGE : DomainState -> DynamicEntry
+      DynamicEntry entry;
+      DynamicTag& tag = entry.tags[UPGRADE_TAG];
+      
+      if (!parsed->GetBoolean(kIncludeSubdomains,
+                              &tag.include_subdomains) ||
+          !parsed->GetString(kMode, &mode_string) ||
+          !parsed->GetDouble(kExpiry, &expiry)) {
+        LOG(WARNING) << "Could not parse some elements of entry " << *i
+                     << "; skipping entry";
+        continue;
+      }
+      
+      if (mode_string == kForceHTTPS || mode_string == kStrict) {
+        tag.present = true;
+      } else if (mode_string == kDefault || mode_string == kPinningOnly) {
+        tag.present = false;
+      } else {
+        LOG(WARNING) << "Unknown TransportSecurityState mode string "
+                     << mode_string << " found for entry " << *i
+                     << "; skipping entry";
+        continue;
+      }
+      
+      tag.expiry = base::Time::FromDoubleT(expiry);
+
+      if (parsed->GetDouble(kCreated, &created)) {
+        tag.created = base::Time::FromDoubleT(created);
+      } else {
+        tag.created = base::Time::Now();
+      }
+
+      if (tag.present)
+        MergeEntry(*i, entry, true);
+    }
+    return true;
+  }
+ 
+  // Unknown version
+  if (version != 2)
+    return false;
+
+  // Version 2, latest version:
+  ListValue* entries;
+  if (!dict_value->GetList("entries", &entries))
+    return false;
+  
+  for (ListValue::iterator iter = entries->begin(); iter != entries->end(); iter++) {
+    DictionaryValue* json_entry;
+    if (!(*iter)->GetAsDictionary(&json_entry))
+      return false;
+
+    std::string name, name_old_format;
+    DynamicEntry entry;
+    DynamicTag tag;
+    tag.present = true;
+
+    double created_double, expiry_double;
+    if (!json_entry->GetString("name", &name) && 
+        !json_entry->GetString("name_old_format", &name_old_format))
+      return false;
+    if (!json_entry->GetBoolean("include_subdomains", &tag.include_subdomains))
+      return false;
+    if (!json_entry->GetDouble("created", &created_double))
+      return false;
+    if (!json_entry->GetDouble("expiry", &expiry_double))
+      return false;
+    tag.created = base::Time::FromDoubleT(created_double);
+    tag.expiry = base::Time::FromDoubleT(expiry_double);
+
+    bool upgrade;
+    if (json_entry->GetBoolean("upgrade", &upgrade) && upgrade)
+      entry.tags[UPGRADE_TAG] = tag;
+
+    ListValue* pins_list = NULL;
+    if (json_entry->GetList("spki_hashes", &pins_list)) {
+      if (!SPKIHashesFromListValue(*pins_list, &entry.hashes))
+        return false;
+      entry.tags[SPKI_TAG] = tag;
+    }
+
+    // !!! Could do more syntax checking on the fingerprint
+    if (json_entry->GetString("tack_key_0", &entry.tack_key_0))
+      entry.tags[TACK_0_TAG] = tag;
+
+    if (json_entry->GetString("tack_key_1", &entry.tack_key_1))
+      entry.tags[TACK_1_TAG] = tag;
+
+    if (name.size() > 0)
+      MergeEntry(name, entry);
+    else
+      MergeEntry(name_old_format, entry, true);
+  }
+  return true;
+}
 
 TransportSecurityState::DynamicEntry::DynamicEntry(){}
 TransportSecurityState::DynamicEntry::~DynamicEntry(){}
