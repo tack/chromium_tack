@@ -41,7 +41,7 @@
 #endif
 
 // TREV FOR TESTING, REMOVE LATER!!!
-#define OFFICIAL
+#define OFFICIAL_BUILD
 
 #if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
 
@@ -133,8 +133,8 @@ bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
     GetDynamicUpgrade(host) ||
     GetPreloadSpki(host, &hashes, &bad_hashes) || 
     GetDynamicSpki(host, &hashes) ||
-    GetPreloadTacks(host, &tack_key_0, &tack_key_1) || 
-    GetDynamicTacks(host, &tack_key_0, &tack_key_1);
+    GetPreloadTack(host, &tack_key_0, &tack_key_1) || 
+    GetDynamicTack(host, &tack_key_0, &tack_key_1);
 }
 
 bool TransportSecurityState::ShouldReportOnErrors(const std::string& host) {
@@ -202,8 +202,8 @@ bool TransportSecurityState::CheckTackPins(const std::string& host,
   std::string dynamic_tack_key_1;
   TACK_RETVAL retval;
 
-  if (!GetPreloadTacks(host, &static_tack_key_0, &static_tack_key_1) &&
-      !GetDynamicTacks(host, &dynamic_tack_key_0, &dynamic_tack_key_1))
+  if (!GetPreloadTack(host, &static_tack_key_0, &static_tack_key_1) &&
+      !GetDynamicTack(host, &dynamic_tack_key_0, &dynamic_tack_key_1))
     return true;
  
   // Get end-entity key hash (ASSUMPTION: first SHA256 element in hashes??)
@@ -271,6 +271,9 @@ bool TransportSecurityState::GetPreloadSpki(const std::string& host,
                                             HashValueVector* hashes, 
                                             HashValueVector* bad_hashes, 
                                             bool exact_match) {
+  hashes->clear();
+  bad_hashes->clear();
+
   const PreloadEntry* entry;
   if (!(entry = GetPreloadEntry(SPKI_TAG, host, exact_match)))
     return false;
@@ -295,10 +298,13 @@ bool TransportSecurityState::GetPreloadSpki(const std::string& host,
   return true;    
 }
 
-bool TransportSecurityState::GetPreloadTacks(const std::string& host, 
-                                             std::string* tack_key_0, 
-                                             std::string* tack_key_1,
-                                             bool exact_match) {
+bool TransportSecurityState::GetPreloadTack(const std::string& host, 
+                                            std::string* tack_key_0, 
+                                            std::string* tack_key_1,
+                                            bool exact_match) {
+  tack_key_0->clear();
+  tack_key_1->clear();
+
   const PreloadEntry* entry;
   bool retval = false;
   if ((entry = GetPreloadEntry(TACK_0_TAG, host, exact_match)) != NULL) {
@@ -320,7 +326,7 @@ bool TransportSecurityState::GetDynamicUpgrade(const std::string& host,
 
 bool TransportSecurityState::GetDynamicSpki(const std::string& host, 
                                             HashValueVector* hashes) {
-
+  hashes->clear();
   // Pins are not enforced if the build is sufficiently old.
   if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
     return false;
@@ -332,9 +338,11 @@ bool TransportSecurityState::GetDynamicSpki(const std::string& host,
   return true;
 }
 
-bool TransportSecurityState::GetDynamicTacks(const std::string& host, 
-                                             std::string* tack_key_0, 
-                                             std::string* tack_key_1) {
+bool TransportSecurityState::GetDynamicTack(const std::string& host, 
+                                            std::string* tack_key_0, 
+                                            std::string* tack_key_1) {
+  tack_key_0->clear();
+  tack_key_1->clear();
 
   // Pins are not enforced if the build is sufficiently old.
   if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
@@ -397,8 +405,9 @@ const PreloadEntry* TransportSecurityState::GetPreloadEntry(
   // that some users will stop getting updates for some reason. We
   // don't want those users building up as a pool of people with bad
   // preloads.
-  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
+  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */) {
     return NULL;
+  }
 
   for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
     std::string name = iter.GetName();
@@ -406,6 +415,7 @@ const PreloadEntry* TransportSecurityState::GetPreloadEntry(
     // Find a preload entry matching the name
     const PreloadEntry* entries = kPreloadedSTS;
     size_t num_entries = kNumPreloadedSTS;    
+
     for (size_t index = 0; index < num_entries; index++) {
       const PreloadEntry* entry = &entries[index];
 

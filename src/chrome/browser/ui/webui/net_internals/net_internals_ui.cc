@@ -67,6 +67,7 @@
 #include "net/proxy/proxy_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "net/base/x509_cert_types.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_CHROMEOS)
@@ -1092,34 +1093,31 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
   if (!IsStringASCII(domain)) {
     result->SetString("error", "non-ASCII domain name");
   } else {
-    net::TransportSecurityState* transport_security_state =
+    net::TransportSecurityState* state =
         context_getter_->GetURLRequestContext()->transport_security_state();
-    if (!transport_security_state) {
+    if (!state) {
       result->SetString("error", "no TransportSecurityState active");
     } else {
-      /* 
-      net::TransportSecurityState::DomainState state;
-      const bool found = transport_security_state->GetInternalDomainState(
-          domain, true, &state);
+      
+      if (state->GetPreloadUpgrade(domain))
+        result->SetString("preload_upgrade", "true");
 
-      result->SetBoolean("result", found);
-      if (found) {
-        result->SetInteger("mode", static_cast<int>(state.upgrade_mode));
-        result->SetBoolean("subdomains", state.include_subdomains);
-        result->SetString("domain", state.domain);
-        result->SetDouble("expiry", state.upgrade_expiry.ToDoubleT());
-        result->SetDouble("dynamic_spki_hashes_expiry",
-                          state.dynamic_spki_hashes_expiry.ToDoubleT());
+      if (state->GetDynamicUpgrade(domain))
+        result->SetString("dynamic_upgrade", "true");
 
-        std::string hashes;
-        SPKIHashesToString(state.static_spki_hashes, &hashes);
-        result->SetString("static_spki_hashes", hashes);
+      net::HashValueVector hashes, bad_hashes;
+      if (state->GetPreloadSpki(domain, &hashes, &bad_hashes))
+        result->SetString("preload_pubkey_hashes", net::HashesToBase64String(hashes));
 
-        hashes.clear();
-        SPKIHashesToString(state.dynamic_spki_hashes, &hashes);
-        result->SetString("dynamic_spki_hashes", hashes);
-      }
-      */
+      if (state->GetDynamicSpki(domain, &hashes))
+        result->SetString("dynamic_pubkey_hashes", net::HashesToBase64String(hashes));
+
+      std::string tack_key_0, tack_key_1;
+      if (state->GetPreloadTack(domain, &tack_key_0, &tack_key_1))
+        result->SetString("preload_tack_keys", tack_key_0 + "," + tack_key_1);
+
+      if (state->GetDynamicTack(domain, &tack_key_0, &tack_key_1))
+        result->SetString("dynamic_tack_keys", tack_key_0 + "," + tack_key_1);
     }
   }
 

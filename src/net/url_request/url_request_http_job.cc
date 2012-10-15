@@ -689,14 +689,6 @@ void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
   std::string value;
   if (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value)) {
     security_state->AddHSTSHeader(request_info_.url.host(), value);
-  } else {
-    
-    if (request_info_.url.host() == "www.google.com")
-      security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
-    if (request_info_.url.host() == "www.nytimes.com")
-      security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
-    if (request_info_.url.host() == "www.slate.com")
-      security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
   }
 }
 

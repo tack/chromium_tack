@@ -79,12 +79,12 @@ class NET_EXPORT TransportSecurityState
   bool GetPreloadUpgrade(const std::string& host, bool exact_match=false);
   bool GetPreloadSpki(const std::string& host, HashValueVector* hashes, 
                       HashValueVector* bad_hashes, bool exact_match=false);
-  bool GetPreloadTacks(const std::string& host, std::string* tack_key_0,
+  bool GetPreloadTack(const std::string& host, std::string* tack_key_0,
                        std::string* tack_key_1, bool exact_match=false);
 
   bool GetDynamicUpgrade(const std::string& host, bool exact_match=false);
   bool GetDynamicSpki(const std::string& host, HashValueVector* hashes);
-  bool GetDynamicTacks(const std::string& host, std::string* tack_key_0,
+  bool GetDynamicTack(const std::string& host, std::string* tack_key_0,
                        std::string* tack_key_1);
 
   static std::string CanonicalizeName(const std::string& host);

@@ -8,21 +8,13 @@
 #include "base/bind.h"
 #include "base/file_path.h"
 #include "base/file_util.h"
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
 #include "base/message_loop.h"
 #include "base/path_service.h"
-#include "base/values.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_thread.h"
-#include "crypto/sha2.h"
 #include "net/base/transport_security_state.h"
-#include "net/base/x509_certificate.h"
 
 using content::BrowserThread;
-using net::HashValue;
-using net::HashValueTag;
-using net::HashValueVector;
 using net::TransportSecurityState;
 
 class TransportSecurityPersister::Loader {
