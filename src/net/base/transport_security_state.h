@@ -59,11 +59,11 @@ class NET_EXPORT TransportSecurityState
   void DeleteSince(const base::Time& time);
   bool ShouldUpgrade(const std::string& host);
   bool IsStrictOnErrors(const std::string& host);
-  bool CheckSpki(const std::string& host,
-                 HashValueVector& hashes);
-  bool CheckTack(const std::string& host,
-                 HashValueVector& hashes,
-                 uint8* tackExt, uint32_t tackExtLen);
+  bool CheckSpkiPins(const std::string& host,
+                     HashValueVector& hashes);
+  bool CheckTackPins(const std::string& host,
+                     HashValueVector& hashes,
+                     uint8* tackExt, uint32_t tackExtLen);
   bool AddHSTSHeader(const std::string& host, const std::string& value);
   bool AddHPKPHeader(const std::string& host, const std::string& value,
                      const SSLInfo& ssl_info);

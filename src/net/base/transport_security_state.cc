@@ -33,14 +33,28 @@
 #include "base/build_time.h"
 #include "net/third_party/tackc/src/TackStoreDefault.h"
 #include "net/third_party/tackc/src/TackChromium.h"
+#if defined(USE_OPENSSL)
+#include "crypto/openssl_util.h"
+#endif
+
+// TREV FOR TESTING, REMOVE LATER!!!
+#define OFFICIAL
+
+#if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
 
 // Auto-generated preload file
 #include "net/base/transport_security_state_static.h"
 
+#else
 
-#if defined(USE_OPENSSL)
-#include "crypto/openssl_util.h"
+static const net::PreloadTackKey kPreloadedTackKeys[] = {};
+static const net::PreloadEntry kPreloadedSTS[] = {};
+static const net::PreloadEntry kPreloadedSNISTS[] = {};
+static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
+static const size_t kNumPreloadedSNISTS = ARRAYSIZE_UNSAFE(kPreloadedSNISTS);
+
 #endif
+
 
 namespace net {
 
@@ -115,8 +129,8 @@ bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
     GetDynamicTacks(host, &tack_key_0, &tack_key_1);
 }
 
-bool TransportSecurityState::CheckSpki(const std::string& host,
-                                       HashValueVector& hashes) {
+bool TransportSecurityState::CheckSpkiPins(const std::string& host,
+                                           HashValueVector& hashes) {
 
   HashValueVector preload_hashes, preload_bad_hashes, dynamic_hashes;
   if (!GetPreloadSpki(host, &preload_hashes, &preload_bad_hashes) && 
@@ -155,10 +169,10 @@ bool TransportSecurityState::CheckSpki(const std::string& host,
   return false;
 }
 
-bool TransportSecurityState::CheckTack(const std::string& host,
-                                       HashValueVector& hashes,
-                                       uint8* tackExt,
-                                       uint32_t tackExtLen) {
+bool TransportSecurityState::CheckTackPins(const std::string& host,
+                                           HashValueVector& hashes,
+                                           uint8* tackExt,
+                                           uint32_t tackExtLen) {
   std::string static_tack_key_0;
   std::string static_tack_key_1;
   std::string dynamic_tack_key_0;
@@ -444,6 +458,11 @@ bool TransportSecurityState::GetDynamicUpgrade(const std::string& host,
 
 bool TransportSecurityState::GetDynamicSpki(const std::string& host, 
                                             HashValueVector* hashes) {
+
+  // Pins are not enforced if the build is sufficiently old.
+  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
+    return false;
+
   DynamicEntry entry;
   if (!GetDynamicEntry(SPKI_TAG, host, &entry, true))
     return false;
@@ -454,6 +473,11 @@ bool TransportSecurityState::GetDynamicSpki(const std::string& host,
 bool TransportSecurityState::GetDynamicTacks(const std::string& host, 
                                              std::string* tack_key_0, 
                                              std::string* tack_key_1) {
+
+  // Pins are not enforced if the build is sufficiently old.
+  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
+    return false;
+
   DynamicEntry entry;
   bool retval = false;
   if (GetDynamicEntry(TACK_0_TAG, host, &entry, true)) {
@@ -505,6 +529,14 @@ const PreloadEntry* TransportSecurityState::GetPreloadEntry(
   TagIndex tag_index, 
   const std::string& host, 
   bool exact_match) {
+
+  // Preloads are not enforced if the build is sufficiently old. Chrome
+  // users should get updates every six weeks or so, but it's possible
+  // that some users will stop getting updates for some reason. We
+  // don't want those users building up as a pool of people with bad
+  // preloads.
+  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
+    return NULL;
 
   for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
     std::string name = iter.GetName();

@@ -545,7 +545,7 @@
     { "name": "googlegroups.com", "include_subdomains": true, "pins": "google", "snionly": true },
 
     // TACK-pin-only entries
-    { "name": "test.tack.io", "tack_key_1": "j6det.kfbj5.oweph.mdyxi.wvbch"},
+    { "name": "test.tack.io", "tack_key_0": "76det.kfbj5.oweph.mdyxi.wvbch", "tack_key_1": "j6det.kfbj5.oweph.mdyxi.wvbch"},
     { "name": "test.tack.io", "pins": "google"}
   ]
 }

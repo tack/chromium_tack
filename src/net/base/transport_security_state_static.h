@@ -10,9 +10,9 @@
 // These are TACK key fingerprints and their min_generation values.
 
 static const net::PreloadTackKey kPreloadedTackKeys[] = {
-  {"6i7l7.gw7zx.kuza6.skvzy.6alwa", 3},
   {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
   {"k2wgv.l24nx.yiqyc.zjir5.md474", 255},
+  {"6i7l7.gw7zx.kuza6.skvzy.6alwa", 3},
 };
 
 // These are SubjectPublicKeyInfo hashes for public key pinning. The
@@ -669,7 +669,7 @@ static const net::PreloadEntry kPreloadedSTS[] = {
   {false, 20, "www.makeyourlaws.org", true, kNoSpkiPins, kNoTackPins},
   {true, 14, "iop.intuit.com", true, kNoSpkiPins, kNoTackPins},
   {true, 7, "tack.io", true, kNoSpkiPins, kNoTackPins},
-  {false, 12, "test.tack.io", false, kNoSpkiPins, NULL, "j6det.kfbj5.oweph.mdyxi.wvbch"},
+  {false, 12, "test.tack.io", false, kNoSpkiPins, "76det.kfbj5.oweph.mdyxi.wvbch", "j6det.kfbj5.oweph.mdyxi.wvbch"},
   {false, 12, "test.tack.io", false, kGooglePins, kNoTackPins},
 };
 static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);

@@ -684,20 +684,20 @@ void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
   if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) || !security_state)
     return;
 
-  /* TREVFAKE
   HttpResponseHeaders* headers = GetResponseHeaders();
   void* iter = NULL;
   std::string value;
-  if (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value))
+  if (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value)) {
     security_state->AddHSTSHeader(request_info_.url.host(), value);
-  */
-  // TREVFAKE:
-  if (request_info_.url.host() == "www.google.com")
-    security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
-  if (request_info_.url.host() == "www.nytimes.com")
-    security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
-  if (request_info_.url.host() == "www.slate.com")
-    security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
+  } else {
+    
+    if (request_info_.url.host() == "www.google.com")
+      security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
+    if (request_info_.url.host() == "www.nytimes.com")
+      security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
+    if (request_info_.url.host() == "www.slate.com")
+      security_state->AddHSTSHeader(request_info_.url.host(), "max-age=1000");
+  }
 }
 
 void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
