@@ -13,6 +13,7 @@
 #include <keyhi.h>
 #include <pk11pub.h>
 #include <nspr.h>
+#include <math.h>
 #endif
 
 #include <algorithm>
@@ -324,8 +325,8 @@ bool TransportSecurityState::Serialize(std::string* output) {
         DictionaryValue* json_entry = new DictionaryValue;
         json_entry->SetString("name", name);
         json_entry->SetBoolean("include_subdomains", tag.include_subdomains);
-        json_entry->SetDouble("created", tag.created.ToDoubleT());
-        json_entry->SetDouble("expiry", tag.expiry.ToDoubleT());
+        json_entry->SetDouble("created", floor(tag.created.ToDoubleT()));
+        json_entry->SetDouble("expiry", floor(tag.expiry.ToDoubleT()));
         switch (tag_index) {
         case UPGRADE_TAG:
           json_entry->SetBoolean("upgrade", "true");
@@ -347,8 +348,9 @@ bool TransportSecurityState::Serialize(std::string* output) {
   top_level.SetInteger("version", 2);
   top_level.Set("entries", entries);
   base::JSONWriter::WriteWithOptions(&top_level,
-                                     base::JSONWriter::OPTIONS_PRETTY_PRINT,
-                                     output);
+                                 base::JSONWriter::OPTIONS_PRETTY_PRINT | 
+                                 base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION,
+                                 output);
   return true;
 }
 
