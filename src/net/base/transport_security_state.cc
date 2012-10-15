@@ -232,61 +232,6 @@ bool TransportSecurityState::CheckTackPins(const std::string& host,
   }
 
   return true;
-
-#if 0        
-  // Check static store
-  retval = staticStore_.process(&ctx, name, currentTime);
-  if (retval < TACK_OK) {
-      LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
-          ", " << tackRetvalString(retval);
-      return false;
-  }
-  if (retval == TACK_OK_REJECTED) {
-      LOG(WARNING) << "TACK: Connection REJECTED by TACK static store: " << name;
-  }
-  if (retval == TACK_OK_ACCEPTED) {
-      LOG(INFO) << "TACK: Connection ACCEPTED by TACK static store: " << name;
-  }
-  if (retval == TACK_OK_UNPINNED) {
-      LOG(INFO) << "TACK: Connection unpinned by TACK static store: " << name;
-  }
-  TACK_RETVAL staticRetval = retval;
-  
-  // Check dynamic store
-  retval = dynamicStore_.process(&ctx, name, currentTime);
-  if (retval < TACK_OK) {
-      LOG(WARNING) << "TACK: Connection ERROR from TACK static store: " << name <<
-          ", " << tackRetvalString(retval);
-      return false;
-  }
-  if (retval == TACK_OK_REJECTED) {
-      LOG(WARNING) << "TACK: Connection REJECTED by TACK dynamic store: " << name;
-  }
-  if (retval == TACK_OK_ACCEPTED) {
-      LOG(INFO) << "TACK: Connection ACCEPTED by TACK dynamic store: " << name;
-  }
-  if (retval == TACK_OK_UNPINNED) {
-      LOG(INFO) << "TACK: Connection unpinned by TACK dynamic store: " << name;
-  }
-  
-  // Write out store contents if changed
-  if (staticStore_.getDirtyFlag()) {
-      LOG(INFO) << "TACK: Static store is DIRTY, time: " << currentTime;
-      TackDirtyNotify(false);
-      staticStore_.setDirtyFlag(false);
-  }
-  if (dynamicStore_.getDirtyFlag()) {
-      LOG(INFO) << "TACK: Dynamic store is DIRTY, time: " << currentTime;
-      TackDirtyNotify(true);
-      dynamicStore_.setDirtyFlag(false);
-  }
-  
-  // Reject the connection if indicated
-  if (retval == TACK_OK_REJECTED || staticRetval == TACK_OK_REJECTED)
-      return false;
-  
-  return true;
-#endif
 }
 
 bool TransportSecurityState::AddHSTSHeader(const std::string& host, 
@@ -297,6 +242,7 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
   if (ParseHSTSHeader(now, value, &tag.present, &tag.expiry, &tag.include_subdomains)) {
     tag.created = now;
     MergeEntry(host, entry);
+    DirtyNotify();
     return true;
   }
   return false;
@@ -311,6 +257,7 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   if (ParseHPKPHeader(now, value, ssl_info, &entry.hashes, &tag.present, &tag.expiry)) {
     tag.created = now;
     MergeEntry(host, entry);
+    DirtyNotify();
     return true;
   }
   return false;
@@ -599,8 +546,6 @@ void TransportSecurityState::MergeEntry(const std::string& name,
   if (entry_is_empty) {
     dynamic_entries->erase(lookup_name);
   }
-
-  DirtyNotify();
 }
 
 
@@ -730,6 +675,8 @@ bool TransportSecurityState::Deserialize(const std::string& input) {
       if (tag.present)
         MergeEntry(*i, entry, true);
     }
+    // There may have been some entries expired, so write it out
+    DirtyNotify();
     return true;
   }
  
@@ -788,6 +735,8 @@ bool TransportSecurityState::Deserialize(const std::string& input) {
     else
       MergeEntry(name_old_format, entry, true);
   }
+  // There may have been some entries expired, so write it out
+  DirtyNotify();
   return true;
 }
 
