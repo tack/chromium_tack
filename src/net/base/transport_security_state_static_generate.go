@@ -48,7 +48,7 @@ type pin struct {
 type preloaded struct {
 	TackKeys map [string] int `json:"tack_keys"`
 	Pinsets []pinset `json:"pinsets"`
-	Entries []hsts   `json:"entries"`
+	Entries []preloadEntry   `json:"entries"`
 }
 
 type pinset struct {
@@ -57,7 +57,7 @@ type pinset struct {
 	Exclude []string `json:"bad_static_spki_hashes"`
 }
 
-type hsts struct {
+type preloadEntry struct {
 	Name       string `json:"name"`
 	Subdomains bool   `json:"include_subdomains"`
 	Upgrade    bool   `json:"upgrade"`
@@ -116,6 +116,10 @@ func process(jsonFileName, certsFileName string) error {
 	}
 
 	if err := checkNoopEntries(preloaded.Entries); err != nil {
+		return err
+	}
+
+	if err := checkTackKeys(preloaded.TackKeys, preloaded.Entries); err != nil {
 		return err
 	}
 
@@ -399,7 +403,42 @@ func checkCertsInPinsets(pinsets []pinset, pins []pin) error {
 	return nil
 }
 
-func checkNoopEntries(entries []hsts) error {
+// Checks length of TACK fingerprints, but doesn't otherwise check
+// for correct syntax
+func checkTackKeys(TackKeys map [string] int, entries []preloadEntry) error {
+	usedKeys := make(map[string]bool)
+	for _, entry := range entries {
+		keys := [2]string{entry.TackKey0, entry.TackKey1}
+		for _, key := range keys  {
+			if key != "" && len(key) != 29 {
+				return fmt.Errorf("tack_key is wrong length: %s", key)
+			}
+			if key == "" {
+				continue
+			}
+			usedKeys[key] = true
+			_, ok := TackKeys[key]
+			if !ok {
+				return fmt.Errorf("Missing tack_key: %s", key)
+			}
+		}
+	}
+	for key, minGen := range TackKeys {
+		if len(key) != 29 {
+			return fmt.Errorf("tack_key is wrong length: %s", key)
+		}
+		if minGen < 0 || minGen > 255 {
+			return fmt.Errorf("Min_generation out of bounds: %d", minGen)
+		}
+		if usedKeys[key] == false {
+			return fmt.Errorf("An entry in tack_keys is unused: %s", key)
+		}
+	}
+
+	return nil
+}
+
+func checkNoopEntries(entries []preloadEntry) error {
 	for _, e := range entries {
 		if e.Upgrade == false && len(e.Pins) == 0 && e.TackKey0 == "" && e.TackKey1 == "" {
 			switch e.Name {
@@ -496,7 +535,7 @@ func writeTackKeysOutput(out *bufio.Writer, tackKeys map[string] int) {
 	out.WriteString("};\n\n")
 }
 
-func writeHSTSEntry(out *bufio.Writer, entry hsts) {
+func writeHSTSEntry(out *bufio.Writer, entry preloadEntry) {
 	dnsName, dnsLen := toDNS(entry.Name)
 	//domain := "DOMAIN_NOT_PINNED"
 	pinsetName := "kNoSpkiPins"
