@@ -56,7 +56,6 @@ class NET_EXPORT TransportSecurityState
 
   // High-level functions
   void Clear();
-  void DeleteSince(const base::Time& time);
   bool ShouldUpgrade(const std::string& host);
   bool IsStrictOnErrors(const std::string& host);
   bool ShouldReportOnErrors(const std::string& host);
@@ -68,6 +67,8 @@ class NET_EXPORT TransportSecurityState
   bool AddHSTSHeader(const std::string& host, const std::string& value);
   bool AddHPKPHeader(const std::string& host, const std::string& value,
                      const SSLInfo& ssl_info);
+  void DeleteSince(const base::Time& time);
+  void DeleteDynamicEntry(const std::string& host);
 
   bool Serialize(std::string* output);
   bool Deserialize(const std::string& input);

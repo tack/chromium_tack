@@ -61,6 +61,8 @@ static const size_t kNumPreloadedSNISTS = ARRAYSIZE_UNSAFE(kPreloadedSNISTS);
 
 namespace net {
 
+static std::string CanonicalizeAndHashOldFormat(const std::string& name);
+
 
 TransportSecurityState::TransportSecurityState() : 
   max_dynamic_entries_(10000), delegate_(NULL) {}
@@ -82,44 +84,6 @@ void TransportSecurityState::Clear() {
   dynamic_entries_[0].clear();
   dynamic_entries_[1].clear();
   DirtyNotify();
-}
-
-void TransportSecurityState::DeleteSince(const base::Time& time) {
-  DCHECK(CalledOnValidThread());
-
-  bool dirtied = false;
-
-  // Iterate through dynamic entries...
-  for (int count = 0; count < 2; count++) {
-    DynamicEntries* dynamic_entries = &dynamic_entries_[count];
-
-    DynamicEntriesIterator iter = dynamic_entries->begin();
-    while (iter != dynamic_entries->end()) {
-      // Check each tag in the entry
-      //   If the data is present, check it for recency
-      //     If recent, mark as non-present and set the dirty flag
-      DynamicEntry& entry = iter->second;
-      bool empty_entry = true;
-      for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
-        if (entry.tags[tag_index].present) {
-          if (entry.tags[tag_index].created >= time) {
-            entry.tags[tag_index].present = false;
-            dirtied = true;
-          }
-          else
-            empty_entry = false;
-        }
-        if (empty_entry) {
-          dynamic_entries->erase(iter++);
-          dirtied = true; // redundant unless the entry was empty to begin with
-        }
-        else
-          iter++;
-      }
-    }
-  }
-  if (dirtied)
-    DirtyNotify();
 }
 
 bool TransportSecurityState::ShouldUpgrade(const std::string& host) {
@@ -261,6 +225,50 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
     return true;
   }
   return false;
+}
+
+void TransportSecurityState::DeleteSince(const base::Time& time) {
+  DCHECK(CalledOnValidThread());
+
+  bool dirtied = false;
+
+  // Iterate through dynamic entries...
+  for (int count = 0; count < 2; count++) {
+    DynamicEntries* dynamic_entries = &dynamic_entries_[count];
+
+    DynamicEntriesIterator iter = dynamic_entries->begin();
+    while (iter != dynamic_entries->end()) {
+      // Check each tag in the entry
+      //   If the data is present, check it for recency
+      //     If recent, mark as non-present and set the dirty flag
+      DynamicEntry& entry = iter->second;
+      bool empty_entry = true;
+      for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
+        if (entry.tags[tag_index].present) {
+          if (entry.tags[tag_index].created >= time) {
+            entry.tags[tag_index].present = false;
+            dirtied = true;
+          }
+          else
+            empty_entry = false;
+        }
+        if (empty_entry) {
+          dynamic_entries->erase(iter++);
+          dirtied = true; // redundant unless the entry was empty to begin with
+        }
+        else
+          iter++;
+      }
+    }
+  }
+  if (dirtied)
+    DirtyNotify();
+}
+
+void TransportSecurityState::DeleteDynamicEntry(const std::string& host) {
+  dynamic_entries_[0].erase(CanonicalizeName(host));
+  dynamic_entries_[1].erase(CanonicalizeAndHashOldFormat(host));
+  DirtyNotify();
 }
 
 bool TransportSecurityState::GetPreloadUpgrade(const std::string& host, bool exact_match) {
@@ -464,12 +472,7 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
       
       std::string lookup_name = iter.GetName();
       if (count == 1) {
-        std::string old_style_canonicalized_name;
-        if (!DNSDomainFromDot(lookup_name, &old_style_canonicalized_name))
-          continue;
-        char hashed[crypto::kSHA256Length];
-        crypto::SHA256HashString(old_style_canonicalized_name, hashed, sizeof(hashed));
-        base::Base64Encode(std::string(hashed, sizeof(hashed)), &lookup_name);
+        lookup_name = CanonicalizeAndHashOldFormat(lookup_name);
       }
       
       // If an entry contains relevant data and is non-expired and either 
@@ -558,6 +561,21 @@ void TransportSecurityState::MergeEntry(const std::string& name,
   }
 }
 
+static
+std::string CanonicalizeAndHashOldFormat(const std::string& host) {
+  std::string lowercase = StringToLowerASCII(host);
+
+  std::string old_style_canonicalized_name ;
+  if (!DNSDomainFromDot(lowercase, &old_style_canonicalized_name))
+    return std::string("");
+
+  char hashed[crypto::kSHA256Length];
+  crypto::SHA256HashString(old_style_canonicalized_name, hashed, sizeof(hashed));
+
+  std::string lookup_name;
+  base::Base64Encode(std::string(hashed, sizeof(hashed)), &lookup_name);
+  return lookup_name;
+}
 
 std::string TransportSecurityState::CanonicalizeName(const std::string& host) {
   return StringToLowerASCII(host);

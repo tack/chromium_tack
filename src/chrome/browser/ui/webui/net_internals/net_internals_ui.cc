@@ -1176,12 +1176,12 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
     // There cannot be a unicode entry in the HSTS set.
     return;
   }
-  net::TransportSecurityState* transport_security_state =
+  net::TransportSecurityState* state =
       context_getter_->GetURLRequestContext()->transport_security_state();
-  if (!transport_security_state)
+  if (!state)
     return;
 
-  //TODO transport_security_state->DeleteInternalDomainState(domain);
+  state->DeleteDynamicEntry(domain);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnGetHttpCacheInfo(
