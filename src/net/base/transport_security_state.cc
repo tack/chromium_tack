@@ -130,10 +130,18 @@ bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
 }
 
 bool TransportSecurityState::ShouldReportOnErrors(const std::string& host) {
-  HashValueVector hashes, bad_hashes;
-  std::string tack_key_0, tack_key_1;
-  return GetPreloadSpki(host, &hashes, &bad_hashes) || 
-    GetPreloadTacks(host, &tack_key_0, &tack_key_1);
+  // True if has the same set of pins as Google
+  HashValueVector google_hashes, bad_hashes;
+  HashValueVector hashes;
+  GetPreloadSpki("google.com", &google_hashes, &bad_hashes);
+  GetPreloadSpki(host, &hashes, &bad_hashes);
+  if (hashes.size() != google_hashes.size())
+    return false;
+  for (size_t count = 0; count < hashes.size(); count++) {
+    if (!hashes[count].Equals(google_hashes[count]))
+      return false;
+  }
+  return true;
 }
 
 bool TransportSecurityState::CheckSpkiPins(const std::string& host,
