@@ -34,8 +34,6 @@
 #include "net/base/x509_cert_types.h"
 #include "net/base/x509_certificate.h"
 #include "base/build_time.h"
-#include "net/third_party/tackc/src/TackStoreDefault.h"
-#include "net/third_party/tackc/src/TackChromium.h"
 #if defined(USE_OPENSSL)
 #include "crypto/openssl_util.h"
 #endif
@@ -182,7 +180,6 @@ bool TransportSecurityState::CheckTackPins(const std::string& host,
   std::string static_tack_key_1;
   std::string dynamic_tack_key_0;
   std::string dynamic_tack_key_1;
-  TACK_RETVAL retval;
 
   if (!GetPreloadTack(host, &static_tack_key_0, &static_tack_key_1) &&
       !GetDynamicTack(host, &dynamic_tack_key_0, &dynamic_tack_key_1))
@@ -201,17 +198,9 @@ bool TransportSecurityState::CheckTackPins(const std::string& host,
     return false;
         
   // Get current time (in uint32_t for minutes since epoch)
-  uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
+  // uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
 
-  // Check connection is well-formed
-  TackProcessingContext ctx;
-  retval = tackProcessWellFormed(&ctx, tackExt, tackExtLen, keyHash,
-                                 currentTime, tackChromium);
-  if (retval != TACK_OK) {
-    LOG(WARNING) << "TACK: Connection ERROR not well-formed: " << host <<
-        ", " << tackRetvalString(retval);
-    return false;
-  }
+  // TODO!!! ACTUAL PROCESSING
 
   return true;
 }
@@ -247,6 +236,12 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
 
 void TransportSecurityState::UserAddUpgrade(const std::string& host, 
                                             bool include_subdomains) {
+  // The name will be canonicalized later, but we should do further 
+  // checks that the user is not setting an invalid name (eg 
+  // an empty string, "www..example.com", etc.)
+  if (host.empty())
+    return;
+
   DynamicEntry entry;
   DynamicTag& tag = entry.tags[UPGRADE_TAG];
   tag.created = base::Time::Now();
@@ -260,6 +255,12 @@ void TransportSecurityState::UserAddUpgrade(const std::string& host,
 void TransportSecurityState::UserAddSpkiPins(const std::string& host, 
                                              bool include_subdomains, 
                                              HashValueVector &hashes) {
+  // The name will be canonicalized later, but we should do further 
+  // checks that the user is not setting an invalid name (eg 
+  // an empty string, "www..example.com", etc.)
+  if (host.empty())
+    return;
+
   DynamicEntry entry;
   DynamicTag& tag = entry.tags[SPKI_TAG];
   tag.created = base::Time::Now();

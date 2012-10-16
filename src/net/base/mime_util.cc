@@ -333,6 +333,8 @@ static const char* const supported_non_image_types[] = {
   "text/",
   "image/svg+xml",  // SVG is text-based XML, even though it has an image/ type
   "application/xml",
+  "application/atom+xml",
+  "application/rss+xml",
   "application/xhtml+xml",
   "application/json",
   "application/x-x509-user-cert",
@@ -359,6 +361,10 @@ static const char* const unsupported_text_types[] = {
   "text/x-csv",
   "text/x-vcf",
   "text/rtf",
+  "text/comma-separated-values",
+  "text/csv",
+  "text/tab-separated-values",
+  "text/tsv",
 };
 
 //  Mozilla 1.8 and WinIE 7 both accept text/javascript and text/ecmascript.

@@ -531,6 +531,15 @@
     { "name": "makeyourlaws.org", "upgrade": true },
     { "name": "www.makeyourlaws.org", "upgrade": true },
     { "name": "iop.intuit.com", "include_subdomains": true, "upgrade": true },
+    { "name": "surfeasy.com", "upgrade": true },
+    { "name": "www.surfeasy.com", "upgrade": true },
+    { "name": "packagist.org", "upgrade": true },
+    { "name": "lookout.com", "upgrade": true },
+    { "name": "www.lookout.com", "upgrade": true },
+    { "name": "mylookout.com", "upgrade": true },
+    { "name": "www.mylookout.com", "upgrade": true },
+    { "name": "dm.lookout.com", "upgrade": true },
+    { "name": "dm.mylookout.com", "upgrade": true },
 
     { "name": "tack.io", "include_subdomains": true, "upgrade": true},
 

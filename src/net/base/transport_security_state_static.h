@@ -10,8 +10,8 @@
 // These are TACK key fingerprints and their min_generation values.
 
 static const net::PreloadTackKey kPreloadedTackKeys[] = {
-  {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
   {"6i7l7.gw7zx.kuza6.skvzy.6alwa", 3},
+  {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
 };
 
 // These are SubjectPublicKeyInfo hashes for public key pinning. The
@@ -667,6 +667,15 @@ static const net::PreloadEntry kPreloadedSTS[] = {
   {false, 16, "makeyourlaws.org", true, kNoSpkiPins, kNoTackPins},
   {false, 20, "www.makeyourlaws.org", true, kNoSpkiPins, kNoTackPins},
   {true, 14, "iop.intuit.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 12, "surfeasy.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 16, "www.surfeasy.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 13, "packagist.org", true, kNoSpkiPins, kNoTackPins},
+  {false, 11, "lookout.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 15, "www.lookout.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 13, "mylookout.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 17, "www.mylookout.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 14, "dm.lookout.com", true, kNoSpkiPins, kNoTackPins},
+  {false, 16, "dm.mylookout.com", true, kNoSpkiPins, kNoTackPins},
   {true, 7, "tack.io", true, kNoSpkiPins, kNoTackPins},
   {false, 12, "test.tack.io", false, kNoSpkiPins, "6i7l7.gw7zx.kuza6.skvzy.6alwa", "j6det.kfbj5.oweph.mdyxi.wvbch"},
   {false, 12, "test.tack.io", false, kGooglePins, kNoTackPins},

@@ -17,8 +17,6 @@
 #include "net/base/x509_certificate.h"
 #include "net/base/x509_cert_types.h"
 
-#include "net/third_party/tackc/src/TackStoreDefault.h"
-
 namespace net {
 
 class SSLInfo;
