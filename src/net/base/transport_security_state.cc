@@ -38,9 +38,10 @@
 #include "crypto/openssl_util.h"
 #endif
 
-// TREV FOR TESTING, REMOVE LATER!!!
+// FOR TESTING, REMOVE LATER!!!
 #define OFFICIAL_BUILD
 
+// If preloads aren't supported in build, don't compile them in
 #if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
 
 // Auto-generated preload file
@@ -200,7 +201,7 @@ bool TransportSecurityState::CheckTackPins(const std::string& host,
   // Get current time (in uint32_t for minutes since epoch)
   // uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
 
-  // TODO!!! ACTUAL PROCESSING
+  // TODO!!! ACTUAL TACK PROCESSING
 
   return true;
 }
@@ -236,16 +237,18 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
 
 void TransportSecurityState::UserAddUpgrade(const std::string& host, 
                                             bool include_subdomains) {
-  // The name will be canonicalized later, but we should do further 
+  // !!! The name will be canonicalized later, but we could do further 
   // checks that the user is not setting an invalid name (eg 
-  // an empty string, "www..example.com", etc.)
+  // an empty string like " ", "www..example.com", etc.)
   if (host.empty())
     return;
 
   DynamicEntry entry;
   DynamicTag& tag = entry.tags[UPGRADE_TAG];
   tag.created = base::Time::Now();
-  tag.expiry = tag.created + base::TimeDelta::FromDays(3 * 365);
+  // !!! 1000 days matches existing behavior for pins created via
+  // chrome::/net-internals, but maybe it should be longer?
+  tag.expiry = tag.created + base::TimeDelta::FromDays(1000);
   tag.present = true;
   tag.include_subdomains = include_subdomains;
   MergeEntry(host, entry);
@@ -255,16 +258,18 @@ void TransportSecurityState::UserAddUpgrade(const std::string& host,
 void TransportSecurityState::UserAddSpkiPins(const std::string& host, 
                                              bool include_subdomains, 
                                              HashValueVector &hashes) {
-  // The name will be canonicalized later, but we should do further 
+  // !!! The name will be canonicalized later, but we should do further 
   // checks that the user is not setting an invalid name (eg 
-  // an empty string, "www..example.com", etc.)
+  // an empty string like " ", "www..example.com", etc.)
   if (host.empty())
     return;
 
   DynamicEntry entry;
   DynamicTag& tag = entry.tags[SPKI_TAG];
   tag.created = base::Time::Now();
-  tag.expiry = tag.created + base::TimeDelta::FromDays(3 * 365);
+  // !!! 1000 days matches existing behavior for pins created via
+  // chrome::/net-internals, but maybe it should be longer?
+  tag.expiry = tag.created + base::TimeDelta::FromDays(1000);
   tag.present = true;
   tag.include_subdomains = include_subdomains;
   entry.hashes = hashes;
@@ -381,7 +386,8 @@ bool TransportSecurityState::GetDynamicSpki(const std::string& host,
                                             HashValueVector* hashes,
                                             bool exact_match) {
   hashes->clear();
-  // Pins are not enforced if the build is sufficiently old.
+  // Dynamic pins are not enforced if the build is sufficiently old.
+  // !!! Per Adam's request, but I'm not sure I agree...
   if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
     return false;
 
@@ -399,7 +405,8 @@ bool TransportSecurityState::GetDynamicTack(const std::string& host,
   tack_key_0->clear();
   tack_key_1->clear();
 
-  // Pins are not enforced if the build is sufficiently old.
+  // Dynamic pins are not enforced if the build is sufficiently old.
+  // !!! Per Adam's request, but I'm not sure I agree...
   if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
     return false;
 
@@ -525,14 +532,13 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
       // matches the full hostname or has include_subdomains, return it
       DynamicEntriesIterator find_result = dynamic_entries->find(lookup_name);
       if (find_result != dynamic_entries->end()) {
+        // !!! If we've found an old-format hashed entry, it would be possible
+        // to convert it to new-format, is it worth it?
         DynamicEntry& entry = find_result->second;
         DynamicTag& tag = entry.tags[tag_index];
         if (tag.present && base::Time::Now() < tag.expiry && 
             (iter.IsFullHostname() || tag.include_subdomains)) {
           *result = entry;
-          if (count == 1) {
-            LOG(WARNING) << "TREV WOOHOO FOUND IT! "<< lookup_name << " " << host;
-          }
           return true;
         }
       }
@@ -549,16 +555,20 @@ void TransportSecurityState::MergeEntry(const std::string& name,
   DynamicEntry* entry;
   std::string lookup_name;
 
-  if (old_format) {
+  // We're either passed a normal domain name for dynamic_entries_[0],
+  // or an old-format hashed name for dynamic_entries_[1]
+  if (!old_format) {
+    lookup_name = CanonicalizeName(name);
+    dynamic_entries = &dynamic_entries_[0];
+  } else {
     lookup_name = name;
     dynamic_entries = &dynamic_entries_[1];
   }
-  else {
-    lookup_name = CanonicalizeName(name);
-    dynamic_entries = &dynamic_entries_[0];
-  }
       
   // If this is a new entry and the store is full, return silently
+  // !!! It may be better to search for expired entries to prune,
+  // but we don't currently do any pruning of expired entries
+  // except on startup when this function is called via Deserialize().
   DynamicEntriesIterator iter = dynamic_entries->find(lookup_name);
   if (iter == dynamic_entries->end()) {
     if (dynamic_entries->size() >= max_dynamic_entries_)
@@ -621,6 +631,10 @@ bool TransportSecurityState::Serialize(std::string* output) {
       const std::string& name = iter->first;
       DynamicEntry& entry = iter->second;
       
+      // Each tag gets its data written out as a separate JSON entry.  In cases
+      // where the tags share metadata (ie include_subdomains / created / expiry
+      // are equal across HSTS / pinning), it would be more efficient to detect
+      // this and write out a single JSON entry
       for (size_t tag_index = UPGRADE_TAG; tag_index < TOTAL_TAGS; tag_index++) {
         DynamicTag& tag = entry.tags[tag_index];
         if (tag.present) {
@@ -654,6 +668,7 @@ bool TransportSecurityState::Serialize(std::string* output) {
   }
   top_level.SetInteger("version", 2);
   top_level.Set("entries", entries);
+  // Below options result in pretty JSON, and no microseconds precision
   base::JSONWriter::WriteWithOptions(&top_level,
                                  base::JSONWriter::OPTIONS_PRETTY_PRINT | 
                                  base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION,
@@ -707,6 +722,8 @@ bool TransportSecurityState::Deserialize(const std::string& input) {
         continue;
       }
       
+      // !!! We only load up old-format HSTS data, assuming there's
+      // unlikely to be useful dynamic pins in old-format data.  OK?
       if (mode_string == kForceHTTPS || mode_string == kStrict) {
         tag.present = true;
       } else if (mode_string == kDefault || mode_string == kPinningOnly) {
@@ -729,7 +746,7 @@ bool TransportSecurityState::Deserialize(const std::string& input) {
       if (tag.present)
         MergeEntry(*i, entry, true);
     }
-    // There may have been some entries expired, so write it out
+    // Write it out again, this will overwrite the old format with new format
     DirtyNotify();
     return true;
   }
@@ -777,7 +794,7 @@ bool TransportSecurityState::Deserialize(const std::string& input) {
       entry.tags[SPKI_TAG] = tag;
     }
 
-    // !!! Could do more syntax checking on the fingerprint
+    // !!! Should do more syntax checking on the fingerprint
     if (json_entry->GetString("tack_key_0", &entry.tack_key_0))
       entry.tags[TACK_0_TAG] = tag;
 
@@ -789,7 +806,10 @@ bool TransportSecurityState::Deserialize(const std::string& input) {
     else
       MergeEntry(name_old_format, entry, true);
   }
-  // There may have been some entries expired, so write it out
+  // There may have been some entries expired, so write out a clean copy
+  // !!! Could be more intelligent and try to track whether any entries
+  // have actually expired or overwritten others, but its easier and 
+  // harmless to just write out a fresh copy on startup.
   DirtyNotify();
   return true;
 }

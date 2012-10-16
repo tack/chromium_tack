@@ -153,6 +153,7 @@ struct PreloadTackKey {
 
 //extern const struct PreloadTackKey kPreloadedTackKeys[];
 //extern const struct PreloadEntry kPreloadedSTS[];
+//static const size_t kNumPreloadedSTS;
 
 }  // namespace net
 

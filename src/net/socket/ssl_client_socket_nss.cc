@@ -3467,9 +3467,6 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
       const std::string& host = host_and_port_.host();
 
-#define OFFICIAL_BUILD // !!!! FOR TESTING ONLY !!!
-
-#if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
   // Take care of any mandates for public key pinning.
   //
   // Pinning is only enabled for official builds to make sure that others don't
@@ -3490,7 +3487,6 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
                                           server_cert_verify_result_.public_key_hashes, 
                                           tackExt, tackExtLen))
     return false;
-#endif
   }
 
   // Exit DoHandshakeLoop and return the result to the caller to Connect.
