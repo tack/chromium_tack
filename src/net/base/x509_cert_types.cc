@@ -193,11 +193,11 @@ bool HashValue::ParsePin(const std::string& value) {
   std::string b64;
   if (value.substr(0, 5) == "sha1/") {
     tag = HASH_VALUE_SHA1;
-    b64 = value.substr(5, value.size() - 5);
+    b64 = value.substr(5, 28);  // length of base64 string
   }
   else if (value.substr(0, 7) == "sha256/") {
     tag = HASH_VALUE_SHA256;
-    b64 = value.substr(7, value.size() - 7);
+    b64 = value.substr(7, 44);  // length of base64 string
   }
   else
     return false;
@@ -207,7 +207,6 @@ bool HashValue::ParsePin(const std::string& value) {
       decoded.size() != size()) {
     return false;
   }
-
   memcpy(data(), decoded.data(), size());
   return true;
 }

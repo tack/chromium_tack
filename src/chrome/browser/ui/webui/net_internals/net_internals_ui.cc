@@ -1129,7 +1129,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   // |list| should be: [<domain to query>, <include subdomains>, <cert pins>].
   std::string domain;
   CHECK(list->GetString(0, &domain));
-  if (!IsStringASCII(domain)) {
+  if (!IsStringASCII(domain) || domain.empty()) {
     // Silently fail. The user will get a helpful error if they query for the
     // name.
     return;
@@ -1139,15 +1139,12 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   std::string hashes_str;
   CHECK(list->GetString(2, &hashes_str));
 
-  net::TransportSecurityState* transport_security_state =
+  net::TransportSecurityState* state =
       context_getter_->GetURLRequestContext()->transport_security_state();
-  if (!transport_security_state)
+  if (!state)
     return;
 
-  /* TODO!!!
-  net::TransportSecurityState::DomainState state;
-  state.upgrade_expiry = state.created + base::TimeDelta::FromDays(1000);
-  state.include_subdomains = include_subdomains;
+  net::HashValueVector hashes;  
   if (!hashes_str.empty()) {
     std::vector<std::string> type_and_b64s;
     base::SplitString(hashes_str, ',', &type_and_b64s);
@@ -1156,15 +1153,15 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
       std::string type_and_b64;
       RemoveChars(*i, " \t\r\n", &type_and_b64);
       net::HashValue hash;
-      if (!net::TransportSecurityState::ParsePin(type_and_b64, &hash))
+      if (!hash.ParsePin(type_and_b64))
         continue;
-
-      state.dynamic_spki_hashes.push_back(hash);
+      std::string test = hash.WriteAsPin();
+      hashes.push_back(hash);
     }
   }
 
-  transport_security_state->SetInternalDomainState(domain, state);
-  */
+  state->UserAddUpgrade(domain, include_subdomains);
+  state->UserAddSpkiPins(domain, include_subdomains, hashes);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(

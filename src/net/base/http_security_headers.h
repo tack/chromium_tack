@@ -29,7 +29,7 @@ namespace net {
   bool ParseHPKPHeader(
     const base::Time& now,
     const std::string& value,
-    const SSLInfo& ssl_info,
+    const SSLInfo* ssl_info,
     HashValueVector* hashes,    // OUT
     bool* present,              // OUT (false if max-age=0)
     base::Time* expiry);        // OUT

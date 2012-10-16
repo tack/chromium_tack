@@ -706,7 +706,7 @@ void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
   void* iter = NULL;
   std::string value;
   if (headers->EnumerateHeader(&iter, "Public-Key-Pins", &value))
-    security_state->AddHPKPHeader(request_info_.url.host(), value, ssl_info);
+    security_state->AddHPKPHeader(request_info_.url.host(), value, &ssl_info);
 }
 
 void URLRequestHttpJob::OnStartCompleted(int result) {

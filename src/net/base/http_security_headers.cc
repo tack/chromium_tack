@@ -198,7 +198,7 @@ static bool ParseAndAppendPin(const std::string& value,
 bool ParseHPKPHeader(
     const base::Time& now,
     const std::string& value,
-    const SSLInfo& ssl_info,
+    const SSLInfo* ssl_info,
     HashValueVector* hashes,
     bool* present,
     base::Time* expiry) {
@@ -217,7 +217,6 @@ bool ParseHPKPHeader(
     equals.second = Strip(equals.second);
 
     if (LowerCaseEqualsASCII(equals.first, "max-age")) {
-
       if (equals.second.empty() ||
           !MaxAgeToInt(equals.second.begin(), equals.second.end(),
                        &max_age_candidate)) {
@@ -243,9 +242,16 @@ bool ParseHPKPHeader(
     source = semicolon.second;
   }
 
-  if (!parsed_max_age || !IsPinListValid(pins, ssl_info)) {
+  if (!parsed_max_age)
     return false;
-  }
+
+  // If ssl_info was passed in, check that it matches
+  if (ssl_info && !IsPinListValid(pins, *ssl_info))
+    return false;
+
+  // If ssl_info wasn't passed in, this is needed...
+  if (pins.size() == 0)
+    return false;
 
   *present = true;
   *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);

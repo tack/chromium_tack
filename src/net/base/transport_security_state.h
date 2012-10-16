@@ -25,7 +25,6 @@ class SSLInfo;
 class Delegate;
 struct PreloadEntry;
 
-
 // Tracks which hosts have enabled strict transport security and/or public
 // key pins.
 //
@@ -66,16 +65,18 @@ class NET_EXPORT TransportSecurityState
                      uint8* tackExt, uint32_t tackExtLen);
   bool AddHSTSHeader(const std::string& host, const std::string& value);
   bool AddHPKPHeader(const std::string& host, const std::string& value,
-                     const SSLInfo& ssl_info);
+                     const SSLInfo* ssl_info = NULL);
+  void UserAddUpgrade(const std::string& host, bool include_subdomains);
+  void UserAddSpkiPins(const std::string& host, bool include_subdomains, 
+                       HashValueVector &hashes);
   void DeleteSince(const base::Time& time);
   void DeleteDynamicEntry(const std::string& host);
-
   bool Serialize(std::string* output);
   bool Deserialize(const std::string& input);
 
+
   // Low-level functions for looking up data from PreloadEntries / DynamicEntries
-  //   USE THE HIGH-LEVEL FUNCTIONS INSTEAD OF THESE
-  //   If exact_match==true, entries for superdomains are ignored
+  //   (only public for use by net_internals_ui.cc)
 
   bool GetPreloadUpgrade(const std::string& host, bool exact_match=false);
   bool GetPreloadSpki(const std::string& host, HashValueVector* hashes, 
@@ -84,12 +85,10 @@ class NET_EXPORT TransportSecurityState
                        std::string* tack_key_1, bool exact_match=false);
 
   bool GetDynamicUpgrade(const std::string& host, bool exact_match=false);
-  bool GetDynamicSpki(const std::string& host, HashValueVector* hashes);
+  bool GetDynamicSpki(const std::string& host, HashValueVector* hashes,
+                      bool exact_match=false);
   bool GetDynamicTack(const std::string& host, std::string* tack_key_0,
-                       std::string* tack_key_1);
-
-  static std::string CanonicalizeName(const std::string& host);
-
+                      std::string* tack_key_1, bool exact_match=false);
 
  private:
 

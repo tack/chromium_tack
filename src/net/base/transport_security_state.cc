@@ -61,8 +61,26 @@ static const size_t kNumPreloadedSNISTS = ARRAYSIZE_UNSAFE(kPreloadedSNISTS);
 
 namespace net {
 
-static std::string CanonicalizeAndHashOldFormat(const std::string& name);
+static
+std::string CanonicalizeAndHashOldFormat(const std::string& host) {
+  std::string lowercase = StringToLowerASCII(host);
 
+  std::string old_style_canonicalized_name ;
+  if (!DNSDomainFromDot(lowercase, &old_style_canonicalized_name))
+    return std::string("");
+
+  char hashed[crypto::kSHA256Length];
+  crypto::SHA256HashString(old_style_canonicalized_name, hashed, sizeof(hashed));
+
+  std::string lookup_name;
+  base::Base64Encode(std::string(hashed, sizeof(hashed)), &lookup_name);
+  return lookup_name;
+}
+
+static
+std::string CanonicalizeName(const std::string& host) {
+  return StringToLowerASCII(host);
+}
 
 TransportSecurityState::TransportSecurityState() : 
   max_dynamic_entries_(10000), delegate_(NULL) {}
@@ -214,7 +232,7 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
 
 bool TransportSecurityState::AddHPKPHeader(const std::string& host, 
                                                const std::string& value,
-                                               const SSLInfo& ssl_info) {
+                                               const SSLInfo* ssl_info) {
   DynamicEntry entry;
   DynamicTag& tag = entry.tags[SPKI_TAG];
   base::Time now = base::Time::Now();
@@ -225,6 +243,32 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
     return true;
   }
   return false;
+}
+
+void TransportSecurityState::UserAddUpgrade(const std::string& host, 
+                                            bool include_subdomains) {
+  DynamicEntry entry;
+  DynamicTag& tag = entry.tags[UPGRADE_TAG];
+  tag.created = base::Time::Now();
+  tag.expiry = tag.created + base::TimeDelta::FromDays(3 * 365);
+  tag.present = true;
+  tag.include_subdomains = include_subdomains;
+  MergeEntry(host, entry);
+  DirtyNotify();
+}
+
+void TransportSecurityState::UserAddSpkiPins(const std::string& host, 
+                                             bool include_subdomains, 
+                                             HashValueVector &hashes) {
+  DynamicEntry entry;
+  DynamicTag& tag = entry.tags[SPKI_TAG];
+  tag.created = base::Time::Now();
+  tag.expiry = tag.created + base::TimeDelta::FromDays(3 * 365);
+  tag.present = true;
+  tag.include_subdomains = include_subdomains;
+  entry.hashes = hashes;
+  MergeEntry(host, entry);
+  DirtyNotify();  
 }
 
 void TransportSecurityState::DeleteSince(const base::Time& time) {
@@ -333,14 +377,15 @@ bool TransportSecurityState::GetDynamicUpgrade(const std::string& host,
 }
 
 bool TransportSecurityState::GetDynamicSpki(const std::string& host, 
-                                            HashValueVector* hashes) {
+                                            HashValueVector* hashes,
+                                            bool exact_match) {
   hashes->clear();
   // Pins are not enforced if the build is sufficiently old.
   if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
     return false;
 
   DynamicEntry entry;
-  if (!GetDynamicEntry(SPKI_TAG, host, &entry, true))
+  if (!GetDynamicEntry(SPKI_TAG, host, &entry, exact_match))
     return false;
   *hashes = entry.hashes;
   return true;
@@ -348,7 +393,8 @@ bool TransportSecurityState::GetDynamicSpki(const std::string& host,
 
 bool TransportSecurityState::GetDynamicTack(const std::string& host, 
                                             std::string* tack_key_0, 
-                                            std::string* tack_key_1) {
+                                            std::string* tack_key_1,
+                                            bool exact_match) {
   tack_key_0->clear();
   tack_key_1->clear();
 
@@ -358,11 +404,11 @@ bool TransportSecurityState::GetDynamicTack(const std::string& host,
 
   DynamicEntry entry;
   bool retval = false;
-  if (GetDynamicEntry(TACK_0_TAG, host, &entry, true)) {
+  if (GetDynamicEntry(TACK_0_TAG, host, &entry, exact_match)) {
     retval = true;
     *tack_key_0 = entry.tack_key_0;
   }
-  if (GetDynamicEntry(TACK_1_TAG, host, &entry, true)) {
+  if (GetDynamicEntry(TACK_1_TAG, host, &entry, exact_match)) {
     retval = true;
     *tack_key_1 = entry.tack_key_0;
   }
@@ -373,7 +419,7 @@ bool TransportSecurityState::GetDynamicTack(const std::string& host,
 //   If exact_match is specified, then only returns "www.example.com"
 struct DomainNameIterator {
   DomainNameIterator(const std::string& host, bool exact_match) {
-    name_ = TransportSecurityState::CanonicalizeName(host);
+    name_ = CanonicalizeName(host);
     exact_match_ = exact_match;
     index_ = 0;
   }
@@ -471,9 +517,8 @@ bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
       DynamicEntries* dynamic_entries = &dynamic_entries_[count];
       
       std::string lookup_name = iter.GetName();
-      if (count == 1) {
+      if (count == 1)
         lookup_name = CanonicalizeAndHashOldFormat(lookup_name);
-      }
       
       // If an entry contains relevant data and is non-expired and either 
       // matches the full hostname or has include_subdomains, return it
@@ -559,26 +604,6 @@ void TransportSecurityState::MergeEntry(const std::string& name,
   if (entry_is_empty) {
     dynamic_entries->erase(lookup_name);
   }
-}
-
-static
-std::string CanonicalizeAndHashOldFormat(const std::string& host) {
-  std::string lowercase = StringToLowerASCII(host);
-
-  std::string old_style_canonicalized_name ;
-  if (!DNSDomainFromDot(lowercase, &old_style_canonicalized_name))
-    return std::string("");
-
-  char hashed[crypto::kSHA256Length];
-  crypto::SHA256HashString(old_style_canonicalized_name, hashed, sizeof(hashed));
-
-  std::string lookup_name;
-  base::Base64Encode(std::string(hashed, sizeof(hashed)), &lookup_name);
-  return lookup_name;
-}
-
-std::string TransportSecurityState::CanonicalizeName(const std::string& host) {
-  return StringToLowerASCII(host);
 }
 
 bool TransportSecurityState::Serialize(std::string* output) {
