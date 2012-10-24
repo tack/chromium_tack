@@ -1,11 +1,13 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-#include "net/base/http_security_headers.h"
 #include "base/base64.h"
 #include "base/string_number_conversions.h"
 #include "base/string_tokenizer.h"
 #include "base/string_util.h"
+#include "net/http/http_security_headers.h"
 #include "net/http/http_util.h"
-
 
 namespace net {
 
@@ -27,36 +29,76 @@ static bool MaxAgeToInt(std::string::const_iterator begin,
   return true;
 }
 
-// "Strict-Transport-Security" ":"
-//     "max-age" "=" delta-seconds [ ";" "includeSubDomains" ]
-bool ParseHSTSHeader(
-  const base::Time& now,
-  const std::string& value,
-  bool* present,               
-  base::Time* expiry,         
-  bool* include_subdomains) {
+// Parse the Strict-Transport-Security header, as currently defined in
+// http://tools.ietf.org/html/draft-ietf-websec-strict-transport-sec-14:
+//
+// Strict-Transport-Security = "Strict-Transport-Security" ":"
+//                             [ directive ]  *( ";" [ directive ] )
+//
+// directive                 = directive-name [ "=" directive-value ]
+// directive-name            = token
+// directive-value           = token | quoted-string
+//
+// 1.  The order of appearance of directives is not significant.
+//
+// 2.  All directives MUST appear only once in an STS header field.
+//     Directives are either optional or required, as stipulated in
+//     their definitions.
+//
+// 3.  Directive names are case-insensitive.
+//
+// 4.  UAs MUST ignore any STS header fields containing directives, or
+//     other header field value data, that does not conform to the
+//     syntax defined in this specification.
+//
+// 5.  If an STS header field contains directive(s) not recognized by
+//     the UA, the UA MUST ignore the unrecognized directives and if the
+//     STS header field otherwise satisfies the above requirements (1
+//     through 4), the UA MUST process the recognized directives.
+bool ParseHSTSHeader(const base::Time& now, const std::string& value,
+                     base::Time* expiry,         // OUT
+                     bool* include_subdomains) {  // OUT
+
   int max_age_candidate = 0;
+  bool include_subdomains_candidate = false;
+
+  // We must see max-age exactly once.
+  int max_age_observed = 0;
+  // We must see includeSubdomains exactly 0 or 1 times.
+  int include_subdomains_observed = 0;
 
   enum ParserState {
     START,
     AFTER_MAX_AGE_LABEL,
     AFTER_MAX_AGE_EQUALS,
     AFTER_MAX_AGE,
-    AFTER_MAX_AGE_INCLUDE_SUB_DOMAINS_DELIMITER,
     AFTER_INCLUDE_SUBDOMAINS,
+    AFTER_UNKNOWN_LABEL,
+    DIRECTIVE_END
   } state = START;
 
   StringTokenizer tokenizer(value, " \t=;");
   tokenizer.set_options(StringTokenizer::RETURN_DELIMS);
+  tokenizer.set_quote_chars("\"");
+  std::string unquoted;
   while (tokenizer.GetNext()) {
     DCHECK(!tokenizer.token_is_delim() || tokenizer.token().length() == 1);
     switch (state) {
       case START:
+      case DIRECTIVE_END:
         if (IsAsciiWhitespace(*tokenizer.token_begin()))
           continue;
-        if (!LowerCaseEqualsASCII(tokenizer.token(), "max-age"))
-          return false;
-        state = AFTER_MAX_AGE_LABEL;
+        if (LowerCaseEqualsASCII(tokenizer.token(), "max-age")) {
+          state = AFTER_MAX_AGE_LABEL;
+          max_age_observed++;
+        } else if (LowerCaseEqualsASCII(tokenizer.token(),
+                                        "includesubdomains")) {
+          state = AFTER_INCLUDE_SUBDOMAINS;
+          include_subdomains_observed++;
+          include_subdomains_candidate = true;
+        } else {
+          state = AFTER_UNKNOWN_LABEL;
+        }
         break;
 
       case AFTER_MAX_AGE_LABEL:
@@ -71,55 +113,73 @@ bool ParseHSTSHeader(
       case AFTER_MAX_AGE_EQUALS:
         if (IsAsciiWhitespace(*tokenizer.token_begin()))
           continue;
-        if (!MaxAgeToInt(tokenizer.token_begin(),
-                         tokenizer.token_end(),
+        unquoted = HttpUtil::Unquote(tokenizer.token());
+        if (!MaxAgeToInt(unquoted.begin(),
+                         unquoted.end(),
                          &max_age_candidate))
           return false;
         state = AFTER_MAX_AGE;
         break;
 
       case AFTER_MAX_AGE:
-        if (IsAsciiWhitespace(*tokenizer.token_begin()))
-          continue;
-        if (*tokenizer.token_begin() != ';')
-          return false;
-        state = AFTER_MAX_AGE_INCLUDE_SUB_DOMAINS_DELIMITER;
-        break;
-
-      case AFTER_MAX_AGE_INCLUDE_SUB_DOMAINS_DELIMITER:
-        if (IsAsciiWhitespace(*tokenizer.token_begin()))
-          continue;
-        if (!LowerCaseEqualsASCII(tokenizer.token(), "includesubdomains"))
-          return false;
-        state = AFTER_INCLUDE_SUBDOMAINS;
-        break;
-
       case AFTER_INCLUDE_SUBDOMAINS:
-        if (!IsAsciiWhitespace(*tokenizer.token_begin()))
+        if (IsAsciiWhitespace(*tokenizer.token_begin()))
+          continue;
+        else if (*tokenizer.token_begin() == ';')
+          state = DIRECTIVE_END;
+        else
           return false;
+        break;
+
+      case AFTER_UNKNOWN_LABEL:
+        // Consume and ignore the post-label contents (if any).
+        if (*tokenizer.token_begin() != ';')
+          continue;
+        state = DIRECTIVE_END;
         break;
     }
   }
 
-  if (state == AFTER_INCLUDE_SUBDOMAINS || state == AFTER_MAX_AGE) {
-    *present = true;
-    *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
-    *include_subdomains = (state == AFTER_INCLUDE_SUBDOMAINS);    
-    return true;
+  // We've consumed all the input.  Let's see what state we ended up in.
+  if (max_age_observed != 1 ||
+      (include_subdomains_observed != 0 && include_subdomains_observed != 1)) {
+    return false;
   }
-  return false;
+
+  switch (state) {
+    case AFTER_MAX_AGE:
+    case AFTER_INCLUDE_SUBDOMAINS:
+    case AFTER_UNKNOWN_LABEL:
+      // BUG(156147), TODO(palmer): If max_age_candidate == 0, we should
+      // delete (or, not set) the HSTS record, rather than treat it as a
+      // normal value. However, now + 0 effectively deletes the entry
+      // because it will not be enforced (it expires immediately,
+      // essentially).
+      *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
+      *include_subdomains = include_subdomains_candidate; 
+      return true;
+    case START:
+    case DIRECTIVE_END:
+    case AFTER_MAX_AGE_LABEL:
+    case AFTER_MAX_AGE_EQUALS:
+      return false;
+    default:
+      NOTREACHED();
+      return false;
+  }
 }
 
 // Returns true iff there is an item in |pins| which is not present in
 // |from_cert_chain|. Such an SPKI hash is called a "backup pin".
 static bool IsBackupPinPresent(const HashValueVector& pins,
                                const HashValueVector& from_cert_chain) {
-  for (HashValueVector::const_iterator i = pins.begin(); 
-       i != pins.end(); ++i) {
+  for (HashValueVector::const_iterator
+       i = pins.begin(); i != pins.end(); ++i) {
     HashValueVector::const_iterator j =
-      std::find(from_cert_chain.begin(), from_cert_chain.end(), *i);
-    if (j == from_cert_chain.end())
-      return true;
+        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
+                     HashValuesEqualPredicate(*i));
+      if (j == from_cert_chain.end())
+        return true;
   }
 
   return false;
@@ -146,7 +206,7 @@ static bool IsPinListValid(const HashValueVector& pins,
 }
 
 // Strip, Split, StringPair, and ParsePins are private implementation details
-// of ParseHPKPHeader.
+// of ParsePinsHeader(std::string&, DomainState&).
 static std::string Strip(const std::string& source) {
   if (source.empty())
     return source;
@@ -169,7 +229,6 @@ static StringPair Split(const std::string& source, char delimiter) {
 
   return pair;
 }
-
 
 static bool ParseAndAppendPin(const std::string& value,
                               HashValueTag tag,
@@ -198,10 +257,9 @@ static bool ParseAndAppendPin(const std::string& value,
 bool ParseHPKPHeader(
     const base::Time& now,
     const std::string& value,
-    const SSLInfo* ssl_info,
-    HashValueVector* hashes,
-    bool* present,
-    base::Time* expiry) {
+    const SSLInfo& ssl_info,
+    base::Time* expiry,
+    HashValueVector* hashes) {
   bool parsed_max_age = false;
   int max_age_candidate = 0;
   HashValueVector pins;
@@ -245,15 +303,14 @@ bool ParseHPKPHeader(
   if (!parsed_max_age)
     return false;
 
-  // If ssl_info was passed in, check that it matches
-  if (ssl_info && !IsPinListValid(pins, *ssl_info))
+  // Check that the header is valid
+  if (!IsPinListValid(pins, ssl_info))
     return false;
 
-  // If ssl_info wasn't passed in, this is needed...
+  // If ssl_info wasn't passed in, this is a good idea...
   if (pins.size() == 0)
     return false;
 
-  *present = true;
   *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
   for (HashValueVector::const_iterator i = pins.begin();
        i != pins.end(); ++i) {
@@ -263,26 +320,4 @@ bool ParseHPKPHeader(
   return true;
 }
 
-bool SPKIHashesFromListValue(const ListValue& pins, HashValueVector* hashes) {
-  size_t num_pins = pins.GetSize();
-  for (size_t i = 0; i < num_pins; ++i) {
-    std::string type_and_base64;
-    HashValue fingerprint;
-    if (!pins.GetString(i, &type_and_base64))
-      return false;
-    if (!fingerprint.ParsePin(type_and_base64))
-      return false;
-      hashes->push_back(fingerprint);
-  }
-  return true;
-}
-
-ListValue* SPKIHashesToListValue(const HashValueVector& hashes) {
-  ListValue* pins = new ListValue;
-  for (HashValueVector::const_iterator i = hashes.begin(); i != hashes.end(); ++i)
-    pins->Append(new StringValue(i->WriteAsPin()));
-  return pins;
-}
-
-
-}
+}  // namespace net

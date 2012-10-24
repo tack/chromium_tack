@@ -75,6 +75,11 @@ class NET_EXPORT HashValue {
   HashValue() : tag(HASH_VALUE_SHA1) {}
 
   bool Equals(const HashValue& other) const;
+
+  // Parse/write in this format: "sha1/Guzek9lMwR3KeIS8wwS9gBvVtIg="
+  bool ParseBase64String(const std::string& input);
+  std::string WriteBase64String() const;
+
   size_t size() const;
   unsigned char* data();
   const unsigned char* data() const;
@@ -102,6 +107,18 @@ class NET_EXPORT HashValueLessThan {
   }
 };
 
+class NET_EXPORT HashValuesEqualPredicate {
+  public:
+  explicit HashValuesEqualPredicate(const HashValue& fingerprint) :
+      fingerprint_(fingerprint) {}
+
+  bool operator()(const HashValue& other) const {
+    return fingerprint_.Equals(other);
+  }
+
+  const HashValue& fingerprint_;
+};
+
 typedef std::vector<HashValue> HashValueVector;
 
 // IsSHA1HashInSortedArray returns true iff |hash| is in |array|, a sorted
@@ -113,30 +130,13 @@ bool NET_EXPORT IsSHA1HashInSortedArray(const SHA1HashValue& hash,
 // Returns true if the intersection of |a| and |b| is not empty. If either
 // |a| or |b| is empty, returns false.
 bool NET_EXPORT HashesIntersect(const HashValueVector& a,
-                                const HashValueVector& b) {
-  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
-    HashValueVector::const_iterator j =
-        std::find_if(b.begin(), b.end(), HashValuesEqualPredicate(*i));
-    if (j != b.end())
-      return true;
-  }
+                                const HashValueVector& b);
 
-  return false;
-}
-
-std::string NET_EXPORT HashesToBase64String(const HashValueVector& hashes) {
-  std::vector<std::string> hashes_strs;
-  for (HashValueVector::const_iterator
-       i = hashes.begin(); i != hashes.end(); i++) {
-    std::string s;
-    const std::string hash_str(reinterpret_cast<const char*>(i->data()),
-                               i->size());
-    base::Base64Encode(hash_str, &s);
-    hashes_strs.push_back(s);
-  }
-
-  return JoinString(hashes_strs, ',');
-}
+// Convert between HashValueVector and comma-separated string format:
+// "sha1/Guzek9lMwR3KeIS8wwS9gBvVtIg=,sha256/U8Sg...
+std::string NET_EXPORT HashesToBase64String(const HashValueVector& hashes);
+bool Base64StringToHashes(const std::string& hashes_str,
+                          HashValueVector* hashes);
 
 // CertPrincipal represents the issuer or subject field of an X.509 certificate.
 struct NET_EXPORT CertPrincipal {

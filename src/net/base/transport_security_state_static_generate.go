@@ -448,13 +448,17 @@ func writeFooter(out *bufio.Writer) {
 
 func writeCertsOutput(out *bufio.Writer, pins []pin) {
 	out.WriteString(`// These are SubjectPublicKeyInfo hashes for public key pinning. The
-// hashes are base64 encoded, SHA1 digests.
+// hashes are SHA1 digests.
 
 `)
 
 	for _, pin := range pins {
 		fmt.Fprintf(out, "static const char kSPKIHash_%s[] =\n", pin.name)
-		fmt.Fprintf(out, "    \"%s/%s\";\n\n", pin.spkiHashFunc, base64.StdEncoding.EncodeToString(pin.spkiHash))
+		var s string
+		for _,c := range pin.spkiHash {
+			s += fmt.Sprintf("\\x%02x", c)
+		}
+		fmt.Fprintf(out, "    \"%s\";\n\n", s)
 	}
 }
 
