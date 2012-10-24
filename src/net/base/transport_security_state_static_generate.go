@@ -46,9 +46,8 @@ type pin struct {
 // following are used by the "json" package to parse the file. See the comments
 // in transport_security_state_static.json for details.
 type preloaded struct {
-	TackKeys map [string] int `json:"tack_keys"`
 	Pinsets []pinset `json:"pinsets"`
-	Entries []preloadEntry   `json:"entries"`
+	Entries []hsts   `json:"entries"`
 }
 
 type pinset struct {
@@ -57,14 +56,12 @@ type pinset struct {
 	Exclude []string `json:"bad_static_spki_hashes"`
 }
 
-type preloadEntry struct {
+type hsts struct {
 	Name       string `json:"name"`
 	Subdomains bool   `json:"include_subdomains"`
-	Upgrade    bool   `json:"upgrade"`
+	Mode       string `json:"mode"`
 	Pins       string `json:"pins"`
 	SNIOnly    bool   `json:"snionly"`
-	TackKey0   string `json:"tack_key_0"`
-	TackKey1   string `json:"tack_key_1"`
 }
 
 func main() {
@@ -119,7 +116,7 @@ func process(jsonFileName, certsFileName string) error {
 		return err
 	}
 
-	if err := checkTackKeys(preloaded.TackKeys, preloaded.Entries); err != nil {
+	if err := checkDuplicateEntries(preloaded.Entries); err != nil {
 		return err
 	}
 
@@ -131,7 +128,6 @@ func process(jsonFileName, certsFileName string) error {
 
 	out := bufio.NewWriter(outFile)
 	writeHeader(out)
-	writeTackKeysOutput(out, preloaded.TackKeys)
 	writeCertsOutput(out, pins)
 	writeHSTSOutput(out, preloaded)
 	writeFooter(out)
@@ -403,44 +399,9 @@ func checkCertsInPinsets(pinsets []pinset, pins []pin) error {
 	return nil
 }
 
-// Checks length of TACK fingerprints, but doesn't otherwise check
-// for correct syntax
-func checkTackKeys(TackKeys map [string] int, entries []preloadEntry) error {
-	usedKeys := make(map[string]bool)
-	for _, entry := range entries {
-		keys := [2]string{entry.TackKey0, entry.TackKey1}
-		for _, key := range keys  {
-			if key != "" && len(key) != 29 {
-				return fmt.Errorf("tack_key is wrong length: %s", key)
-			}
-			if key == "" {
-				continue
-			}
-			usedKeys[key] = true
-			_, ok := TackKeys[key]
-			if !ok {
-				return fmt.Errorf("Missing tack_key: %s", key)
-			}
-		}
-	}
-	for key, minGen := range TackKeys {
-		if len(key) != 29 {
-			return fmt.Errorf("tack_key is wrong length: %s", key)
-		}
-		if minGen < 0 || minGen > 255 {
-			return fmt.Errorf("Min_generation out of bounds: %d", minGen)
-		}
-		if usedKeys[key] == false {
-			return fmt.Errorf("An entry in tack_keys is unused: %s", key)
-		}
-	}
-
-	return nil
-}
-
-func checkNoopEntries(entries []preloadEntry) error {
+func checkNoopEntries(entries []hsts) error {
 	for _, e := range entries {
-		if e.Upgrade == false && len(e.Pins) == 0 && e.TackKey0 == "" && e.TackKey1 == "" {
+		if len(e.Mode) == 0 && len(e.Pins) == 0 {
 			switch e.Name {
 			// This entry is deliberately used as an exclusion.
 			case "learn.doubleclick.net":
@@ -449,6 +410,19 @@ func checkNoopEntries(entries []preloadEntry) error {
 				return errors.New("Entry for " + e.Name + " has no mode and no pins")
 			}
 		}
+	}
+
+	return nil
+}
+
+func checkDuplicateEntries(entries []hsts) error {
+	seen := make(map[string]bool)
+
+	for _, e := range entries {
+		if _, ok := seen[e.Name]; ok {
+			return errors.New("Duplicate entry for " + e.Name)
+		}
+		seen[e.Name] = true
 	}
 
 	return nil
@@ -474,17 +448,13 @@ func writeFooter(out *bufio.Writer) {
 
 func writeCertsOutput(out *bufio.Writer, pins []pin) {
 	out.WriteString(`// These are SubjectPublicKeyInfo hashes for public key pinning. The
-// hashes are SHA1 digests.
+// hashes are base64 encoded, SHA1 digests.
 
 `)
 
 	for _, pin := range pins {
 		fmt.Fprintf(out, "static const char kSPKIHash_%s[] =\n", pin.name)
-		var s string
-		for _,c := range pin.spkiHash {
-			s += fmt.Sprintf("\\x%02x", c)
-		}
-		fmt.Fprintf(out, "    \"%s\";\n\n", s)
+		fmt.Fprintf(out, "    \"%s/%s\";\n\n", pin.spkiHashFunc, base64.StdEncoding.EncodeToString(pin.spkiHash))
 	}
 }
 
@@ -513,7 +483,21 @@ func writeListOfPins(w io.Writer, name string, pinNames []string) {
 // length-prefixed form and also returns the length of the interpreted string.
 // i.e. for an input "example.com" it will return "\\007example\\003com", 13.
 func toDNS(s string) (string, int) {
-	return s, len(s)
+	labels := strings.Split(s, ".")
+
+	var name string
+	var l int
+	for _, label := range labels {
+		if len(label) > 63 {
+			panic("DNS label too long")
+		}
+		name += fmt.Sprintf("\\%03o", len(label))
+		name += label
+		l += len(label) + 1
+	}
+	l += 1 // For the length of the root label.
+
+	return name, l
 }
 
 // domainConstant converts the domain name |s| into a string of the form
@@ -526,38 +510,15 @@ func domainConstant(s string) string {
 	return fmt.Sprintf("DOMAIN_%s_%s", domain, gtld)
 }
 
-func writeTackKeysOutput(out *bufio.Writer, tackKeys map[string] int) {
-	out.WriteString("// These are TACK key fingerprints and their min_generation values.\n\n")
-	out.WriteString("static const net::PreloadTackKey kPreloadedTackKeys[] = {\n")
-	for key, minGeneration := range tackKeys {
-		fmt.Fprintf(out, "  {\"%s\", %d},\n", key, minGeneration)
-	}
-	out.WriteString("};\n\n")
-}
-
-func writeHSTSEntry(out *bufio.Writer, entry preloadEntry) {
+func writeHSTSEntry(out *bufio.Writer, entry hsts) {
 	dnsName, dnsLen := toDNS(entry.Name)
-	//domain := "DOMAIN_NOT_PINNED"
-	pinsetName := "kNoSpkiPins"
+	domain := "DOMAIN_NOT_PINNED"
+	pinsetName := "kNoPins"
 	if len(entry.Pins) > 0 {
 		pinsetName = fmt.Sprintf("k%sPins", uppercaseFirstLetter(entry.Pins))
+		domain = domainConstant(entry.Name)
 	}
-	tackset := "kNoTackPins"
-	if len(entry.TackKey0) > 0 || len(entry.TackKey1) > 0 {
-		tackKey0Entry := "NULL"
-		tackKey1Entry := "NULL"
-		if len(entry.TackKey0) > 0 {
-			tackKey0Entry = "\"" + entry.TackKey0 + "\""
-		}
-		if len(entry.TackKey1) > 0 {
-			tackKey1Entry = "\"" + entry.TackKey1 + "\""
-		}
-		tackset = fmt.Sprintf("%s, %s", tackKey0Entry, tackKey1Entry)
-	}
-	//if len(entry.Pins) > 0 || entry.TackKey != "" {
-	//	domain = domainConstant(entry.Name)
-	//}
-	fmt.Fprintf(out, "  {%t, %d, \"%s\", %t, %s, %s},\n", entry.Subdomains, dnsLen, dnsName, entry.Upgrade, pinsetName, tackset)
+	fmt.Fprintf(out, "  {%d, %t, \"%s\", %t, %s, %s },\n", dnsLen, entry.Subdomains, dnsName, entry.Mode == "force-https", pinsetName, domain)
 }
 
 func writeHSTSOutput(out *bufio.Writer, hsts preloaded) error {
@@ -581,19 +542,19 @@ static const char* const kNoRejectedPublicKeys[] = {
 			rejectedListName = fmt.Sprintf("k%sRejectedCerts", name)
 			writeListOfPins(out, rejectedListName, pinset.Exclude)
 		}
-                   
-		fmt.Fprintf(out, `#define k%sPins \
+		fmt.Fprintf(out, `#define k%sPins { \
   %s, \
-  %s
+  %s, \
+}
 
 `, name, acceptableListName, rejectedListName)
 	}
 
-	out.WriteString(`#define kNoSpkiPins NULL, NULL
+	out.WriteString(`#define kNoPins {\
+  NULL, NULL, \
+}
 
-#define kNoTackPins NULL, NULL
-
-static const net::PreloadEntry kPreloadedSTS[] = {
+static const struct HSTSPreload kPreloadedSTS[] = {
 `)
 
 	for _, entry := range hsts.Entries {
@@ -606,7 +567,7 @@ static const net::PreloadEntry kPreloadedSTS[] = {
 	out.WriteString(`};
 static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
 
-static const net::PreloadEntry kPreloadedSNISTS[] = {
+static const struct HSTSPreload kPreloadedSNISTS[] = {
 `)
 
 	for _, entry := range hsts.Entries {
