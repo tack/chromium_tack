@@ -163,8 +163,6 @@
         'base/host_resolver_impl.h',
         'base/host_resolver_proc.cc',
         'base/host_resolver_proc.h',
-        'base/http_security_headers.cc',
-        'base/http_security_headers.h',
         'base/io_buffer.cc',
         'base/io_buffer.h',
         'base/ip_endpoint.cc',
@@ -630,6 +628,26 @@
         'proxy/sync_host_resolver.h',
         'proxy/sync_host_resolver_bridge.cc',
         'proxy/sync_host_resolver_bridge.h',
+        'quic/crypto/crypto_framer.cc',
+        'quic/crypto/crypto_framer.h',
+        'quic/crypto/crypto_protocol.cc',
+        'quic/crypto/crypto_protocol.h',
+        'quic/crypto/null_decrypter.cc',
+        'quic/crypto/null_encrypter.cc',
+        'quic/crypto/quic_decrypter.h',
+        'quic/crypto/quic_decrypter.cc',
+        'quic/crypto/quic_encrypter.h',
+        'quic/crypto/quic_encrypter.cc',
+        'quic/quic_data_reader.cc',
+        'quic/quic_data_reader.h',
+        'quic/quic_data_writer.cc',
+        'quic/quic_data_writer.h',
+        'quic/quic_framer.cc',
+        'quic/quic_framer.h',
+        'quic/quic_protocol.cc',
+        'quic/quic_protocol.h',
+        'quic/quic_utils.cc',
+        'quic/quic_utils.h',
         'socket/buffered_write_stream_socket.cc',
         'socket/buffered_write_stream_socket.h',
         'socket/client_socket_factory.cc',
@@ -1352,6 +1370,12 @@
         'proxy/proxy_server_unittest.cc',
         'proxy/proxy_service_unittest.cc',
         'proxy/sync_host_resolver_bridge_unittest.cc',
+        'quic/crypto/crypto_framer_test.cc',
+        'quic/crypto/null_decrypter_test.cc',
+        'quic/crypto/null_encrypter_test.cc',
+        'quic/test_tools/quic_test_utils.cc',
+        'quic/test_tools/quic_test_utils.h',
+        'quic/quic_framer_test.cc',
         'socket/buffered_write_stream_socket_unittest.cc',
         'socket/client_socket_pool_base_unittest.cc',
         'socket/deterministic_socket_data_unittest.cc',
@@ -1435,6 +1459,13 @@
           'sources!': [
             'base/network_change_notifier_linux_unittest.cc',
             'proxy/proxy_config_service_linux_unittest.cc',
+          ],
+        }],
+        [ 'OS == "android"', {
+          'sources!': [
+            # No res_ninit() et al on Android, so this doesn't make a lot of
+            # sense.
+            'dns/dns_config_service_posix_unittest.cc',
           ],
         }],
         [ 'use_glib == 1', {
@@ -1587,10 +1618,20 @@
             ],
             'conditions': [
               ['coverage != 0', {
-                # These sources can't be built with coverage due to a toolchain
-                # bug: http://openradar.appspot.com/radar?id=1499403
                 'sources!': [
+                  # These sources can't be built with coverage due to a
+                  # toolchain bug: http://openradar.appspot.com/radar?id=1499403
                   'base/transport_security_state_unittest.cc',
+
+                  # These tests crash when run with coverage turned on due to an
+                  # issue with llvm_gcda_increment_indirect_counter:
+                  # http://crbug.com/156058
+                  'cookies/cookie_monster_unittest.cc',
+                  'cookies/cookie_store_unittest.h',
+                  'http/http_auth_controller_unittest.cc',
+                  'http/http_network_layer_unittest.cc',
+                  'http/http_network_transaction_spdy2_unittest.cc',
+                  'http/http_network_transaction_spdy3_unittest.cc',
                 ],
               }],
             ],

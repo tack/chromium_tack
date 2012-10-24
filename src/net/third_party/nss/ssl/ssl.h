@@ -456,10 +456,6 @@ SSL_IMPORT SECStatus SSL_SecurityStatus(PRFileDesc *fd, int *on, char **cipher,
 */
 SSL_IMPORT CERTCertificate *SSL_PeerCertificate(PRFileDesc *fd);
 
-SSL_IMPORT SECStatus SSL_TackExtension(PRFileDesc *fd,
-                                       uint8_t** tackExt,
-                                       uint32_t* tackExtLen);
-
 /*
 ** Return references to the certificates presented by the SSL peer.
 ** |maxNumCerts| must contain the size of the |certs| array. On successful

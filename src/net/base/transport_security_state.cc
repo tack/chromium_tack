@@ -13,82 +13,526 @@
 #include <keyhi.h>
 #include <pk11pub.h>
 #include <nspr.h>
-#include <math.h>
 #endif
 
 #include <algorithm>
 
 #include "base/base64.h"
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/metrics/histogram.h"
+#include "base/sha1.h"
+#include "base/string_number_conversions.h"
+#include "base/string_tokenizer.h"
 #include "base/string_util.h"
 #include "base/time.h"
+#include "base/utf_string_conversions.h"
 #include "base/values.h"
 #include "crypto/sha2.h"
 #include "googleurl/src/gurl.h"
 #include "net/base/dns_util.h"
-#include "net/base/http_security_headers.h"
 #include "net/base/ssl_info.h"
 #include "net/base/x509_cert_types.h"
 #include "net/base/x509_certificate.h"
-#include "base/build_time.h"
+#include "net/http/http_util.h"
+
 #if defined(USE_OPENSSL)
 #include "crypto/openssl_util.h"
 #endif
 
-// FOR TESTING, REMOVE LATER!!!
-#define OFFICIAL_BUILD
-
-// If preloads aren't supported in build, don't compile them in
-#if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
-
-// Auto-generated preload file
-#include "net/base/transport_security_state_static.h"
-
-#else
-
-static const net::PreloadTackKey kPreloadedTackKeys[] = {};
-static const net::PreloadEntry kPreloadedSTS[] = {};
-static const net::PreloadEntry kPreloadedSNISTS[] = {};
-static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
-static const size_t kNumPreloadedSNISTS = ARRAYSIZE_UNSAFE(kPreloadedSNISTS);
-
-#endif
-
-
 namespace net {
 
-static
-std::string CanonicalizeAndHashOldFormat(const std::string& host) {
-  std::string lowercase = StringToLowerASCII(host);
+const long int TransportSecurityState::kMaxHSTSAgeSecs = 86400 * 365;  // 1 year
 
-  std::string old_style_canonicalized_name ;
-  if (!DNSDomainFromDot(lowercase, &old_style_canonicalized_name))
-    return std::string("");
-
+static std::string HashHost(const std::string& canonicalized_host) {
   char hashed[crypto::kSHA256Length];
-  crypto::SHA256HashString(old_style_canonicalized_name, hashed, sizeof(hashed));
-
-  std::string lookup_name;
-  base::Base64Encode(std::string(hashed, sizeof(hashed)), &lookup_name);
-  return lookup_name;
+  crypto::SHA256HashString(canonicalized_host, hashed, sizeof(hashed));
+  return std::string(hashed, sizeof(hashed));
 }
 
-static
-std::string CanonicalizeName(const std::string& host) {
-  return StringToLowerASCII(host);
+TransportSecurityState::TransportSecurityState()
+  : delegate_(NULL) {
 }
 
-TransportSecurityState::TransportSecurityState() : 
-  max_dynamic_entries_(10000), delegate_(NULL) {}
-TransportSecurityState::~TransportSecurityState() {}
+TransportSecurityState::Iterator::Iterator(const TransportSecurityState& state)
+    : iterator_(state.enabled_hosts_.begin()),
+      end_(state.enabled_hosts_.end()) {
+}
+
+TransportSecurityState::Iterator::~Iterator() {}
 
 void TransportSecurityState::SetDelegate(
     TransportSecurityState::Delegate* delegate) {
   delegate_ = delegate;
 }
+
+void TransportSecurityState::EnableHost(const std::string& host,
+                                        const DomainState& state) {
+  DCHECK(CalledOnValidThread());
+
+  const std::string canonicalized_host = CanonicalizeHost(host);
+  if (canonicalized_host.empty())
+    return;
+
+  DomainState existing_state;
+
+  // Use the original creation date if we already have this host. (But note
+  // that statically-defined states have no |created| date. Therefore, we do
+  // not bother to search the SNI-only static states.)
+  DomainState state_copy(state);
+  if (GetDomainState(host, false /* sni_enabled */, &existing_state) &&
+      !existing_state.created.is_null()) {
+    state_copy.created = existing_state.created;
+  }
+
+  // No need to store this value since it is redundant. (|canonicalized_host|
+  // is the map key.)
+  state_copy.domain.clear();
+
+  enabled_hosts_[HashHost(canonicalized_host)] = state_copy;
+  DirtyNotify();
+}
+
+bool TransportSecurityState::DeleteHost(const std::string& host) {
+  DCHECK(CalledOnValidThread());
+
+  const std::string canonicalized_host = CanonicalizeHost(host);
+  if (canonicalized_host.empty())
+    return false;
+
+  std::map<std::string, DomainState>::iterator i = enabled_hosts_.find(
+      HashHost(canonicalized_host));
+  if (i != enabled_hosts_.end()) {
+    enabled_hosts_.erase(i);
+    DirtyNotify();
+    return true;
+  }
+  return false;
+}
+
+bool TransportSecurityState::GetDomainState(const std::string& host,
+                                            bool sni_enabled,
+                                            DomainState* result) {
+  DCHECK(CalledOnValidThread());
+
+  DomainState state;
+  const std::string canonicalized_host = CanonicalizeHost(host);
+  if (canonicalized_host.empty())
+    return false;
+
+  bool has_preload = GetStaticDomainState(canonicalized_host, sni_enabled,
+                                          &state);
+  std::string canonicalized_preload = CanonicalizeHost(state.domain);
+
+  base::Time current_time(base::Time::Now());
+
+  for (size_t i = 0; canonicalized_host[i]; i += canonicalized_host[i] + 1) {
+    std::string host_sub_chunk(&canonicalized_host[i],
+                               canonicalized_host.size() - i);
+    // Exact match of a preload always wins.
+    if (has_preload && host_sub_chunk == canonicalized_preload) {
+      *result = state;
+      return true;
+    }
+
+    std::map<std::string, DomainState>::iterator j =
+        enabled_hosts_.find(HashHost(host_sub_chunk));
+    if (j == enabled_hosts_.end())
+      continue;
+
+    if (current_time > j->second.upgrade_expiry &&
+        current_time > j->second.dynamic_spki_hashes_expiry) {
+      enabled_hosts_.erase(j);
+      DirtyNotify();
+      continue;
+    }
+
+    state = j->second;
+    state.domain = DNSDomainToString(host_sub_chunk);
+
+    // Succeed if we matched the domain exactly or if subdomain matches are
+    // allowed.
+    if (i == 0 || j->second.include_subdomains) {
+      *result = state;
+      return true;
+    }
+
+    return false;
+  }
+
+  return false;
+}
+
+void TransportSecurityState::DeleteSince(const base::Time& time) {
+  DCHECK(CalledOnValidThread());
+
+  bool dirtied = false;
+
+  std::map<std::string, DomainState>::iterator i = enabled_hosts_.begin();
+  while (i != enabled_hosts_.end()) {
+    if (i->second.created >= time) {
+      dirtied = true;
+      enabled_hosts_.erase(i++);
+    } else {
+      i++;
+    }
+  }
+
+  if (dirtied)
+    DirtyNotify();
+}
+
+// MaxAgeToInt converts a string representation of a number of seconds into a
+// int. We use strtol in order to handle overflow correctly. The string may
+// contain an arbitary number which we should truncate correctly rather than
+// throwing a parse failure.
+static bool MaxAgeToInt(std::string::const_iterator begin,
+                        std::string::const_iterator end,
+                        int* result) {
+  const std::string s(begin, end);
+  char* endptr;
+  long int i = strtol(s.data(), &endptr, 10 /* base */);
+  if (*endptr || i < 0)
+    return false;
+  if (i > TransportSecurityState::kMaxHSTSAgeSecs)
+    i = TransportSecurityState::kMaxHSTSAgeSecs;
+  *result = i;
+  return true;
+}
+
+// Strip, Split, StringPair, and ParsePins are private implementation details
+// of ParsePinsHeader(std::string&, DomainState&).
+static std::string Strip(const std::string& source) {
+  if (source.empty())
+    return source;
+
+  std::string::const_iterator start = source.begin();
+  std::string::const_iterator end = source.end();
+  HttpUtil::TrimLWS(&start, &end);
+  return std::string(start, end);
+}
+
+typedef std::pair<std::string, std::string> StringPair;
+
+static StringPair Split(const std::string& source, char delimiter) {
+  StringPair pair;
+  size_t point = source.find(delimiter);
+
+  pair.first = source.substr(0, point);
+  if (std::string::npos != point)
+    pair.second = source.substr(point + 1);
+
+  return pair;
+}
+
+// static
+bool TransportSecurityState::ParsePin(const std::string& value,
+                                      HashValue* out) {
+  StringPair slash = Split(Strip(value), '/');
+
+  if (slash.first == "sha1")
+    out->tag = HASH_VALUE_SHA1;
+  else if (slash.first == "sha256")
+    out->tag = HASH_VALUE_SHA256;
+  else
+    return false;
+
+  std::string decoded;
+  if (!base::Base64Decode(slash.second, &decoded) ||
+      decoded.size() != out->size()) {
+    return false;
+  }
+
+  memcpy(out->data(), decoded.data(), out->size());
+  return true;
+}
+
+static bool ParseAndAppendPin(const std::string& value,
+                              HashValueTag tag,
+                              HashValueVector* hashes) {
+  std::string unquoted = HttpUtil::Unquote(value);
+  std::string decoded;
+
+  // This code has to assume that 32 bytes is SHA-256 and 20 bytes is SHA-1.
+  // Currently, those are the only two possibilities, so the assumption is
+  // valid.
+  if (!base::Base64Decode(unquoted, &decoded))
+    return false;
+
+  HashValue hash(tag);
+  if (decoded.size() != hash.size())
+    return false;
+
+  memcpy(hash.data(), decoded.data(), hash.size());
+  hashes->push_back(hash);
+  return true;
+}
+
+struct HashValuesEqualPredicate {
+  explicit HashValuesEqualPredicate(const HashValue& fingerprint) :
+      fingerprint_(fingerprint) {}
+
+  bool operator()(const HashValue& other) const {
+    return fingerprint_.Equals(other);
+  }
+
+  const HashValue& fingerprint_;
+};
+
+// Returns true iff there is an item in |pins| which is not present in
+// |from_cert_chain|. Such an SPKI hash is called a "backup pin".
+static bool IsBackupPinPresent(const HashValueVector& pins,
+                               const HashValueVector& from_cert_chain) {
+  for (HashValueVector::const_iterator
+       i = pins.begin(); i != pins.end(); ++i) {
+    HashValueVector::const_iterator j =
+        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
+                     HashValuesEqualPredicate(*i));
+      if (j == from_cert_chain.end())
+        return true;
+  }
+
+  return false;
+}
+
+// Returns true iff |pins| contains both a live and a backup pin. A live pin
+// is a pin whose SPKI is present in the certificate chain in |ssl_info|. A
+// backup pin is a pin intended for disaster recovery, not day-to-day use, and
+// thus must be absent from the certificate chain. The Public-Key-Pins header
+// specification requires both.
+static bool IsPinListValid(const HashValueVector& pins,
+                           const SSLInfo& ssl_info) {
+  // Fast fail: 1 live + 1 backup = at least 2 pins. (Check for actual
+  // liveness and backupness below.)
+  if (pins.size() < 2)
+    return false;
+
+  const HashValueVector& from_cert_chain = ssl_info.public_key_hashes;
+  if (from_cert_chain.empty())
+    return false;
+
+  return IsBackupPinPresent(pins, from_cert_chain) &&
+         HashesIntersect(pins, from_cert_chain);
+}
+
+// "Public-Key-Pins" ":"
+//     "max-age" "=" delta-seconds ";"
+//     "pin-" algo "=" base64 [ ";" ... ]
+bool TransportSecurityState::DomainState::ParsePinsHeader(
+    const base::Time& now,
+    const std::string& value,
+    const SSLInfo& ssl_info) {
+  bool parsed_max_age = false;
+  int max_age_candidate = 0;
+  HashValueVector pins;
+
+  std::string source = value;
+
+  while (!source.empty()) {
+    StringPair semicolon = Split(source, ';');
+    semicolon.first = Strip(semicolon.first);
+    semicolon.second = Strip(semicolon.second);
+    StringPair equals = Split(semicolon.first, '=');
+    equals.first = Strip(equals.first);
+    equals.second = Strip(equals.second);
+
+    if (LowerCaseEqualsASCII(equals.first, "max-age")) {
+      if (equals.second.empty() ||
+          !MaxAgeToInt(equals.second.begin(), equals.second.end(),
+                       &max_age_candidate)) {
+        return false;
+      }
+      if (max_age_candidate > kMaxHSTSAgeSecs)
+        max_age_candidate = kMaxHSTSAgeSecs;
+      parsed_max_age = true;
+    } else if (StartsWithASCII(equals.first, "pin-", false)) {
+      HashValueTag tag;
+      if (LowerCaseEqualsASCII(equals.first, "pin-sha1")) {
+        tag = HASH_VALUE_SHA1;
+      } else if (LowerCaseEqualsASCII(equals.first, "pin-sha256")) {
+        tag = HASH_VALUE_SHA256;
+      } else {
+        LOG(WARNING) << "Ignoring pin of unknown type: " << equals.first;
+        return false;
+      }
+      if (!ParseAndAppendPin(equals.second, tag, &pins))
+        return false;
+    } else {
+      // Silently ignore unknown directives for forward compatibility.
+    }
+
+    source = semicolon.second;
+  }
+
+  if (!parsed_max_age || !IsPinListValid(pins, ssl_info))
+    return false;
+
+  dynamic_spki_hashes_expiry =
+      now + base::TimeDelta::FromSeconds(max_age_candidate);
+
+  dynamic_spki_hashes.clear();
+  if (max_age_candidate > 0) {
+    for (HashValueVector::const_iterator i = pins.begin();
+         i != pins.end(); ++i) {
+      dynamic_spki_hashes.push_back(*i);
+    }
+  }
+
+  return true;
+}
+
+// Parse the Strict-Transport-Security header, as currently defined in
+// http://tools.ietf.org/html/draft-ietf-websec-strict-transport-sec-14:
+//
+// Strict-Transport-Security = "Strict-Transport-Security" ":"
+//                             [ directive ]  *( ";" [ directive ] )
+//
+// directive                 = directive-name [ "=" directive-value ]
+// directive-name            = token
+// directive-value           = token | quoted-string
+//
+// 1.  The order of appearance of directives is not significant.
+//
+// 2.  All directives MUST appear only once in an STS header field.
+//     Directives are either optional or required, as stipulated in
+//     their definitions.
+//
+// 3.  Directive names are case-insensitive.
+//
+// 4.  UAs MUST ignore any STS header fields containing directives, or
+//     other header field value data, that does not conform to the
+//     syntax defined in this specification.
+//
+// 5.  If an STS header field contains directive(s) not recognized by
+//     the UA, the UA MUST ignore the unrecognized directives and if the
+//     STS header field otherwise satisfies the above requirements (1
+//     through 4), the UA MUST process the recognized directives.
+bool TransportSecurityState::DomainState::ParseSTSHeader(
+    const base::Time& now,
+    const std::string& value) {
+  int max_age_candidate = 0;
+  bool include_subdomains_candidate = false;
+
+  // We must see max-age exactly once.
+  int max_age_observed = 0;
+  // We must see includeSubdomains exactly 0 or 1 times.
+  int include_subdomains_observed = 0;
+
+  enum ParserState {
+    START,
+    AFTER_MAX_AGE_LABEL,
+    AFTER_MAX_AGE_EQUALS,
+    AFTER_MAX_AGE,
+    AFTER_INCLUDE_SUBDOMAINS,
+    AFTER_UNKNOWN_LABEL,
+    DIRECTIVE_END
+  } state = START;
+
+  StringTokenizer tokenizer(value, " \t=;");
+  tokenizer.set_options(StringTokenizer::RETURN_DELIMS);
+  tokenizer.set_quote_chars("\"");
+  std::string unquoted;
+  while (tokenizer.GetNext()) {
+    DCHECK(!tokenizer.token_is_delim() || tokenizer.token().length() == 1);
+    switch (state) {
+      case START:
+      case DIRECTIVE_END:
+        if (IsAsciiWhitespace(*tokenizer.token_begin()))
+          continue;
+        if (LowerCaseEqualsASCII(tokenizer.token(), "max-age")) {
+          state = AFTER_MAX_AGE_LABEL;
+          max_age_observed++;
+        } else if (LowerCaseEqualsASCII(tokenizer.token(),
+                                        "includesubdomains")) {
+          state = AFTER_INCLUDE_SUBDOMAINS;
+          include_subdomains_observed++;
+          include_subdomains_candidate = true;
+        } else {
+          state = AFTER_UNKNOWN_LABEL;
+        }
+        break;
+
+      case AFTER_MAX_AGE_LABEL:
+        if (IsAsciiWhitespace(*tokenizer.token_begin()))
+          continue;
+        if (*tokenizer.token_begin() != '=')
+          return false;
+        DCHECK_EQ(tokenizer.token().length(), 1U);
+        state = AFTER_MAX_AGE_EQUALS;
+        break;
+
+      case AFTER_MAX_AGE_EQUALS:
+        if (IsAsciiWhitespace(*tokenizer.token_begin()))
+          continue;
+        unquoted = HttpUtil::Unquote(tokenizer.token());
+        if (!MaxAgeToInt(unquoted.begin(),
+                         unquoted.end(),
+                         &max_age_candidate))
+          return false;
+        state = AFTER_MAX_AGE;
+        break;
+
+      case AFTER_MAX_AGE:
+      case AFTER_INCLUDE_SUBDOMAINS:
+        if (IsAsciiWhitespace(*tokenizer.token_begin()))
+          continue;
+        else if (*tokenizer.token_begin() == ';')
+          state = DIRECTIVE_END;
+        else
+          return false;
+        break;
+
+      case AFTER_UNKNOWN_LABEL:
+        // Consume and ignore the post-label contents (if any).
+        if (*tokenizer.token_begin() != ';')
+          continue;
+        state = DIRECTIVE_END;
+        break;
+    }
+  }
+
+  // We've consumed all the input.  Let's see what state we ended up in.
+  if (max_age_observed != 1 ||
+      (include_subdomains_observed != 0 && include_subdomains_observed != 1)) {
+    return false;
+  }
+
+  switch (state) {
+    case AFTER_MAX_AGE:
+    case AFTER_INCLUDE_SUBDOMAINS:
+    case AFTER_UNKNOWN_LABEL:
+      // BUG(156147), TODO(palmer): If max_age_candidate == 0, we should
+      // delete (or, not set) the HSTS record, rather than treat it as a
+      // normal value. However, now + 0 effectively deletes the entry
+      // because it will not be enforced (it expires immediately,
+      // essentially).
+      upgrade_expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
+      include_subdomains = include_subdomains_candidate;
+      upgrade_mode = MODE_FORCE_HTTPS;
+      return true;
+    case START:
+    case DIRECTIVE_END:
+    case AFTER_MAX_AGE_LABEL:
+    case AFTER_MAX_AGE_EQUALS:
+      return false;
+    default:
+      NOTREACHED();
+      return false;
+  }
+}
+
+static bool AddHash(const std::string& type_and_base64,
+                    HashValueVector* out) {
+  HashValue hash;
+
+  if (!TransportSecurityState::ParsePin(type_and_base64, &hash))
+    return false;
+
+  out->push_back(hash);
+  return true;
+}
+
+TransportSecurityState::~TransportSecurityState() {}
 
 void TransportSecurityState::DirtyNotify() {
   DCHECK(CalledOnValidThread());
@@ -97,724 +541,550 @@ void TransportSecurityState::DirtyNotify() {
     delegate_->StateIsDirty(this);
 }
 
-void TransportSecurityState::Clear() { 
-  dynamic_entries_[0].clear();
-  dynamic_entries_[1].clear();
-  DirtyNotify();
-}
+// static
+std::string TransportSecurityState::CanonicalizeHost(const std::string& host) {
+  // We cannot perform the operations as detailed in the spec here as |host|
+  // has already undergone IDN processing before it reached us. Thus, we check
+  // that there are no invalid characters in the host and lowercase the result.
 
-bool TransportSecurityState::ShouldUpgrade(const std::string& host) {
-  return GetPreloadUpgrade(host) || GetDynamicUpgrade(host);
-}
-
-bool TransportSecurityState::IsStrictOnErrors(const std::string& host) {
-  HashValueVector hashes, bad_hashes;
-  std::string tack_key_0, tack_key_1;
-  return GetPreloadUpgrade(host) || 
-    GetDynamicUpgrade(host) ||
-    GetPreloadSpki(host, &hashes, &bad_hashes) || 
-    GetDynamicSpki(host, &hashes) ||
-    GetPreloadTack(host, &tack_key_0, &tack_key_1) || 
-    GetDynamicTack(host, &tack_key_0, &tack_key_1);
-}
-
-bool TransportSecurityState::ShouldReportOnErrors(const std::string& host) {
-  // True if has the same set of pins as Google
-  HashValueVector google_hashes, bad_hashes;
-  HashValueVector hashes;
-  GetPreloadSpki("google.com", &google_hashes, &bad_hashes);
-  GetPreloadSpki(host, &hashes, &bad_hashes);
-  if (hashes.size() != google_hashes.size())
-    return false;
-  for (size_t count = 0; count < hashes.size(); count++) {
-    if (!hashes[count].Equals(google_hashes[count]))
-      return false;
+  std::string new_host;
+  if (!DNSDomainFromDot(host, &new_host)) {
+    // DNSDomainFromDot can fail if any label is > 63 bytes or if the whole
+    // name is >255 bytes. However, search terms can have those properties.
+    return std::string();
   }
-  return true;
+
+  for (size_t i = 0; new_host[i]; i += new_host[i] + 1) {
+    const unsigned label_length = static_cast<unsigned>(new_host[i]);
+    if (!label_length)
+      break;
+
+    for (size_t j = 0; j < label_length; ++j) {
+      // RFC 3490, 4.1, step 3
+      if (!IsSTD3ASCIIValidCharacter(new_host[i + 1 + j]))
+        return std::string();
+
+      new_host[i + 1 + j] = tolower(new_host[i + 1 + j]);
+    }
+
+    // step 3(b)
+    if (new_host[i + 1] == '-' ||
+        new_host[i + label_length] == '-') {
+      return std::string();
+    }
+  }
+
+  return new_host;
 }
 
-bool TransportSecurityState::CheckSpkiPins(const std::string& host,
-                                           HashValueVector& hashes) {
+// |ReportUMAOnPinFailure| uses these to report which domain was associated
+// with the public key pinning failure.
+//
+// DO NOT CHANGE THE ORDERING OF THESE NAMES OR REMOVE ANY OF THEM. Add new
+// domains at the END of the listing (but before DOMAIN_NUM_EVENTS).
+enum SecondLevelDomainName {
+  DOMAIN_NOT_PINNED,
 
-  HashValueVector preload_hashes, preload_bad_hashes, dynamic_hashes;
-  if (!GetPreloadSpki(host, &preload_hashes, &preload_bad_hashes) && 
-      !GetDynamicSpki(host, &dynamic_hashes))
+  DOMAIN_GOOGLE_COM,
+  DOMAIN_ANDROID_COM,
+  DOMAIN_GOOGLE_ANALYTICS_COM,
+  DOMAIN_GOOGLEPLEX_COM,
+  DOMAIN_YTIMG_COM,
+  DOMAIN_GOOGLEUSERCONTENT_COM,
+  DOMAIN_YOUTUBE_COM,
+  DOMAIN_GOOGLEAPIS_COM,
+  DOMAIN_GOOGLEADSERVICES_COM,
+  DOMAIN_GOOGLECODE_COM,
+  DOMAIN_APPSPOT_COM,
+  DOMAIN_GOOGLESYNDICATION_COM,
+  DOMAIN_DOUBLECLICK_NET,
+  DOMAIN_GSTATIC_COM,
+  DOMAIN_GMAIL_COM,
+  DOMAIN_GOOGLEMAIL_COM,
+  DOMAIN_GOOGLEGROUPS_COM,
+
+  DOMAIN_TORPROJECT_ORG,
+
+  DOMAIN_TWITTER_COM,
+  DOMAIN_TWIMG_COM,
+
+  DOMAIN_AKAMAIHD_NET,
+
+  DOMAIN_TOR2WEB_ORG,
+
+  DOMAIN_YOUTU_BE,
+  DOMAIN_GOOGLECOMMERCE_COM,
+  DOMAIN_URCHIN_COM,
+  DOMAIN_GOO_GL,
+  DOMAIN_G_CO,
+  DOMAIN_GOOGLE_AC,
+  DOMAIN_GOOGLE_AD,
+  DOMAIN_GOOGLE_AE,
+  DOMAIN_GOOGLE_AF,
+  DOMAIN_GOOGLE_AG,
+  DOMAIN_GOOGLE_AM,
+  DOMAIN_GOOGLE_AS,
+  DOMAIN_GOOGLE_AT,
+  DOMAIN_GOOGLE_AZ,
+  DOMAIN_GOOGLE_BA,
+  DOMAIN_GOOGLE_BE,
+  DOMAIN_GOOGLE_BF,
+  DOMAIN_GOOGLE_BG,
+  DOMAIN_GOOGLE_BI,
+  DOMAIN_GOOGLE_BJ,
+  DOMAIN_GOOGLE_BS,
+  DOMAIN_GOOGLE_BY,
+  DOMAIN_GOOGLE_CA,
+  DOMAIN_GOOGLE_CAT,
+  DOMAIN_GOOGLE_CC,
+  DOMAIN_GOOGLE_CD,
+  DOMAIN_GOOGLE_CF,
+  DOMAIN_GOOGLE_CG,
+  DOMAIN_GOOGLE_CH,
+  DOMAIN_GOOGLE_CI,
+  DOMAIN_GOOGLE_CL,
+  DOMAIN_GOOGLE_CM,
+  DOMAIN_GOOGLE_CN,
+  DOMAIN_CO_AO,
+  DOMAIN_CO_BW,
+  DOMAIN_CO_CK,
+  DOMAIN_CO_CR,
+  DOMAIN_CO_HU,
+  DOMAIN_CO_ID,
+  DOMAIN_CO_IL,
+  DOMAIN_CO_IM,
+  DOMAIN_CO_IN,
+  DOMAIN_CO_JE,
+  DOMAIN_CO_JP,
+  DOMAIN_CO_KE,
+  DOMAIN_CO_KR,
+  DOMAIN_CO_LS,
+  DOMAIN_CO_MA,
+  DOMAIN_CO_MZ,
+  DOMAIN_CO_NZ,
+  DOMAIN_CO_TH,
+  DOMAIN_CO_TZ,
+  DOMAIN_CO_UG,
+  DOMAIN_CO_UK,
+  DOMAIN_CO_UZ,
+  DOMAIN_CO_VE,
+  DOMAIN_CO_VI,
+  DOMAIN_CO_ZA,
+  DOMAIN_CO_ZM,
+  DOMAIN_CO_ZW,
+  DOMAIN_COM_AF,
+  DOMAIN_COM_AG,
+  DOMAIN_COM_AI,
+  DOMAIN_COM_AR,
+  DOMAIN_COM_AU,
+  DOMAIN_COM_BD,
+  DOMAIN_COM_BH,
+  DOMAIN_COM_BN,
+  DOMAIN_COM_BO,
+  DOMAIN_COM_BR,
+  DOMAIN_COM_BY,
+  DOMAIN_COM_BZ,
+  DOMAIN_COM_CN,
+  DOMAIN_COM_CO,
+  DOMAIN_COM_CU,
+  DOMAIN_COM_CY,
+  DOMAIN_COM_DO,
+  DOMAIN_COM_EC,
+  DOMAIN_COM_EG,
+  DOMAIN_COM_ET,
+  DOMAIN_COM_FJ,
+  DOMAIN_COM_GE,
+  DOMAIN_COM_GH,
+  DOMAIN_COM_GI,
+  DOMAIN_COM_GR,
+  DOMAIN_COM_GT,
+  DOMAIN_COM_HK,
+  DOMAIN_COM_IQ,
+  DOMAIN_COM_JM,
+  DOMAIN_COM_JO,
+  DOMAIN_COM_KH,
+  DOMAIN_COM_KW,
+  DOMAIN_COM_LB,
+  DOMAIN_COM_LY,
+  DOMAIN_COM_MT,
+  DOMAIN_COM_MX,
+  DOMAIN_COM_MY,
+  DOMAIN_COM_NA,
+  DOMAIN_COM_NF,
+  DOMAIN_COM_NG,
+  DOMAIN_COM_NI,
+  DOMAIN_COM_NP,
+  DOMAIN_COM_NR,
+  DOMAIN_COM_OM,
+  DOMAIN_COM_PA,
+  DOMAIN_COM_PE,
+  DOMAIN_COM_PH,
+  DOMAIN_COM_PK,
+  DOMAIN_COM_PL,
+  DOMAIN_COM_PR,
+  DOMAIN_COM_PY,
+  DOMAIN_COM_QA,
+  DOMAIN_COM_RU,
+  DOMAIN_COM_SA,
+  DOMAIN_COM_SB,
+  DOMAIN_COM_SG,
+  DOMAIN_COM_SL,
+  DOMAIN_COM_SV,
+  DOMAIN_COM_TJ,
+  DOMAIN_COM_TN,
+  DOMAIN_COM_TR,
+  DOMAIN_COM_TW,
+  DOMAIN_COM_UA,
+  DOMAIN_COM_UY,
+  DOMAIN_COM_VC,
+  DOMAIN_COM_VE,
+  DOMAIN_COM_VN,
+  DOMAIN_GOOGLE_CV,
+  DOMAIN_GOOGLE_CZ,
+  DOMAIN_GOOGLE_DE,
+  DOMAIN_GOOGLE_DJ,
+  DOMAIN_GOOGLE_DK,
+  DOMAIN_GOOGLE_DM,
+  DOMAIN_GOOGLE_DZ,
+  DOMAIN_GOOGLE_EE,
+  DOMAIN_GOOGLE_ES,
+  DOMAIN_GOOGLE_FI,
+  DOMAIN_GOOGLE_FM,
+  DOMAIN_GOOGLE_FR,
+  DOMAIN_GOOGLE_GA,
+  DOMAIN_GOOGLE_GE,
+  DOMAIN_GOOGLE_GG,
+  DOMAIN_GOOGLE_GL,
+  DOMAIN_GOOGLE_GM,
+  DOMAIN_GOOGLE_GP,
+  DOMAIN_GOOGLE_GR,
+  DOMAIN_GOOGLE_GY,
+  DOMAIN_GOOGLE_HK,
+  DOMAIN_GOOGLE_HN,
+  DOMAIN_GOOGLE_HR,
+  DOMAIN_GOOGLE_HT,
+  DOMAIN_GOOGLE_HU,
+  DOMAIN_GOOGLE_IE,
+  DOMAIN_GOOGLE_IM,
+  DOMAIN_GOOGLE_INFO,
+  DOMAIN_GOOGLE_IQ,
+  DOMAIN_GOOGLE_IS,
+  DOMAIN_GOOGLE_IT,
+  DOMAIN_IT_AO,
+  DOMAIN_GOOGLE_JE,
+  DOMAIN_GOOGLE_JO,
+  DOMAIN_GOOGLE_JOBS,
+  DOMAIN_GOOGLE_JP,
+  DOMAIN_GOOGLE_KG,
+  DOMAIN_GOOGLE_KI,
+  DOMAIN_GOOGLE_KZ,
+  DOMAIN_GOOGLE_LA,
+  DOMAIN_GOOGLE_LI,
+  DOMAIN_GOOGLE_LK,
+  DOMAIN_GOOGLE_LT,
+  DOMAIN_GOOGLE_LU,
+  DOMAIN_GOOGLE_LV,
+  DOMAIN_GOOGLE_MD,
+  DOMAIN_GOOGLE_ME,
+  DOMAIN_GOOGLE_MG,
+  DOMAIN_GOOGLE_MK,
+  DOMAIN_GOOGLE_ML,
+  DOMAIN_GOOGLE_MN,
+  DOMAIN_GOOGLE_MS,
+  DOMAIN_GOOGLE_MU,
+  DOMAIN_GOOGLE_MV,
+  DOMAIN_GOOGLE_MW,
+  DOMAIN_GOOGLE_NE,
+  DOMAIN_NE_JP,
+  DOMAIN_GOOGLE_NET,
+  DOMAIN_GOOGLE_NL,
+  DOMAIN_GOOGLE_NO,
+  DOMAIN_GOOGLE_NR,
+  DOMAIN_GOOGLE_NU,
+  DOMAIN_OFF_AI,
+  DOMAIN_GOOGLE_PK,
+  DOMAIN_GOOGLE_PL,
+  DOMAIN_GOOGLE_PN,
+  DOMAIN_GOOGLE_PS,
+  DOMAIN_GOOGLE_PT,
+  DOMAIN_GOOGLE_RO,
+  DOMAIN_GOOGLE_RS,
+  DOMAIN_GOOGLE_RU,
+  DOMAIN_GOOGLE_RW,
+  DOMAIN_GOOGLE_SC,
+  DOMAIN_GOOGLE_SE,
+  DOMAIN_GOOGLE_SH,
+  DOMAIN_GOOGLE_SI,
+  DOMAIN_GOOGLE_SK,
+  DOMAIN_GOOGLE_SM,
+  DOMAIN_GOOGLE_SN,
+  DOMAIN_GOOGLE_SO,
+  DOMAIN_GOOGLE_ST,
+  DOMAIN_GOOGLE_TD,
+  DOMAIN_GOOGLE_TG,
+  DOMAIN_GOOGLE_TK,
+  DOMAIN_GOOGLE_TL,
+  DOMAIN_GOOGLE_TM,
+  DOMAIN_GOOGLE_TN,
+  DOMAIN_GOOGLE_TO,
+  DOMAIN_GOOGLE_TP,
+  DOMAIN_GOOGLE_TT,
+  DOMAIN_GOOGLE_US,
+  DOMAIN_GOOGLE_UZ,
+  DOMAIN_GOOGLE_VG,
+  DOMAIN_GOOGLE_VU,
+  DOMAIN_GOOGLE_WS,
+
+  // Boundary value for UMA_HISTOGRAM_ENUMERATION:
+  DOMAIN_NUM_EVENTS
+};
+
+// PublicKeyPins contains a number of SubjectPublicKeyInfo hashes for a site.
+// The validated certificate chain for the site must not include any of
+// |excluded_hashes| and must include one or more of |required_hashes|.
+struct PublicKeyPins {
+  const char* const* required_hashes;
+  const char* const* excluded_hashes;
+};
+
+struct HSTSPreload {
+  uint8 length;
+  bool include_subdomains;
+  char dns_name[34];
+  bool https_required;
+  PublicKeyPins pins;
+  SecondLevelDomainName second_level_domain_name;
+};
+
+static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
+                       const std::string& canonicalized_host, size_t i,
+                       TransportSecurityState::DomainState* out, bool* ret) {
+  for (size_t j = 0; j < num_entries; j++) {
+    if (entries[j].length == canonicalized_host.size() - i &&
+        memcmp(entries[j].dns_name, &canonicalized_host[i],
+               entries[j].length) == 0) {
+      if (!entries[j].include_subdomains && i != 0) {
+        *ret = false;
+      } else {
+        out->include_subdomains = entries[j].include_subdomains;
+        *ret = true;
+        if (!entries[j].https_required)
+          out->upgrade_mode = TransportSecurityState::DomainState::MODE_DEFAULT;
+        if (entries[j].pins.required_hashes) {
+          const char* const* hash = entries[j].pins.required_hashes;
+          while (*hash) {
+            bool ok = AddHash(*hash, &out->static_spki_hashes);
+            DCHECK(ok) << " failed to parse " << *hash;
+            hash++;
+          }
+        }
+        if (entries[j].pins.excluded_hashes) {
+          const char* const* hash = entries[j].pins.excluded_hashes;
+          while (*hash) {
+            bool ok = AddHash(*hash, &out->bad_static_spki_hashes);
+            DCHECK(ok) << " failed to parse " << *hash;
+            hash++;
+          }
+        }
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+#include "net/base/transport_security_state_static.h"
+
+// Returns the HSTSPreload entry for the |canonicalized_host| in |entries|,
+// or NULL if there is none. Prefers exact hostname matches to those that
+// match only because HSTSPreload.include_subdomains is true.
+//
+// |canonicalized_host| should be the hostname as canonicalized by
+// CanonicalizeHost.
+static const struct HSTSPreload* GetHSTSPreload(
+    const std::string& canonicalized_host,
+    const struct HSTSPreload* entries,
+    size_t num_entries) {
+  for (size_t i = 0; canonicalized_host[i]; i += canonicalized_host[i] + 1) {
+    for (size_t j = 0; j < num_entries; j++) {
+      const struct HSTSPreload* entry = entries + j;
+
+      if (i != 0 && !entry->include_subdomains)
+        continue;
+
+      if (entry->length == canonicalized_host.size() - i &&
+          memcmp(entry->dns_name, &canonicalized_host[i], entry->length) == 0) {
+        return entry;
+      }
+    }
+  }
+
+  return NULL;
+}
+
+// static
+bool TransportSecurityState::IsGooglePinnedProperty(const std::string& host,
+                                                    bool sni_enabled) {
+  std::string canonicalized_host = CanonicalizeHost(host);
+  const struct HSTSPreload* entry =
+      GetHSTSPreload(canonicalized_host, kPreloadedSTS, kNumPreloadedSTS);
+
+  if (entry && entry->pins.required_hashes == kGoogleAcceptableCerts)
     return true;
 
+  if (sni_enabled) {
+    entry = GetHSTSPreload(canonicalized_host, kPreloadedSNISTS,
+                           kNumPreloadedSNISTS);
+    if (entry && entry->pins.required_hashes == kGoogleAcceptableCerts)
+      return true;
+  }
+
+  return false;
+}
+
+// static
+void TransportSecurityState::ReportUMAOnPinFailure(const std::string& host) {
+  std::string canonicalized_host = CanonicalizeHost(host);
+
+  const struct HSTSPreload* entry =
+      GetHSTSPreload(canonicalized_host, kPreloadedSTS, kNumPreloadedSTS);
+
+  if (!entry) {
+    entry = GetHSTSPreload(canonicalized_host, kPreloadedSNISTS,
+                           kNumPreloadedSNISTS);
+  }
+
+  if (!entry) {
+    // We don't care to report pin failures for dynamic pins.
+    return;
+  }
+
+  DCHECK(entry);
+  DCHECK(entry->pins.required_hashes);
+  DCHECK(entry->second_level_domain_name != DOMAIN_NOT_PINNED);
+
+  UMA_HISTOGRAM_ENUMERATION("Net.PublicKeyPinFailureDomain",
+                            entry->second_level_domain_name, DOMAIN_NUM_EVENTS);
+}
+
+// static
+const char* TransportSecurityState::HashValueLabel(
+    const HashValue& hash_value) {
+  switch (hash_value.tag) {
+    case HASH_VALUE_SHA1:
+      return "sha1/";
+    case HASH_VALUE_SHA256:
+      return "sha256/";
+    default:
+      NOTREACHED();
+      LOG(WARNING) << "Invalid fingerprint of unknown type " << hash_value.tag;
+      return "unknown/";
+  }
+}
+
+bool TransportSecurityState::GetStaticDomainState(
+    const std::string& canonicalized_host,
+    bool sni_enabled,
+    DomainState* out) {
+  DCHECK(CalledOnValidThread());
+
+  out->upgrade_mode = DomainState::MODE_FORCE_HTTPS;
+  out->include_subdomains = false;
+
+  for (size_t i = 0; canonicalized_host[i]; i += canonicalized_host[i] + 1) {
+    std::string host_sub_chunk(&canonicalized_host[i],
+                               canonicalized_host.size() - i);
+    out->domain = DNSDomainToString(host_sub_chunk);
+    std::string hashed_host(HashHost(host_sub_chunk));
+    if (forced_hosts_.find(hashed_host) != forced_hosts_.end()) {
+      *out = forced_hosts_[hashed_host];
+      out->domain = DNSDomainToString(host_sub_chunk);
+      return true;
+    }
+    bool ret;
+    if (HasPreload(kPreloadedSTS, kNumPreloadedSTS, canonicalized_host, i, out,
+                   &ret)) {
+      return ret;
+    }
+    if (sni_enabled &&
+        HasPreload(kPreloadedSNISTS, kNumPreloadedSNISTS, canonicalized_host, i,
+                   out, &ret)) {
+      return ret;
+    }
+  }
+
+  return false;
+}
+
+void TransportSecurityState::AddOrUpdateEnabledHosts(
+    const std::string& hashed_host, const DomainState& state) {
+  enabled_hosts_[hashed_host] = state;
+}
+
+void TransportSecurityState::AddOrUpdateForcedHosts(
+    const std::string& hashed_host, const DomainState& state) {
+  forced_hosts_[hashed_host] = state;
+}
+
+TransportSecurityState::DomainState::DomainState()
+    : upgrade_mode(MODE_FORCE_HTTPS),
+      created(base::Time::Now()),
+      include_subdomains(false) {
+}
+
+TransportSecurityState::DomainState::~DomainState() {
+}
+
+bool TransportSecurityState::DomainState::IsChainOfPublicKeysPermitted(
+    const HashValueVector& hashes) const {
   // Validate that hashes is not empty. By the time this code is called (in
   // production), that should never happen, but it's good to be defensive.
   // And, hashes *can* be empty in some test scenarios.
   if (hashes.empty()) {
-    LOG(ERROR) << "Rejecting empty public key chain for pinned domain " << host;
+    LOG(ERROR) << "Rejecting empty public key chain for public-key-pinned "
+                  "domain " << domain;
     return false;
   }
 
-  if (HashesIntersect(preload_bad_hashes, hashes)) {
-    LOG(ERROR) << "Rejecting public key chain for domain " << host
+  if (HashesIntersect(bad_static_spki_hashes, hashes)) {
+    LOG(ERROR) << "Rejecting public key chain for domain " << domain
                << ". Validated chain: " << HashesToBase64String(hashes)
                << ", matches one or more bad hashes: "
-               << HashesToBase64String(preload_bad_hashes);
+               << HashesToBase64String(bad_static_spki_hashes);
     return false;
   }
 
   // If there are no pins, then any valid chain is acceptable.
-  if (preload_hashes.empty() && dynamic_hashes.empty())
+  if (dynamic_spki_hashes.empty() && static_spki_hashes.empty())
     return true;
 
-  if (HashesIntersect(dynamic_hashes, hashes) ||
-      HashesIntersect(preload_hashes, hashes)) {
+  if (HashesIntersect(dynamic_spki_hashes, hashes) ||
+      HashesIntersect(static_spki_hashes, hashes)) {
     return true;
   }
 
-  LOG(ERROR) << "Rejecting public key chain for domain " << host
+  LOG(ERROR) << "Rejecting public key chain for domain " << domain
              << ". Validated chain: " << HashesToBase64String(hashes)
-             << ", expected: " << HashesToBase64String(dynamic_hashes)
-             << " or: " << HashesToBase64String(preload_hashes);
+             << ", expected: " << HashesToBase64String(dynamic_spki_hashes)
+             << " or: " << HashesToBase64String(static_spki_hashes);
   return false;
 }
 
-bool TransportSecurityState::CheckTackPins(const std::string& host,
-                                           HashValueVector& hashes,
-                                           uint8* tackExt,
-                                           uint32_t tackExtLen) {
-  std::string static_tack_key_0;
-  std::string static_tack_key_1;
-  std::string dynamic_tack_key_0;
-  std::string dynamic_tack_key_1;
+bool TransportSecurityState::DomainState::ShouldRedirectHTTPToHTTPS() const {
+  return upgrade_mode == MODE_FORCE_HTTPS;
+}
 
-  if (!GetPreloadTack(host, &static_tack_key_0, &static_tack_key_1) &&
-      !GetDynamicTack(host, &dynamic_tack_key_0, &dynamic_tack_key_1))
-    return true;
- 
-  // Get end-entity key hash (ASSUMPTION: first SHA256 element in hashes??)
-  uint8* keyHash = NULL;
-  for (size_t count = 0; count < hashes.size(); count++) {
-    HashValue& hashValue = hashes[count];
-    if (hashValue.tag == HASH_VALUE_SHA256) {
-      keyHash = hashValue.data();
-      break;
-    }
-  }
-  if (keyHash == NULL) // Shouldn't happen!
-    return false;
-        
-  // Get current time (in uint32_t for minutes since epoch)
-  // uint32_t currentTime = (base::Time::Now() - base::Time::UnixEpoch()).InMinutes();
-
-  // TODO!!! ACTUAL TACK PROCESSING
-
+bool TransportSecurityState::DomainState::Equals(
+    const DomainState& other) const {
+  // TODO(palmer): Implement this
+  (void) other;
   return true;
 }
 
-bool TransportSecurityState::AddHSTSHeader(const std::string& host, 
-                                           const std::string& value) {
-  DynamicEntry entry;
-  DynamicTag& tag = entry.tags[UPGRADE_TAG];
-  base::Time now = base::Time::Now();
-  if (ParseHSTSHeader(now, value, &tag.present, &tag.expiry, &tag.include_subdomains)) {
-    tag.created = now;
-    MergeEntry(host, entry);
-    DirtyNotify();
-    return true;
-  }
-  return false;
+bool TransportSecurityState::DomainState::HasPins() const {
+  return static_spki_hashes.size() > 0 ||
+         bad_static_spki_hashes.size() > 0 ||
+         dynamic_spki_hashes.size() > 0;
 }
-
-bool TransportSecurityState::AddHPKPHeader(const std::string& host, 
-                                               const std::string& value,
-                                               const SSLInfo* ssl_info) {
-  DynamicEntry entry;
-  DynamicTag& tag = entry.tags[SPKI_TAG];
-  base::Time now = base::Time::Now();
-  if (ParseHPKPHeader(now, value, ssl_info, &entry.hashes, &tag.present, &tag.expiry)) {
-    tag.created = now;
-    MergeEntry(host, entry);
-    DirtyNotify();
-    return true;
-  }
-  return false;
-}
-
-void TransportSecurityState::UserAddUpgrade(const std::string& host, 
-                                            bool include_subdomains) {
-  // !!! The name will be canonicalized later, but we could do further 
-  // checks that the user is not setting an invalid name (eg 
-  // an empty string like " ", "www..example.com", etc.)
-  if (host.empty())
-    return;
-
-  DynamicEntry entry;
-  DynamicTag& tag = entry.tags[UPGRADE_TAG];
-  tag.created = base::Time::Now();
-  // !!! 1000 days matches existing behavior for pins created via
-  // chrome::/net-internals, but maybe it should be longer?
-  tag.expiry = tag.created + base::TimeDelta::FromDays(1000);
-  tag.present = true;
-  tag.include_subdomains = include_subdomains;
-  MergeEntry(host, entry);
-  DirtyNotify();
-}
-
-void TransportSecurityState::UserAddSpkiPins(const std::string& host, 
-                                             bool include_subdomains, 
-                                             HashValueVector &hashes) {
-  // !!! The name will be canonicalized later, but we should do further 
-  // checks that the user is not setting an invalid name (eg 
-  // an empty string like " ", "www..example.com", etc.)
-  if (host.empty())
-    return;
-
-  DynamicEntry entry;
-  DynamicTag& tag = entry.tags[SPKI_TAG];
-  tag.created = base::Time::Now();
-  // !!! 1000 days matches existing behavior for pins created via
-  // chrome::/net-internals, but maybe it should be longer?
-  tag.expiry = tag.created + base::TimeDelta::FromDays(1000);
-  tag.present = true;
-  tag.include_subdomains = include_subdomains;
-  entry.hashes = hashes;
-  MergeEntry(host, entry);
-  DirtyNotify();  
-}
-
-void TransportSecurityState::DeleteSince(const base::Time& time) {
-  DCHECK(CalledOnValidThread());
-
-  bool dirtied = false;
-
-  // Iterate through dynamic entries...
-  for (int count = 0; count < 2; count++) {
-    DynamicEntries* dynamic_entries = &dynamic_entries_[count];
-
-    DynamicEntriesIterator iter = dynamic_entries->begin();
-    while (iter != dynamic_entries->end()) {
-      // Check each tag in the entry
-      //   If the data is present, check it for recency
-      //     If recent, mark as non-present and set the dirty flag
-      DynamicEntry& entry = iter->second;
-      bool empty_entry = true;
-      for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
-        if (entry.tags[tag_index].present) {
-          if (entry.tags[tag_index].created >= time) {
-            entry.tags[tag_index].present = false;
-            dirtied = true;
-          }
-          else
-            empty_entry = false;
-        }
-        if (empty_entry) {
-          dynamic_entries->erase(iter++);
-          dirtied = true; // redundant unless the entry was empty to begin with
-        }
-        else
-          iter++;
-      }
-    }
-  }
-  if (dirtied)
-    DirtyNotify();
-}
-
-void TransportSecurityState::DeleteDynamicEntry(const std::string& host) {
-  dynamic_entries_[0].erase(CanonicalizeName(host));
-  dynamic_entries_[1].erase(CanonicalizeAndHashOldFormat(host));
-  DirtyNotify();
-}
-
-bool TransportSecurityState::GetPreloadUpgrade(const std::string& host, bool exact_match) {
-  return GetPreloadEntry(UPGRADE_TAG, host, exact_match);
-}
-
-bool TransportSecurityState::GetPreloadSpki(const std::string& host, 
-                                            HashValueVector* hashes, 
-                                            HashValueVector* bad_hashes, 
-                                            bool exact_match) {
-  hashes->clear();
-  bad_hashes->clear();
-
-  const PreloadEntry* entry;
-  if (!(entry = GetPreloadEntry(SPKI_TAG, host, exact_match)))
-    return false;
-  if (entry->hashes) {
-    const char* const* hash = entry->hashes;
-    while (*hash) {
-      HashValue hash_value(HASH_VALUE_SHA1);
-      memcpy(hash_value.data(), hash, 20);
-      hashes->push_back(hash_value);
-      hash++;
-    }
-  }
-  if (entry->bad_hashes) {
-    const char* const* bad_hash = entry->bad_hashes;
-    while (*bad_hash) {
-      HashValue bad_hash_value(HASH_VALUE_SHA1);
-      memcpy(bad_hash_value.data(), bad_hash, 20);
-      bad_hashes->push_back(bad_hash_value);
-      bad_hash++;
-    }
-  }
-  return true;    
-}
-
-bool TransportSecurityState::GetPreloadTack(const std::string& host, 
-                                            std::string* tack_key_0, 
-                                            std::string* tack_key_1,
-                                            bool exact_match) {
-  tack_key_0->clear();
-  tack_key_1->clear();
-
-  const PreloadEntry* entry;
-  bool retval = false;
-  if ((entry = GetPreloadEntry(TACK_0_TAG, host, exact_match)) != NULL) {
-    retval = true;
-    *tack_key_0 = entry->tack_key_0;
-  }
-  if ((entry = GetPreloadEntry(TACK_1_TAG, host, exact_match)) != NULL) {
-    retval = true;
-    *tack_key_1 = entry->tack_key_1;
-  }
-  return retval;
-}
-
-bool TransportSecurityState::GetDynamicUpgrade(const std::string& host, 
-                                               bool exact_match) {
-  DynamicEntry entry;
-  return GetDynamicEntry(UPGRADE_TAG, host, &entry, exact_match);
-}
-
-bool TransportSecurityState::GetDynamicSpki(const std::string& host, 
-                                            HashValueVector* hashes,
-                                            bool exact_match) {
-  hashes->clear();
-  // Dynamic pins are not enforced if the build is sufficiently old.
-  // !!! Per Adam's request, but I'm not sure I agree...
-  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
-    return false;
-
-  DynamicEntry entry;
-  if (!GetDynamicEntry(SPKI_TAG, host, &entry, exact_match))
-    return false;
-  *hashes = entry.hashes;
-  return true;
-}
-
-bool TransportSecurityState::GetDynamicTack(const std::string& host, 
-                                            std::string* tack_key_0, 
-                                            std::string* tack_key_1,
-                                            bool exact_match) {
-  tack_key_0->clear();
-  tack_key_1->clear();
-
-  // Dynamic pins are not enforced if the build is sufficiently old.
-  // !!! Per Adam's request, but I'm not sure I agree...
-  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */)
-    return false;
-
-  DynamicEntry entry;
-  bool retval = false;
-  if (GetDynamicEntry(TACK_0_TAG, host, &entry, exact_match)) {
-    retval = true;
-    *tack_key_0 = entry.tack_key_0;
-  }
-  if (GetDynamicEntry(TACK_1_TAG, host, &entry, exact_match)) {
-    retval = true;
-    *tack_key_1 = entry.tack_key_0;
-  }
-  return retval;
-}
-
-// Iterate over ("www.example.com", "example.com", "com")
-//   If exact_match is specified, then only returns "www.example.com"
-struct DomainNameIterator {
-  DomainNameIterator(const std::string& host, bool exact_match) {
-    name_ = CanonicalizeName(host);
-    exact_match_ = exact_match;
-    index_ = 0;
-  }
-
-  bool HasNext() {
-    if (exact_match_)
-      return index_ == 0;
-    return name_[index_] != 0;
-  }
-
-  void Advance() {
-    for (index_++; name_[index_] != '.' && name_[index_] != 0; index_++);
-    if (name_[index_] == '.')
-      index_++;
-  }
-
-  std::string GetName() {
-    return name_.substr(index_, name_.size() - index_);
-  }
-
-  bool IsFullHostname() {
-    return index_ == 0;
-  }
-
-  std::string name_;  // The full hostname, canonicalized to lowercase
-  size_t index_;      // Index into name_
-  bool exact_match_;
-};
-
-const PreloadEntry* TransportSecurityState::GetPreloadEntry(
-  TagIndex tag_index, 
-  const std::string& host, 
-  bool exact_match) {
-
-  // Preloads are not enforced if the build is sufficiently old. Chrome
-  // users should get updates every six weeks or so, but it's possible
-  // that some users will stop getting updates for some reason. We
-  // don't want those users building up as a pool of people with bad
-  // preloads.
-  if ((base::Time::Now() - base::GetBuildTime()).InDays() >= 70 /* 10 weeks */) {
-    return NULL;
-  }
-
-  for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
-    std::string name = iter.GetName();
-
-    // Find a preload entry matching the name
-    const PreloadEntry* entries = kPreloadedSTS;
-    size_t num_entries = kNumPreloadedSTS;    
-
-    for (size_t index = 0; index < num_entries; index++) {
-      const PreloadEntry* entry = &entries[index];
-
-      // Does the entry name match the search name?
-      // If it's a full match, or the entry name has include_subdomains...
-      if (entry->name_length == name.size()  && 
-          memcmp(entry->name, name.data(), entry->name_length) == 0 &&          
-          (iter.IsFullHostname() || entry->include_subdomains)) {
-
-        // This entry is in scope, see if it has relevant data
-        switch (tag_index) {
-        case UPGRADE_TAG:
-          if (entry->upgrade)
-            return entry;
-          break;
-        case SPKI_TAG:
-          if (entry->hashes || entry->bad_hashes)
-            return entry;
-          break;
-        case TACK_0_TAG:
-          if (entry->tack_key_0)
-            return entry;
-          break;
-        case TACK_1_TAG:
-          if (entry->tack_key_1)
-            return entry;
-          break;
-        default:
-          return NULL; // Bad argument
-        }
-      }
-    }
-  }
-  return NULL;
-}
-
-bool TransportSecurityState::GetDynamicEntry(TagIndex tag_index,
-                                             const std::string& host,
-                                             DynamicEntry* result,
-                                             bool exact_match) {
-
-  for (DomainNameIterator iter(host, exact_match); iter.HasNext(); iter.Advance()) {
-    
-    for (int count = 0; count < 2; count++) {
-      DynamicEntries* dynamic_entries = &dynamic_entries_[count];
-      
-      std::string lookup_name = iter.GetName();
-      if (count == 1)
-        lookup_name = CanonicalizeAndHashOldFormat(lookup_name);
-      
-      // If an entry contains relevant data and is non-expired and either 
-      // matches the full hostname or has include_subdomains, return it
-      DynamicEntriesIterator find_result = dynamic_entries->find(lookup_name);
-      if (find_result != dynamic_entries->end()) {
-        // !!! If we've found an old-format hashed entry, it would be possible
-        // to convert it to new-format, is it worth it?
-        DynamicEntry& entry = find_result->second;
-        DynamicTag& tag = entry.tags[tag_index];
-        if (tag.present && base::Time::Now() < tag.expiry && 
-            (iter.IsFullHostname() || tag.include_subdomains)) {
-          *result = entry;
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
-void TransportSecurityState::MergeEntry(const std::string& name, 
-                                        const DynamicEntry& new_entry,
-                                        bool old_format) {
-  base::Time now = base::Time::Now();
-  DynamicEntries *dynamic_entries;
-  DynamicEntry* entry;
-  std::string lookup_name;
-
-  // We're either passed a normal domain name for dynamic_entries_[0],
-  // or an old-format hashed name for dynamic_entries_[1]
-  if (!old_format) {
-    lookup_name = CanonicalizeName(name);
-    dynamic_entries = &dynamic_entries_[0];
-  } else {
-    lookup_name = name;
-    dynamic_entries = &dynamic_entries_[1];
-  }
-      
-  // If this is a new entry and the store is full, return silently
-  // !!! It may be better to search for expired entries to prune,
-  // but we don't currently do any pruning of expired entries
-  // except on startup when this function is called via Deserialize().
-  DynamicEntriesIterator iter = dynamic_entries->find(lookup_name);
-  if (iter == dynamic_entries->end()) {
-    if (dynamic_entries->size() >= max_dynamic_entries_)
-      return;
-    entry = &((*dynamic_entries)[lookup_name]);
-  }
-  else
-    entry = &iter->second;
-
-  // Merge the new entry into the old, overwriting any data where
-  // the new entry has a present tag
-  for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
-    DynamicTag& tag = entry->tags[tag_index];
-    const DynamicTag& new_tag = new_entry.tags[tag_index];
-
-    if (new_tag.present) {
-      if (!tag.present)
-        tag.created = new_tag.created;
-      tag.present = true;
-      tag.expiry = new_tag.expiry;
-      tag.include_subdomains = new_tag.include_subdomains;
-      
-      if (tag_index == SPKI_TAG)
-        entry->hashes = new_entry.hashes;
-      else if (tag_index == TACK_0_TAG)
-        entry->tack_key_0 = new_entry.tack_key_0;
-      else if (tag_index == TACK_1_TAG)
-        entry->tack_key_1 = new_entry.tack_key_1;
-    }
-  }
-
-  // Prune any expired tags (and possibly the entire entry)
-  // (Could be expired due to new data, such as max-age=0, or old data, don't care)
-  bool entry_is_empty = true;
-  for (TagIndex tag_index = UPGRADE_TAG; tag_index != TOTAL_TAGS; tag_index++) {
-    DynamicTag& tag = entry->tags[tag_index];
-    if (tag.present) {
-      if (tag.expiry <= now)
-        tag.present = false;
-     else
-        entry_is_empty = false;
-    }
-  }
-  if (entry_is_empty) {
-    dynamic_entries->erase(lookup_name);
-  }
-}
-
-bool TransportSecurityState::Serialize(std::string* output) {
-
-  DictionaryValue top_level;
-
-  ListValue* entries = new ListValue();
-
-  for (int count = 0; count < 2; count++) {
-    DynamicEntries* dynamic_entries = &dynamic_entries_[count];
-
-    DynamicEntriesIterator iter;
-    for (iter = dynamic_entries->begin(); iter != dynamic_entries->end(); iter++) {
-      const std::string& name = iter->first;
-      DynamicEntry& entry = iter->second;
-      
-      // Each tag gets its data written out as a separate JSON entry.  In cases
-      // where the tags share metadata (ie include_subdomains / created / expiry
-      // are equal across HSTS / pinning), it would be more efficient to detect
-      // this and write out a single JSON entry
-      for (size_t tag_index = UPGRADE_TAG; tag_index < TOTAL_TAGS; tag_index++) {
-        DynamicTag& tag = entry.tags[tag_index];
-        if (tag.present) {
-          DictionaryValue* json_entry = new DictionaryValue;
-          if (count == 0)
-            json_entry->SetString("name", name);
-          else if (count == 1) {
-            json_entry->SetString("name_old_format", name);
-          }
-          json_entry->SetBoolean("include_subdomains", tag.include_subdomains);
-          json_entry->SetDouble("created", floor(tag.created.ToDoubleT()));
-          json_entry->SetDouble("expiry", floor(tag.expiry.ToDoubleT()));
-          switch (tag_index) {
-          case UPGRADE_TAG:
-            json_entry->SetBoolean("upgrade", "true");
-            break;
-          case SPKI_TAG:
-            json_entry->Set("spki_hashes", SPKIHashesToListValue(entry.hashes));
-            break;
-          case TACK_0_TAG:
-            json_entry->SetString("tack_key_0", entry.tack_key_0);
-            break;
-          case TACK_1_TAG:
-            json_entry->SetString("tack_key_1", entry.tack_key_1);
-            break;
-          }
-          entries->Append(json_entry); 
-        }
-      }    
-    }
-  }
-  top_level.SetInteger("version", 2);
-  top_level.Set("entries", entries);
-  // Below options result in pretty JSON, and no microseconds precision
-  base::JSONWriter::WriteWithOptions(&top_level,
-                                 base::JSONWriter::OPTIONS_PRETTY_PRINT | 
-                                 base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION,
-                                 output);
-  return true;
-}
-
-bool TransportSecurityState::Deserialize(const std::string& input) {
-  scoped_ptr<Value> value(base::JSONReader::Read(input));
-  DictionaryValue* dict_value;
-  if (!value.get() || !value->GetAsDictionary(&dict_value))
-    return false;
-
-  // If we can't find the version field, we parse the old version of the file
-  int version;
-  if (!dict_value->GetInteger("version", &version)) {
-
-    // This code is copied mostly intact from old version, preserving
-    // somewhat legacy names and style...
-    const char kIncludeSubdomains[] = "include_subdomains";
-    const char kMode[] = "mode";
-    const char kExpiry[] = "expiry";
-    const char kForceHTTPS[] = "force-https";
-    const char kStrict[] = "strict";
-    const char kDefault[] = "default";
-    const char kPinningOnly[] = "pinning-only";
-    const char kCreated[] = "created";
-
-    for (DictionaryValue::key_iterator i = dict_value->begin_keys();
-         i != dict_value->end_keys(); ++i) {
-      DictionaryValue* parsed;
-      if (!dict_value->GetDictionary(*i, &parsed)) {
-        LOG(WARNING) << "Could not parse entry " << *i << "; skipping entry";
-        continue;
-      }
-      
-      std::string mode_string;
-      double created;
-      double expiry;
-
-      // CODE CHANGE : DomainState -> DynamicEntry
-      DynamicEntry entry;
-      DynamicTag& tag = entry.tags[UPGRADE_TAG];
-      
-      if (!parsed->GetBoolean(kIncludeSubdomains,
-                              &tag.include_subdomains) ||
-          !parsed->GetString(kMode, &mode_string) ||
-          !parsed->GetDouble(kExpiry, &expiry)) {
-        LOG(WARNING) << "Could not parse some elements of entry " << *i
-                     << "; skipping entry";
-        continue;
-      }
-      
-      // !!! We only load up old-format HSTS data, assuming there's
-      // unlikely to be useful dynamic pins in old-format data.  OK?
-      if (mode_string == kForceHTTPS || mode_string == kStrict) {
-        tag.present = true;
-      } else if (mode_string == kDefault || mode_string == kPinningOnly) {
-        tag.present = false;
-      } else {
-        LOG(WARNING) << "Unknown TransportSecurityState mode string "
-                     << mode_string << " found for entry " << *i
-                     << "; skipping entry";
-        continue;
-      }
-      
-      tag.expiry = base::Time::FromDoubleT(expiry);
-
-      if (parsed->GetDouble(kCreated, &created)) {
-        tag.created = base::Time::FromDoubleT(created);
-      } else {
-        tag.created = base::Time::Now();
-      }
-
-      if (tag.present)
-        MergeEntry(*i, entry, true);
-    }
-    // Write it out again, this will overwrite the old format with new format
-    DirtyNotify();
-    return true;
-  }
- 
-  // Unknown version
-  if (version != 2)
-    return false;
-
-  // Version 2, latest version:
-  ListValue* entries;
-  if (!dict_value->GetList("entries", &entries))
-    return false;
-  
-  for (ListValue::iterator iter = entries->begin(); iter != entries->end(); iter++) {
-    DictionaryValue* json_entry;
-    if (!(*iter)->GetAsDictionary(&json_entry))
-      return false;
-
-    std::string name, name_old_format;
-    DynamicEntry entry;
-    DynamicTag tag;
-    tag.present = true;
-
-    double created_double, expiry_double;
-    if (!json_entry->GetString("name", &name) && 
-        !json_entry->GetString("name_old_format", &name_old_format))
-      return false;
-    if (!json_entry->GetBoolean("include_subdomains", &tag.include_subdomains))
-      return false;
-    if (!json_entry->GetDouble("created", &created_double))
-      return false;
-    if (!json_entry->GetDouble("expiry", &expiry_double))
-      return false;
-    tag.created = base::Time::FromDoubleT(created_double);
-    tag.expiry = base::Time::FromDoubleT(expiry_double);
-
-    bool upgrade;
-    if (json_entry->GetBoolean("upgrade", &upgrade) && upgrade)
-      entry.tags[UPGRADE_TAG] = tag;
-
-    ListValue* pins_list = NULL;
-    if (json_entry->GetList("spki_hashes", &pins_list)) {
-      if (!SPKIHashesFromListValue(*pins_list, &entry.hashes))
-        return false;
-      entry.tags[SPKI_TAG] = tag;
-    }
-
-    // !!! Should do more syntax checking on the fingerprint
-    if (json_entry->GetString("tack_key_0", &entry.tack_key_0))
-      entry.tags[TACK_0_TAG] = tag;
-
-    if (json_entry->GetString("tack_key_1", &entry.tack_key_1))
-      entry.tags[TACK_1_TAG] = tag;
-
-    if (name.size() > 0)
-      MergeEntry(name, entry);
-    else
-      MergeEntry(name_old_format, entry, true);
-  }
-  // There may have been some entries expired, so write out a clean copy
-  // !!! Could be more intelligent and try to track whether any entries
-  // have actually expired or overwritten others, but its easier and 
-  // harmless to just write out a fresh copy on startup.
-  DirtyNotify();
-  return true;
-}
-
-TransportSecurityState::DynamicEntry::DynamicEntry(){}
-TransportSecurityState::DynamicEntry::~DynamicEntry(){}
 
 }  // namespace

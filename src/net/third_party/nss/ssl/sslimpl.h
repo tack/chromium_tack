@@ -1095,9 +1095,6 @@ struct sslSecurityInfoStr {
     CERTCertificate *peerCert;					/* ssl 2 & 3 */
     SECKEYPublicKey *peerKey;					/* ssl3 only */
 
-    uint8_t          tackExtLen;
-    uint8_t          tackExt[2048];
-
     SSLSignType      authAlgorithm;
     PRUint32         authKeyBits;
     SSLKEAType       keaType;
@@ -1269,7 +1266,7 @@ const unsigned char *  preferredCipher;
 
     ssl3CipherSuiteCfg cipherSuites[ssl_V3_SUITES_IMPLEMENTED];
     ssl3KeyPair *         ephemeralECDHKeyPair; /* for ECDHE-* handshake */
-  
+
     /* SSL3 state info.  Formerly was a pointer */
     ssl3State        ssl3;
 

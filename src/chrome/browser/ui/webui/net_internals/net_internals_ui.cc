@@ -67,7 +67,6 @@
 #include "net/proxy/proxy_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "net/base/x509_cert_types.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_CHROMEOS)
@@ -1083,6 +1082,21 @@ void NetInternalsMessageHandler::IOThreadImpl::OnStartConnectionTests(
   connection_tester_->RunAllTests(url);
 }
 
+void SPKIHashesToString(const net::HashValueVector& hashes,
+                        std::string* string) {
+  for (net::HashValueVector::const_iterator
+       i = hashes.begin(); i != hashes.end(); ++i) {
+    base::StringPiece hash_str(reinterpret_cast<const char*>(i->data()),
+                               i->size());
+    std::string encoded;
+    base::Base64Encode(hash_str, &encoded);
+
+    if (i != hashes.begin())
+      *string += ",";
+    *string += net::TransportSecurityState::HashValueLabel(*i) + encoded;
+  }
+}
+
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
     const ListValue* list) {
   // |list| should be: [<domain to query>].
@@ -1093,31 +1107,32 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
   if (!IsStringASCII(domain)) {
     result->SetString("error", "non-ASCII domain name");
   } else {
-    net::TransportSecurityState* state =
+    net::TransportSecurityState* transport_security_state =
         context_getter_->GetURLRequestContext()->transport_security_state();
-    if (!state) {
+    if (!transport_security_state) {
       result->SetString("error", "no TransportSecurityState active");
     } else {
-      
-      if (state->GetPreloadUpgrade(domain))
-        result->SetString("preload_upgrade", "true");
+      net::TransportSecurityState::DomainState state;
+      const bool found = transport_security_state->GetDomainState(
+          domain, true, &state);
 
-      if (state->GetDynamicUpgrade(domain))
-        result->SetString("dynamic_upgrade", "true");
+      result->SetBoolean("result", found);
+      if (found) {
+        result->SetInteger("mode", static_cast<int>(state.upgrade_mode));
+        result->SetBoolean("subdomains", state.include_subdomains);
+        result->SetString("domain", state.domain);
+        result->SetDouble("expiry", state.upgrade_expiry.ToDoubleT());
+        result->SetDouble("dynamic_spki_hashes_expiry",
+                          state.dynamic_spki_hashes_expiry.ToDoubleT());
 
-      net::HashValueVector hashes, bad_hashes;
-      if (state->GetPreloadSpki(domain, &hashes, &bad_hashes))
-        result->SetString("preload_pubkey_hashes", net::HashesToBase64String(hashes));
+        std::string hashes;
+        SPKIHashesToString(state.static_spki_hashes, &hashes);
+        result->SetString("static_spki_hashes", hashes);
 
-      if (state->GetDynamicSpki(domain, &hashes))
-        result->SetString("dynamic_pubkey_hashes", net::HashesToBase64String(hashes));
-
-      std::string tack_key_0, tack_key_1;
-      if (state->GetPreloadTack(domain, &tack_key_0, &tack_key_1))
-        result->SetString("preload_tack_keys", tack_key_0 + "," + tack_key_1);
-
-      if (state->GetDynamicTack(domain, &tack_key_0, &tack_key_1))
-        result->SetString("dynamic_tack_keys", tack_key_0 + "," + tack_key_1);
+        hashes.clear();
+        SPKIHashesToString(state.dynamic_spki_hashes, &hashes);
+        result->SetString("dynamic_spki_hashes", hashes);
+      }
     }
   }
 
@@ -1129,7 +1144,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   // |list| should be: [<domain to query>, <include subdomains>, <cert pins>].
   std::string domain;
   CHECK(list->GetString(0, &domain));
-  if (!IsStringASCII(domain) || domain.empty()) {
+  if (!IsStringASCII(domain)) {
     // Silently fail. The user will get a helpful error if they query for the
     // name.
     return;
@@ -1139,12 +1154,14 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   std::string hashes_str;
   CHECK(list->GetString(2, &hashes_str));
 
-  net::TransportSecurityState* state =
+  net::TransportSecurityState* transport_security_state =
       context_getter_->GetURLRequestContext()->transport_security_state();
-  if (!state)
+  if (!transport_security_state)
     return;
 
-  net::HashValueVector hashes;  
+  net::TransportSecurityState::DomainState state;
+  state.upgrade_expiry = state.created + base::TimeDelta::FromDays(1000);
+  state.include_subdomains = include_subdomains;
   if (!hashes_str.empty()) {
     std::vector<std::string> type_and_b64s;
     base::SplitString(hashes_str, ',', &type_and_b64s);
@@ -1153,15 +1170,14 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
       std::string type_and_b64;
       RemoveChars(*i, " \t\r\n", &type_and_b64);
       net::HashValue hash;
-      if (!hash.ParsePin(type_and_b64))
+      if (!net::TransportSecurityState::ParsePin(type_and_b64, &hash))
         continue;
-      std::string test = hash.WriteAsPin();
-      hashes.push_back(hash);
+
+      state.dynamic_spki_hashes.push_back(hash);
     }
   }
 
-  state->UserAddUpgrade(domain, include_subdomains);
-  state->UserAddSpkiPins(domain, include_subdomains, hashes);
+  transport_security_state->EnableHost(domain, state);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
@@ -1173,12 +1189,12 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
     // There cannot be a unicode entry in the HSTS set.
     return;
   }
-  net::TransportSecurityState* state =
+  net::TransportSecurityState* transport_security_state =
       context_getter_->GetURLRequestContext()->transport_security_state();
-  if (!state)
+  if (!transport_security_state)
     return;
 
-  state->DeleteDynamicEntry(domain);
+  transport_security_state->DeleteHost(domain);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnGetHttpCacheInfo(

@@ -3458,15 +3458,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
   completed_handshake_ = true;
 
-  const CertStatus cert_status = server_cert_verify_result_.cert_status;
-
-  if ((result == OK || (IsCertificateError(result) &&
-                        IsCertStatusMinorError(cert_status))) &&
-      server_cert_verify_result_.is_issued_by_known_root &&
-      transport_security_state_) {
-
-      const std::string& host = host_and_port_.host();
-
+#if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID)
   // Take care of any mandates for public key pinning.
   //
   // Pinning is only enabled for official builds to make sure that others don't
@@ -3475,19 +3467,40 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
   // TODO(agl): we might have an issue here where a request for foo.example.com
   // merges into a SPDY connection to www.example.com, and gets a different
   // certificate.
-  if (!transport_security_state_->CheckSpkiPins(host, 
-                                          server_cert_verify_result_.public_key_hashes))
-    return false;
 
-  uint8_t* tackExt = NULL;
-  uint32_t tackExtLen = 0;
-  SECStatus rv = SSL_TackExtension(nss_fd_, &tackExt, &tackExtLen);
-  DCHECK_EQ(rv, SECSuccess);
-  if (!transport_security_state_->CheckTackPins(host, 
-                                          server_cert_verify_result_.public_key_hashes, 
-                                          tackExt, tackExtLen))
-    return false;
+  const CertStatus cert_status = server_cert_verify_result_.cert_status;
+  if ((result == OK || (IsCertificateError(result) &&
+                        IsCertStatusMinorError(cert_status))) &&
+      server_cert_verify_result_.is_issued_by_known_root &&
+      transport_security_state_) {
+    bool sni_available =
+        ssl_config_.version_max >= SSL_PROTOCOL_VERSION_TLS1 ||
+        ssl_config_.version_fallback;
+    const std::string& host = host_and_port_.host();
+
+    TransportSecurityState::DomainState domain_state;
+    if (transport_security_state_->GetDomainState(host, sni_available,
+                                                  &domain_state) &&
+        domain_state.HasPins()) {
+      if (!domain_state.IsChainOfPublicKeysPermitted(
+               server_cert_verify_result_.public_key_hashes)) {
+        const base::Time build_time = base::GetBuildTime();
+        // Pins are not enforced if the build is sufficiently old. Chrome
+        // users should get updates every six weeks or so, but it's possible
+        // that some users will stop getting updates for some reason. We
+        // don't want those users building up as a pool of people with bad
+        // pins.
+        if ((base::Time::Now() - build_time).InDays() < 70 /* 10 weeks */) {
+          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+          UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
+          TransportSecurityState::ReportUMAOnPinFailure(host);
+        }
+      } else {
+        UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);
+      }
+    }
   }
+#endif
 
   // Exit DoHandshakeLoop and return the result to the caller to Connect.
   DCHECK_EQ(STATE_NONE, next_handshake_state_);

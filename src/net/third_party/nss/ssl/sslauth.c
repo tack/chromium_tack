@@ -59,29 +59,6 @@ SSL_PeerCertificate(PRFileDesc *fd)
     return 0;
 }
 
-SSL_IMPORT SECStatus SSL_TackExtension(PRFileDesc *fd,
-                                      uint8_t** tackExt,
-                                      uint32_t* tackExtLen)
-{
-    sslSocket *ss;
-
-    ss = ssl_FindSocket(fd);
-    if (!ss) {
-	SSL_DBG(("%d: SSL[%d]: bad socket in TackExtension",
-		 SSL_GETPID(), fd));
-	return SECFailure;
-    }
-
-    /* If tackExtLen is non-zero then populate tackExt, else NULL */
-    if ((*tackExtLen = ss->sec.tackExtLen) > 0) {
-      *tackExt = ss->sec.tackExt;
-    }
-    else
-      *tackExt = 0;
-
-    return SECSuccess;
-}
-
 /* NEED LOCKS IN HERE.  */
 SECStatus
 SSL_PeerCertificateChain(PRFileDesc *fd, CERTCertificate **certs,

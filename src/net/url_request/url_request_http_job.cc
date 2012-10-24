@@ -672,37 +672,78 @@ void URLRequestHttpJob::FetchResponseCookies(
 // should resolve the conflict in favor of the more strict policy.
 void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
   DCHECK(response_info_);
-  TransportSecurityState* security_state = \
-                                   request_->context()->transport_security_state();
+
+  const URLRequestContext* ctx = request_->context();
   const SSLInfo& ssl_info = response_info_->ssl_info;
 
-  // Only accept HSTS headers on HTTPS connections that have no certificate errors.
-  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) || !security_state)
+  // Only accept strict transport security headers on HTTPS connections that
+  // have no certificate errors.
+  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) ||
+      !ctx->transport_security_state()) {
     return;
+  }
+
+  TransportSecurityState* security_state = ctx->transport_security_state();
+  TransportSecurityState::DomainState domain_state;
+  const std::string& host = request_info_.url.host();
+
+  bool sni_available =
+      SSLConfigService::IsSNIAvailable(ctx->ssl_config_service());
+  if (!security_state->GetDomainState(host, sni_available, &domain_state))
+    // |GetDomainState| may have altered |domain_state| while searching. If
+    // not found, start with a fresh state.
+    domain_state.upgrade_mode =
+        TransportSecurityState::DomainState::MODE_FORCE_HTTPS;
 
   HttpResponseHeaders* headers = GetResponseHeaders();
-  void* iter = NULL;
   std::string value;
-  if (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value)) {
-    security_state->AddHSTSHeader(request_info_.url.host(), value);
+  void* iter = NULL;
+  base::Time now = base::Time::Now();
+
+  while (headers->EnumerateHeader(&iter, "Strict-Transport-Security", &value)) {
+    TransportSecurityState::DomainState domain_state;
+    if (domain_state.ParseSTSHeader(now, value))
+      security_state->EnableHost(host, domain_state);
   }
 }
 
 void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
   DCHECK(response_info_);
-  TransportSecurityState* security_state = \
-                                   request_->context()->transport_security_state();
+
+  const URLRequestContext* ctx = request_->context();
   const SSLInfo& ssl_info = response_info_->ssl_info;
 
-  // Only accept HPKP headers on HTTPS connections that have no certificate errors.
-  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) || !security_state)
+  // Only accept public key pins headers on HTTPS connections that have no
+  // certificate errors.
+  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status) ||
+      !ctx->transport_security_state()) {
     return;
+  }
+
+  TransportSecurityState* security_state = ctx->transport_security_state();
+  TransportSecurityState::DomainState domain_state;
+  const std::string& host = request_info_.url.host();
+
+  bool sni_available =
+      SSLConfigService::IsSNIAvailable(ctx->ssl_config_service());
+  if (!security_state->GetDomainState(host, sni_available, &domain_state))
+    // |GetDomainState| may have altered |domain_state| while searching. If
+    // not found, start with a fresh state.
+    domain_state.upgrade_mode =
+        TransportSecurityState::DomainState::MODE_DEFAULT;
 
   HttpResponseHeaders* headers = GetResponseHeaders();
   void* iter = NULL;
   std::string value;
-  if (headers->EnumerateHeader(&iter, "Public-Key-Pins", &value))
-    security_state->AddHPKPHeader(request_info_.url.host(), value, &ssl_info);
+  base::Time now = base::Time::Now();
+
+  while (headers->EnumerateHeader(&iter, "Public-Key-Pins", &value)) {
+    // Note that ParsePinsHeader updates |domain_state| (iff the header parses
+    // correctly), but does not completely overwrite it. It just updates the
+    // dynamic pinning metadata.
+    if (domain_state.ParsePinsHeader(now, value, ssl_info))
+      security_state->EnableHost(host, domain_state);
+  }
 }
 
 void URLRequestHttpJob::OnStartCompleted(int result) {
@@ -766,10 +807,14 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
     // We encountered an SSL certificate error.  Ask our delegate to decide
     // what we should do.
 
+    TransportSecurityState::DomainState domain_state;
     const URLRequestContext* context = request_->context();
     const bool fatal =
         context->transport_security_state() &&
-        context->transport_security_state()->IsStrictOnErrors(request_info_.url.host());
+        context->transport_security_state()->GetDomainState(
+            request_info_.url.host(),
+            SSLConfigService::IsSNIAvailable(context->ssl_config_service()),
+            &domain_state);
     NotifySSLCertificateError(transaction_->GetResponseInfo()->ssl_info, fatal);
   } else if (result == ERR_SSL_CLIENT_AUTH_CERT_NEEDED) {
     NotifyCertificateRequested(

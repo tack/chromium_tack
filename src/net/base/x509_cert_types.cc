@@ -8,11 +8,9 @@
 #include <cstring>
 
 #include "base/logging.h"
-#include "base/base64.h"
 #include "base/sha1.h"
 #include "base/string_number_conversions.h"
 #include "base/string_piece.h"
-#include "base/string_util.h"
 #include "base/time.h"
 #include "net/base/x509_certificate.h"
 
@@ -39,7 +37,6 @@ int CompareSHA1Hashes(const void* a, const void* b) {
 
 }  // namespace
 
-// static
 bool IsSHA1HashInSortedArray(const SHA1HashValue& hash,
                              const uint8* array,
                              size_t array_byte_len) {
@@ -53,15 +50,15 @@ bool HashesIntersect(const HashValueVector& a,
                      const HashValueVector& b) {
   for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
     HashValueVector::const_iterator j =
-      std::find(b.begin(), b.end(), *i);
+      std::find_if(b.begin(), b.end(), HashValuesEqualPredicate(*i));
     if (j != b.end())
       return true;
   }
+  
   return false;
 }
 
-std::string HashesToBase64String(
-  const HashValueVector& hashes) {
+std::string HashesToBase64String(const HashValueVector& hashes) {
   std::vector<std::string> hashes_strs;
   for (HashValueVector::const_iterator
          i = hashes.begin(); i != hashes.end(); i++) {
@@ -69,14 +66,11 @@ std::string HashesToBase64String(
     const std::string hash_str(reinterpret_cast<const char*>(i->data()),
                                i->size());
     base::Base64Encode(hash_str, &s);
-    if (i->tag == HASH_VALUE_SHA1) 
-      hashes_strs.push_back(std::string("sha1/") + s);
-    else if (i->tag == HASH_VALUE_SHA256)
-      hashes_strs.push_back(std::string("sha256/") + s);
+    hashes_strs.push_back(s);
   }
+  
   return JoinString(hashes_strs, ',');
 }
-
 
 CertPrincipal::CertPrincipal() {
 }
@@ -186,39 +180,6 @@ bool HashValue::Equals(const HashValue& other) const {
       NOTREACHED() << "Unknown HashValueTag " << tag;
       return false;
   }
-}
-  
-bool HashValue::ParsePin(const std::string& value) {
-
-  std::string b64;
-  if (value.substr(0, 5) == "sha1/") {
-    tag = HASH_VALUE_SHA1;
-    b64 = value.substr(5, 28);  // length of base64 string
-  }
-  else if (value.substr(0, 7) == "sha256/") {
-    tag = HASH_VALUE_SHA256;
-    b64 = value.substr(7, 44);  // length of base64 string
-  }
-  else
-    return false;
-
-  std::string decoded;
-  if (!base::Base64Decode(b64, &decoded) ||
-      decoded.size() != size()) {
-    return false;
-  }
-  memcpy(data(), decoded.data(), size());
-  return true;
-}
-
-std::string HashValue::WriteAsPin() const {
-  std::string b64;
-  base::Base64Encode(std::string((const char*)data(), size()), &b64);
-  if (tag == HASH_VALUE_SHA1)
-    return std::string("sha1/" + b64);
-  else if (tag == HASH_VALUE_SHA256)
-    return std::string("sha256/" + b64);
-  return std::string("unknown/" + b64);
 }
 
 size_t HashValue::size() const {

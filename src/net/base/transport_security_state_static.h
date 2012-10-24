@@ -7,168 +7,161 @@
 #ifndef NET_BASE_TRANSPORT_SECURITY_STATE_STATIC_H_
 #define NET_BASE_TRANSPORT_SECURITY_STATE_STATIC_H_
 
-// These are TACK key fingerprints and their min_generation values.
-
-static const net::PreloadTackKey kPreloadedTackKeys[] = {
-  {"6i7l7.gw7zx.kuza6.skvzy.6alwa", 3},
-  {"j6det.kfbj5.oweph.mdyxi.wvbch", 0},
-};
-
 // These are SubjectPublicKeyInfo hashes for public key pinning. The
-// hashes are SHA1 digests.
+// hashes are base64 encoded, SHA1 digests.
 
 static const char kSPKIHash_TestSPKI[] =
-    "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+    "sha1/AAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 static const char kSPKIHash_VeriSignClass3[] =
-    "\xe2\x7f\x7b\xd8\x77\xd5\xdf\x9e\x0a\x3f\x9e\xb4\xcb\x0e\x2e\xa9\xef\xdb\x69\x77";
+    "sha1/4n972HfV354KP560yw4uqe/baXc=";
 
 static const char kSPKIHash_VeriSignClass3_G3[] =
-    "\x22\xf1\x9e\x2e\xc6\xea\xcc\xfc\x5d\x23\x46\xf4\xc2\xe8\xf6\xc5\x54\xdd\x5e\x07";
+    "sha1/IvGeLsbqzPxdI0b0wuj2xVTdXgc=";
 
 static const char kSPKIHash_Google1024[] =
-    "\x40\xc5\x40\x1d\x6f\x8c\xba\xf0\x8b\x00\xed\xef\xb1\xee\x87\xd0\x05\xb3\xb9\xcd";
+    "sha1/QMVAHW+MuvCLAO3vse6H0AWzuc0=";
 
 static const char kSPKIHash_Google2048[] =
-    "\x01\xb9\x21\xc5\x8d\x0b\xdf\x8d\xe0\x29\xff\x9c\x92\x2e\xcd\x55\x6a\x7e\xa3\x39";
+    "sha1/AbkhxY0L343gKf+cki7NVWp+ozk=";
 
 static const char kSPKIHash_EquifaxSecureCA[] =
-    "\x48\xe6\x68\xf9\x2b\xd2\xb2\x95\xd7\x47\xd8\x23\x20\x10\x4f\x33\x98\x90\x9f\xd4";
+    "sha1/SOZo+SvSspXXR9gjIBBPM5iQn9Q=";
 
 static const char kSPKIHash_Aetna[] =
-    "\x92\x52\xaa\x14\xde\xbf\x80\xae\x30\xaa\xd9\x4e\x60\x38\x70\x24\xa5\x43\x2f\x1a";
+    "sha1/klKqFN6/gK4wqtlOYDhwJKVDLxo=";
 
 static const char kSPKIHash_GeoTrustGlobal[] =
-    "\xc0\x7a\x98\x68\x8d\x89\xfb\xab\x05\x64\x0c\x11\x7d\xaa\x7d\x65\xb8\xca\xcc\x4e";
+    "sha1/wHqYaI2J+6sFZAwRfap9ZbjKzE4=";
 
 static const char kSPKIHash_GeoTrustPrimary[] =
-    "\xb0\x19\x89\xe7\xef\xfb\x4a\xaf\xcb\x14\x8f\x58\x46\x39\x76\x22\x41\x50\xe1\xba";
+    "sha1/sBmJ5+/7Sq/LFI9YRjl2IkFQ4bo=";
 
 static const char kSPKIHash_Intel[] =
-    "\x0e\xc6\x2a\xf7\x59\xb2\x08\x10\x90\x25\x6f\xc3\xdd\xfd\x8a\x66\x31\x30\x2b\xc5";
+    "sha1/DsYq91myCBCQJW/D3f2KZjEwK8U=";
 
 static const char kSPKIHash_TCTrustCenter[] =
-    "\x83\x3b\x84\x10\x00\x7f\x6e\x4a\x9d\x41\x2d\xc4\x22\x39\x36\x6f\x2e\xe5\x5b\xe9";
+    "sha1/gzuEEAB/bkqdQS3EIjk2by7lW+k=";
 
 static const char kSPKIHash_Vodafone[] =
-    "\x0d\x7f\xe1\x5c\x55\x14\x36\x68\x99\xfc\x40\xd6\x22\x08\xef\x22\xeb\xd1\x15\x1c";
+    "sha1/DX/hXFUUNmiZ/EDWIgjvIuvRFRw=";
 
 static const char kSPKIHash_RapidSSL[] =
-    "\xa3\x93\x99\xc4\x04\xc3\xb2\x09\xb0\x81\xc2\x1f\x21\x62\x27\x78\xc2\x74\x8e\x4c";
+    "sha1/o5OZxATDsgmwgcIfIWIneMJ0jkw=";
 
 static const char kSPKIHash_DigiCertEVRoot[] =
-    "\x83\x31\x7e\x62\x85\x42\x53\xd6\xd7\x78\x31\x90\xec\x91\x90\x56\xe9\x91\xb9\xe3";
+    "sha1/gzF+YoVCU9bXeDGQ7JGQVumRueM=";
 
 static const char kSPKIHash_Tor1[] =
-    "\x8e\xe3\x71\x49\x3b\xfd\x50\x03\x66\xa4\x2f\x64\x17\x91\x8a\xa6\x65\x8d\xc7\x76";
+    "sha1/juNxSTv9UANmpC9kF5GKpmWNx3Y=";
 
 static const char kSPKIHash_Tor2[] =
-    "\x96\x26\xb8\xde\x53\xe8\x97\x34\x8f\x54\x8a\xb7\xe0\x3c\x39\xee\xe6\x1c\x2c\x3f";
+    "sha1/lia43lPolzSPVIq34Dw57uYcLD8=";
 
 static const char kSPKIHash_Tor3[] =
-    "\xaf\x31\x32\x40\x82\x8e\x87\xbe\xe3\xf3\xb9\xf9\x6e\x35\x94\x36\x0b\x97\x17\xc6";
+    "sha1/rzEyQIKOh77j87n5bjWUNguXF8Y=";
 
 static const char kSPKIHash_VeriSignClass1[] =
-    "\x23\x43\xd1\x48\xa2\x55\x89\x9b\x94\x7d\x46\x1a\x79\x7e\xc0\x4c\xfe\xd1\x70\xb7";
+    "sha1/I0PRSKJViZuUfUYaeX7ATP7RcLc=";
 
 static const char kSPKIHash_VeriSignClass3_G4[] =
-    "\xed\x66\x31\x35\xd3\x1b\xd4\xec\xa6\x14\xc4\x29\xe3\x19\x06\x9f\x94\xc1\x26\x50";
+    "sha1/7WYxNdMb1OymFMQp4xkGn5TBJlA=";
 
 static const char kSPKIHash_VeriSignClass4_G3[] =
-    "\x3c\x03\x43\x68\x68\x95\x1c\xf3\x69\x2a\xb8\xb4\x26\xda\xba\x8f\xe9\x22\xe5\xbd";
+    "sha1/PANDaGiVHPNpKri0Jtq6j+ki5b0=";
 
 static const char kSPKIHash_VeriSignClass1_G3[] =
-    "\x55\x19\xb2\x78\xac\xb2\x81\xd7\xed\xa7\xab\xc1\x83\x99\xc3\xbb\x69\x04\x24\xb5";
+    "sha1/VRmyeKyygdftp6vBg5nDu2kEJLU=";
 
 static const char kSPKIHash_VeriSignClass2_G3[] =
-    "\x5a\xbe\xc5\x75\xdc\xae\xf3\xb0\x8e\x27\x19\x43\xfc\x7f\x25\x0c\x3d\xf6\x61\xe3";
+    "sha1/Wr7Fddyu87COJxlD/H8lDD32YeM=";
 
 static const char kSPKIHash_VeriSignClass3_G2[] =
-    "\x1a\x21\xb4\x95\x2b\x62\x93\xce\x18\xb3\x65\xec\x9c\x0e\x93\x4c\xb3\x81\xe6\xd4";
+    "sha1/GiG0lStik84Ys2XsnA6TTLOB5tQ=";
 
 static const char kSPKIHash_VeriSignClass2_G2[] =
-    "\x12\x37\xba\x45\x17\xee\xad\x29\x26\xfd\xc1\xcd\xfe\xbe\xed\xf2\xde\xd9\x14\x5c";
+    "sha1/Eje6RRfurSkm/cHN/r7t8t7ZFFw=";
 
 static const char kSPKIHash_VeriSignClass3_G5[] =
-    "\xb1\x81\x08\x1a\x19\xa4\xc0\x94\x1f\xfa\xe8\x95\x28\xc1\x24\xc9\x9b\x34\xac\xc7";
+    "sha1/sYEIGhmkwJQf+uiVKMEkyZs0rMc=";
 
 static const char kSPKIHash_VeriSignUniversal[] =
-    "\xbb\xc2\x3e\x29\x0b\xb3\x28\x77\x1d\xad\x3e\xa2\x4d\xbd\xf4\x23\xbd\x06\xb0\x3d";
+    "sha1/u8I+KQuzKHcdrT6iTb30I70GsD0=";
 
 static const char kSPKIHash_Twitter1[] =
-    "\x56\xfe\xf3\xc2\x14\x7d\x4e\xd3\x88\x37\xfd\xbd\x30\x52\x38\x72\x01\xe5\x77\x8d";
+    "sha1/Vv7zwhR9TtOIN/29MFI4cgHld40=";
 
 static const char kSPKIHash_GeoTrustGlobal2[] =
-    "\x71\x38\x36\xf2\x02\x31\x53\x47\x2b\x6e\xba\x65\x46\xa9\x10\x15\x58\x20\x05\x09";
+    "sha1/cTg28gIxU0crbrplRqkQFVggBQk=";
 
 static const char kSPKIHash_GeoTrustUniversal[] =
-    "\x87\xe8\x5b\x63\x53\xc6\x23\xa3\x12\x8c\xb0\xff\xbb\xf5\x51\xfe\x59\x80\x0e\x22";
+    "sha1/h+hbY1PGI6MSjLD/u/VR/lmADiI=";
 
 static const char kSPKIHash_GeoTrustUniversal2[] =
-    "\x5e\x4f\x53\x86\x85\xdd\x4f\x9e\xca\x5f\xdc\x0d\x45\x6f\x7d\x51\xb1\xdc\x9b\x7b";
+    "sha1/Xk9ThoXdT57KX9wNRW99UbHcm3s=";
 
 static const char kSPKIHash_GeoTrustPrimary_G2[] =
-    "\xbd\xbe\xa7\x1b\xab\x71\x57\xf9\xe4\x75\xd9\x54\xd2\xb7\x27\x80\x1a\x82\x26\x82";
+    "sha1/vb6nG6txV/nkddlU0rcngBqCJoI=";
 
 static const char kSPKIHash_GeoTrustPrimary_G3[] =
-    "\x9c\xa9\x8d\x00\xaf\x74\x0d\xdd\x81\x80\xd2\x13\x45\xa5\x8b\x8f\x2e\x94\x38\xd6";
+    "sha1/nKmNAK90Dd2BgNITRaWLjy6UONY=";
 
 static const char kSPKIHash_Entrust_2048[] =
-    "\x55\xe4\x81\xd1\x11\x80\xbe\xd8\x89\xb9\x08\xa3\x31\xf9\xa1\x24\x09\x16\xb9\x70";
+    "sha1/VeSB0RGAvtiJuQijMfmhJAkWuXA=";
 
 static const char kSPKIHash_Entrust_EV[] =
-    "\xba\x42\xb0\x81\x88\x53\x88\x1d\x86\x63\xbd\x4c\xc0\x5e\x08\xfe\xea\x6e\xbb\x77";
+    "sha1/ukKwgYhTiB2GY71MwF4I/upuu3c=";
 
 static const char kSPKIHash_Entrust_G2[] =
-    "\xab\x30\xd3\xaf\x4b\xd8\xf1\x6b\x58\x69\xee\x45\x69\x29\xda\x84\xb8\x73\x94\x88";
+    "sha1/qzDTr0vY8WtYae5FaSnahLhzlIg=";
 
 static const char kSPKIHash_Entrust_SSL[] =
-    "\xf0\x17\x62\x13\x55\x3d\xb3\xff\x0a\x00\x6b\xfb\x50\x84\x97\xf3\xed\x62\xd0\x1a";
+    "sha1/8BdiE1U9s/8KAGv7UISX8+1i0Bo=";
 
 static const char kSPKIHash_AAACertificateServices[] =
-    "\xc4\x30\x28\xc5\xd3\xe3\x08\x0c\x10\x44\x8b\x2c\x77\xba\x24\x53\x97\x60\xbb\xf9";
+    "sha1/xDAoxdPjCAwQRIssd7okU5dgu/k=";
 
 static const char kSPKIHash_AddTrustClass1CARoot[] =
-    "\x8b\xdb\xd7\xcc\xa0\x68\x53\x42\x16\xf4\xc1\x2b\x25\x44\xfc\x02\x9c\xa5\x8b\x47";
+    "sha1/i9vXzKBoU0IW9MErJUT8Apyli0c=";
 
 static const char kSPKIHash_AddTrustExternalCARoot[] =
-    "\x4f\x9c\x7d\x21\x79\x9c\xad\x0e\xd8\xb9\x0c\x57\x9f\x1a\x02\x99\xe7\x90\xf3\x87";
+    "sha1/T5x9IXmcrQ7YuQxXnxoCmeeQ84c=";
 
 static const char kSPKIHash_AddTrustPublicCARoot[] =
-    "\xa8\x57\x65\xd6\xe8\x32\xc8\xc5\x19\x63\x73\x5a\x9a\x17\x74\x3a\x81\xdf\xee\x2e";
+    "sha1/qFdl1ugyyMUZY3Namhd0OoHf7i4=";
 
 static const char kSPKIHash_AddTrustQualifiedCARoot[] =
-    "\xbc\xe4\xb7\x23\x12\x55\x98\xe5\x63\x41\x19\x1c\x50\xe4\xb6\x47\xc2\x76\x05\xd7";
+    "sha1/vOS3IxJVmOVjQRkcUOS2R8J2Bdc=";
 
 static const char kSPKIHash_COMODOCertificationAuthority[] =
-    "\x11\xe4\x91\xd1\xc9\xe4\xc0\xeb\x9a\xce\xcf\x73\x54\x5d\xe1\xf1\xa8\x30\x3e\xc3";
+    "sha1/EeSR0cnkwOuazs9zVF3h8agwPsM=";
 
 static const char kSPKIHash_SecureCertificateServices[] =
-    "\x3c\xb4\x1a\x84\x2e\xf5\x5c\xf2\x1a\x3d\xa5\x4a\xc8\xd1\xbe\x39\x08\x76\x37\xbc";
+    "sha1/PLQahC71XPIaPaVKyNG+OQh2N7w=";
 
 static const char kSPKIHash_TrustedCertificateServices[] =
-    "\xfe\x72\xc8\xeb\xbf\x0c\x2f\xbb\x0e\x26\x13\x93\x93\x3c\x2c\xa9\x8d\xdc\x24\x94";
+    "sha1//nLI678ML7sOJhOTkzwsqY3cJJQ=";
 
 static const char kSPKIHash_UTNDATACorpSGC[] =
-    "\x53\x32\xd1\xb3\xcf\x7f\xfa\xe0\xf1\xa0\x5d\x85\x4e\x92\xd2\x9e\x45\x1d\xb4\x4f";
+    "sha1/UzLRs89/+uDxoF2FTpLSnkUdtE8=";
 
 static const char kSPKIHash_UTNUSERFirstClientAuthenticationandEmail[] =
-    "\x89\x82\x67\x7d\xc4\x9d\x26\x70\x00\x4b\xb4\x50\x48\x7c\xde\x3d\xae\x04\x6e\x7d";
+    "sha1/iYJnfcSdJnAAS7RQSHzePa4Ebn0=";
 
 static const char kSPKIHash_UTNUSERFirstHardware[] =
-    "\xa1\x72\x5f\x26\x1b\x28\x98\x43\x95\x5d\x07\x37\xd5\x85\x96\x9d\x4b\xd2\xc3\x45";
+    "sha1/oXJfJhsomEOVXQc31YWWnUvSw0U=";
 
 static const char kSPKIHash_UTNUSERFirstObject[] =
-    "\xda\xed\x64\x74\x14\x9c\x14\x3c\xab\xdd\x99\xa9\xbd\x5b\x28\x4d\x8b\x3c\xc9\xd8";
+    "sha1/2u1kdBScFDyr3ZmpvVsoTYs8ydg=";
 
 static const char kSPKIHash_GTECyberTrustGlobalRoot[] =
-    "\x59\x79\x12\xde\x61\x75\xd6\x6f\xc4\x23\xb7\x77\x13\x74\xc7\x96\xde\x6f\x88\x72";
+    "sha1/WXkS3mF11m/EI7d3E3THlt5viHI=";
 
 static const char kSPKIHash_Tor2web[] =
-    "\x19\xe5\xb5\x87\x1b\xd4\x83\x2e\xc8\xf5\x94\x97\xfe\xc6\x5e\xfb\x48\xe3\x33\xb1";
+    "sha1/GeW1hxvUgy7I9ZSX/sZe+0jjM7E=";
 
 static const char kSPKIHash_AlphaSSL_G2[] =
-    "\xe5\x24\xe9\x8e\x31\x7d\xc8\xfc\xad\x90\x53\x7c\x91\xe7\x0d\xa4\x70\x93\x90\x5f";
+    "sha1/5STpjjF9yPytkFN8kecNpHCTkF8=";
 
 // The following is static data describing the hosts that are hardcoded with
 // certificate pins or HSTS information.
@@ -182,9 +175,10 @@ static const char* const kTestAcceptableCerts[] = {
   kSPKIHash_TestSPKI,
   NULL,
 };
-#define kTestPins \
+#define kTestPins { \
   kTestAcceptableCerts, \
-  kNoRejectedPublicKeys
+  kNoRejectedPublicKeys, \
+}
 
 static const char* const kGoogleAcceptableCerts[] = {
   kSPKIHash_VeriSignClass3,
@@ -201,9 +195,10 @@ static const char* const kGoogleRejectedCerts[] = {
   kSPKIHash_Vodafone,
   NULL,
 };
-#define kGooglePins \
+#define kGooglePins { \
   kGoogleAcceptableCerts, \
-  kGoogleRejectedCerts
+  kGoogleRejectedCerts, \
+}
 
 static const char* const kTorAcceptableCerts[] = {
   kSPKIHash_RapidSSL,
@@ -213,9 +208,10 @@ static const char* const kTorAcceptableCerts[] = {
   kSPKIHash_Tor3,
   NULL,
 };
-#define kTorPins \
+#define kTorPins { \
   kTorAcceptableCerts, \
-  kNoRejectedPublicKeys
+  kNoRejectedPublicKeys, \
+}
 
 static const char* const kTwitterComAcceptableCerts[] = {
   kSPKIHash_VeriSignClass1,
@@ -239,9 +235,10 @@ static const char* const kTwitterComAcceptableCerts[] = {
   kSPKIHash_Twitter1,
   NULL,
 };
-#define kTwitterComPins \
+#define kTwitterComPins { \
   kTwitterComAcceptableCerts, \
-  kNoRejectedPublicKeys
+  kNoRejectedPublicKeys, \
+}
 
 static const char* const kTwitterCDNAcceptableCerts[] = {
   kSPKIHash_VeriSignClass1,
@@ -282,413 +279,416 @@ static const char* const kTwitterCDNAcceptableCerts[] = {
   kSPKIHash_GTECyberTrustGlobalRoot,
   NULL,
 };
-#define kTwitterCDNPins \
+#define kTwitterCDNPins { \
   kTwitterCDNAcceptableCerts, \
-  kNoRejectedPublicKeys
+  kNoRejectedPublicKeys, \
+}
 
 static const char* const kTor2webAcceptableCerts[] = {
   kSPKIHash_AlphaSSL_G2,
   kSPKIHash_Tor2web,
   NULL,
 };
-#define kTor2webPins \
+#define kTor2webPins { \
   kTor2webAcceptableCerts, \
-  kNoRejectedPublicKeys
+  kNoRejectedPublicKeys, \
+}
 
-#define kNoSpkiPins NULL, NULL
+#define kNoPins {\
+  NULL, NULL, \
+}
 
-#define kNoTackPins NULL, NULL
-
-static const net::PreloadEntry kPreloadedSTS[] = {
-  {true, 23, "pinningtest.appspot.com", false, kTestPins, kNoTackPins},
-  {true, 10, "google.com", false, kGooglePins, kNoTackPins},
-  {true, 17, "health.google.com", true, kGooglePins, kNoTackPins},
-  {true, 19, "checkout.google.com", true, kGooglePins, kNoTackPins},
-  {true, 17, "chrome.google.com", true, kGooglePins, kNoTackPins},
-  {true, 15, "docs.google.com", true, kGooglePins, kNoTackPins},
-  {true, 16, "sites.google.com", true, kGooglePins, kNoTackPins},
-  {true, 23, "spreadsheets.google.com", true, kGooglePins, kNoTackPins},
-  {false, 20, "appengine.google.com", true, kGooglePins, kNoTackPins},
-  {true, 20, "encrypted.google.com", true, kGooglePins, kNoTackPins},
-  {true, 19, "accounts.google.com", true, kGooglePins, kNoTackPins},
-  {true, 19, "profiles.google.com", true, kGooglePins, kNoTackPins},
-  {true, 15, "mail.google.com", true, kGooglePins, kNoTackPins},
-  {true, 21, "talkgadget.google.com", true, kGooglePins, kNoTackPins},
-  {true, 15, "talk.google.com", true, kGooglePins, kNoTackPins},
-  {true, 27, "hostedtalkgadget.google.com", true, kGooglePins, kNoTackPins},
-  {true, 15, "plus.google.com", true, kGooglePins, kNoTackPins},
-  {true, 17, "script.google.com", true, kGooglePins, kNoTackPins},
-  {true, 18, "market.android.com", true, kGooglePins, kNoTackPins},
-  {true, 24, "ssl.google-analytics.com", true, kGooglePins, kNoTackPins},
-  {true, 16, "drive.google.com", true, kGooglePins, kNoTackPins},
-  {true, 14, "googleplex.com", true, kGooglePins, kNoTackPins},
-  {true, 17, "groups.google.com", true, kGooglePins, kNoTackPins},
-  {true, 15, "apis.google.com", true, kGooglePins, kNoTackPins},
-  {true, 30, "chromiumcodereview.appspot.com", true, kGooglePins, kNoTackPins},
-  {true, 22, "codereview.appspot.com", true, kGooglePins, kNoTackPins},
-  {true, 21, "chart.apis.google.com", false, kGooglePins, kNoTackPins},
-  {true, 9, "ytimg.com", false, kGooglePins, kNoTackPins},
-  {true, 21, "googleusercontent.com", false, kGooglePins, kNoTackPins},
-  {true, 11, "youtube.com", false, kGooglePins, kNoTackPins},
-  {true, 14, "googleapis.com", false, kGooglePins, kNoTackPins},
-  {true, 20, "googleadservices.com", false, kGooglePins, kNoTackPins},
-  {true, 14, "googlecode.com", false, kGooglePins, kNoTackPins},
-  {true, 11, "appspot.com", false, kGooglePins, kNoTackPins},
-  {true, 21, "googlesyndication.com", false, kGooglePins, kNoTackPins},
-  {true, 15, "doubleclick.net", false, kGooglePins, kNoTackPins},
-  {true, 15, "ssl.gstatic.com", false, kGooglePins, kNoTackPins},
-  {true, 8, "youtu.be", false, kGooglePins, kNoTackPins},
-  {true, 11, "android.com", false, kGooglePins, kNoTackPins},
-  {true, 18, "googlecommerce.com", false, kGooglePins, kNoTackPins},
-  {true, 10, "urchin.com", false, kGooglePins, kNoTackPins},
-  {true, 6, "goo.gl", false, kGooglePins, kNoTackPins},
-  {true, 4, "g.co", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ac", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ad", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ae", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.af", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ag", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.am", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.as", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.at", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.az", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ba", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.be", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.bf", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.bg", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.bi", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.bj", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.bs", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.by", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ca", false, kGooglePins, kNoTackPins},
-  {true, 10, "google.cat", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cc", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cd", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cf", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cg", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ch", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ci", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cl", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cm", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cn", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.ao", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.bw", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.ck", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.cr", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.hu", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.id", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.il", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.im", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.in", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.je", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.jp", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.ke", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.kr", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.ls", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.ma", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.mz", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.nz", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.th", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.tz", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.ug", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.uk", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.uz", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.ve", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.vi", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.za", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.zm", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.co.zw", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.af", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ag", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ai", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ar", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.au", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.bd", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.bh", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.bn", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.bo", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.br", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.by", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.bz", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.cn", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.co", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.cu", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.cy", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.do", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ec", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.eg", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.et", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.fj", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ge", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.gh", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.gi", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.gr", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.gt", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.hk", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.iq", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.jm", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.jo", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.kh", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.kw", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.lb", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ly", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.mt", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.mx", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.my", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.na", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.nf", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ng", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ni", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.np", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.nr", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.om", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.pa", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.pe", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ph", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.pk", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.pl", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.pr", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.py", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.qa", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ru", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.sa", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.sb", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.sg", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.sl", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.sv", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.tj", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.tn", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.tr", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.tw", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ua", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.uy", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.vc", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.ve", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.com.vn", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cv", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.cz", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.de", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.dj", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.dk", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.dm", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.dz", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ee", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.es", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.fi", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.fm", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.fr", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ga", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ge", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.gg", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.gl", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.gm", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.gp", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.gr", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.gy", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.hk", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.hn", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.hr", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ht", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.hu", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ie", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.im", false, kGooglePins, kNoTackPins},
-  {true, 11, "google.info", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.iq", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.is", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.it", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.it.ao", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.je", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.jo", false, kGooglePins, kNoTackPins},
-  {true, 11, "google.jobs", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.jp", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.kg", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ki", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.kz", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.la", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.li", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.lk", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.lt", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.lu", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.lv", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.md", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.me", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.mg", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.mk", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ml", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.mn", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ms", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.mu", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.mv", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.mw", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ne", false, kGooglePins, kNoTackPins},
-  {true, 12, "google.ne.jp", false, kGooglePins, kNoTackPins},
-  {true, 10, "google.net", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.nl", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.no", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.nr", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.nu", false, kGooglePins, kNoTackPins},
-  {true, 13, "google.off.ai", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.pk", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.pl", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.pn", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ps", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.pt", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ro", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.rs", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ru", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.rw", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.sc", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.se", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.sh", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.si", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.sk", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.sm", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.sn", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.so", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.st", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.td", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.tg", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.tk", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.tl", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.tm", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.tn", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.to", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.tp", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.tt", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.us", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.uz", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.vg", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.vu", false, kGooglePins, kNoTackPins},
-  {true, 9, "google.ws", false, kGooglePins, kNoTackPins},
-  {true, 21, "learn.doubleclick.net", false, kNoSpkiPins, kNoTackPins},
-  {false, 14, "www.paypal.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 14, "www.elanex.biz", true, kNoSpkiPins, kNoTackPins},
-  {true, 10, "jottit.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 17, "sunshinepress.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 19, "www.noisebridge.net", true, kNoSpkiPins, kNoTackPins},
-  {false, 8, "neg9.org", true, kNoSpkiPins, kNoTackPins},
-  {true, 10, "riseup.net", true, kNoSpkiPins, kNoTackPins},
-  {false, 9, "factor.cc", true, kNoSpkiPins, kNoTackPins},
-  {false, 20, "members.mayfirst.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 20, "support.mayfirst.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "id.mayfirst.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 18, "lists.mayfirst.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 26, "aladdinschools.appspot.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 12, "ottospora.nl", true, kNoSpkiPins, kNoTackPins},
-  {false, 23, "www.paycheckrecords.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 12, "lastpass.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 16, "www.lastpass.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 12, "keyerror.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "entropia.de", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "www.entropia.de", true, kNoSpkiPins, kNoTackPins},
-  {true, 9, "romab.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 14, "logentries.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 18, "www.logentries.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 10, "stripe.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 25, "cloudsecurityalliance.org", true, kNoSpkiPins, kNoTackPins},
-  {true, 13, "login.sapo.pt", true, kNoSpkiPins, kNoTackPins},
-  {true, 17, "mattmccutchen.net", true, kNoSpkiPins, kNoTackPins},
-  {true, 9, "betnet.fr", true, kNoSpkiPins, kNoTackPins},
-  {true, 11, "uprotect.it", true, kNoSpkiPins, kNoTackPins},
-  {false, 12, "squareup.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 7, "cert.se", true, kNoSpkiPins, kNoTackPins},
-  {true, 9, "crypto.is", true, kNoSpkiPins, kNoTackPins},
-  {true, 18, "simon.butcher.name", true, kNoSpkiPins, kNoTackPins},
-  {true, 8, "linx.net", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "dropcam.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "www.dropcam.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 28, "ebanking.indovinabank.com.vn", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "epoxate.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 14, "torproject.org", true, kTorPins, kNoTackPins},
-  {true, 19, "blog.torproject.org", true, kTorPins, kNoTackPins},
-  {true, 20, "check.torproject.org", true, kTorPins, kNoTackPins},
-  {true, 18, "www.torproject.org", true, kTorPins, kNoTackPins},
-  {true, 20, "www.moneybookers.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "ledgerscope.net", true, kNoSpkiPins, kNoTackPins},
-  {false, 19, "www.ledgerscope.net", true, kNoSpkiPins, kNoTackPins},
-  {false, 8, "kyps.net", true, kNoSpkiPins, kNoTackPins},
-  {false, 12, "www.kyps.net", true, kNoSpkiPins, kNoTackPins},
-  {true, 15, "app.recurly.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 15, "api.recurly.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "greplin.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "www.greplin.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 25, "luneta.nearbuysystems.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 10, "ubertt.org", true, kNoSpkiPins, kNoTackPins},
-  {true, 7, "pixi.me", true, kNoSpkiPins, kNoTackPins},
-  {true, 12, "grepular.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 14, "mydigipass.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 18, "www.mydigipass.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 24, "developer.mydigipass.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 28, "www.developer.mydigipass.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 22, "sandbox.mydigipass.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 26, "www.sandbox.mydigipass.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 10, "crypto.cat", true, kNoSpkiPins, kNoTackPins},
-  {true, 23, "bigshinylock.minazo.net", true, kNoSpkiPins, kNoTackPins},
-  {true, 8, "crate.io", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "twitter.com", false, kTwitterComPins, kNoTackPins},
-  {true, 15, "www.twitter.com", false, kTwitterComPins, kNoTackPins},
-  {true, 15, "api.twitter.com", false, kTwitterCDNPins, kNoTackPins},
-  {true, 17, "oauth.twitter.com", false, kTwitterComPins, kNoTackPins},
-  {true, 18, "mobile.twitter.com", false, kTwitterComPins, kNoTackPins},
-  {true, 15, "dev.twitter.com", false, kTwitterComPins, kNoTackPins},
-  {true, 20, "business.twitter.com", false, kTwitterComPins, kNoTackPins},
-  {true, 20, "platform.twitter.com", false, kTwitterCDNPins, kNoTackPins},
-  {true, 13, "si0.twimg.com", false, kTwitterCDNPins, kNoTackPins},
-  {true, 21, "twimg0-a.akamaihd.net", false, kTwitterCDNPins, kNoTackPins},
-  {true, 20, "braintreegateway.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 21, "braintreepayments.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 25, "www.braintreepayments.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 22, "emailprivacytester.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 11, "tor2web.org", false, kTor2webPins, kNoTackPins},
-  {true, 23, "business.medbank.com.mt", true, kNoSpkiPins, kNoTackPins},
-  {true, 12, "arivo.com.br", true, kNoSpkiPins, kNoTackPins},
-  {true, 19, "www.apollo-auto.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 13, "www.cueup.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 9, "jitsi.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 13, "www.jitsi.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 18, "download.jitsi.org", true, kNoSpkiPins, kNoTackPins},
-  {true, 6, "sol.io", true, kNoSpkiPins, kNoTackPins},
-  {false, 12, "irccloud.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 16, "www.irccloud.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 18, "alpha.irccloud.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 9, "passwd.io", true, kNoSpkiPins, kNoTackPins},
-  {true, 13, "browserid.org", true, kNoSpkiPins, kNoTackPins},
-  {true, 17, "login.persona.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "neonisi.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 15, "www.neonisi.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 17, "shops.neonisi.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 15, "piratenlogin.de", true, kNoSpkiPins, kNoTackPins},
-  {true, 13, "howrandom.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "intercom.io", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "api.intercom.io", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "www.intercom.io", true, kNoSpkiPins, kNoTackPins},
-  {true, 15, "fatzebra.com.au", true, kNoSpkiPins, kNoTackPins},
-  {true, 16, "csawctf.poly.edu", true, kNoSpkiPins, kNoTackPins},
-  {false, 16, "makeyourlaws.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 20, "www.makeyourlaws.org", true, kNoSpkiPins, kNoTackPins},
-  {true, 14, "iop.intuit.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 12, "surfeasy.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 16, "www.surfeasy.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 13, "packagist.org", true, kNoSpkiPins, kNoTackPins},
-  {false, 11, "lookout.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 15, "www.lookout.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 13, "mylookout.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 17, "www.mylookout.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 14, "dm.lookout.com", true, kNoSpkiPins, kNoTackPins},
-  {false, 16, "dm.mylookout.com", true, kNoSpkiPins, kNoTackPins},
-  {true, 7, "tack.io", true, kNoSpkiPins, kNoTackPins},
-  {false, 12, "test.tack.io", false, kNoSpkiPins, "6i7l7.gw7zx.kuza6.skvzy.6alwa", "j6det.kfbj5.oweph.mdyxi.wvbch"},
-  {false, 12, "test.tack.io", false, kGooglePins, kNoTackPins},
+static const struct HSTSPreload kPreloadedSTS[] = {
+  {25, true, "\013pinningtest\007appspot\003com", false, kTestPins, DOMAIN_APPSPOT_COM },
+  {12, true, "\006google\003com", false, kGooglePins, DOMAIN_GOOGLE_COM },
+  {19, true, "\006health\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {21, true, "\010checkout\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {19, true, "\006chrome\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {17, true, "\004docs\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {18, true, "\005sites\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {25, true, "\014spreadsheets\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {22, false, "\011appengine\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {22, true, "\011encrypted\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {21, true, "\010accounts\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {21, true, "\010profiles\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {17, true, "\004mail\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {23, true, "\012talkgadget\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {17, true, "\004talk\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {29, true, "\020hostedtalkgadget\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {17, true, "\004plus\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {19, true, "\006script\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {20, true, "\006market\007android\003com", true, kGooglePins, DOMAIN_ANDROID_COM },
+  {26, true, "\003ssl\020google-analytics\003com", true, kGooglePins, DOMAIN_GOOGLE_ANALYTICS_COM },
+  {18, true, "\005drive\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {16, true, "\012googleplex\003com", true, kGooglePins, DOMAIN_GOOGLEPLEX_COM },
+  {19, true, "\006groups\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {17, true, "\004apis\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {32, true, "\022chromiumcodereview\007appspot\003com", true, kGooglePins, DOMAIN_APPSPOT_COM },
+  {24, true, "\012codereview\007appspot\003com", true, kGooglePins, DOMAIN_APPSPOT_COM },
+  {23, true, "\005chart\004apis\006google\003com", false, kGooglePins, DOMAIN_GOOGLE_COM },
+  {11, true, "\005ytimg\003com", false, kGooglePins, DOMAIN_YTIMG_COM },
+  {23, true, "\021googleusercontent\003com", false, kGooglePins, DOMAIN_GOOGLEUSERCONTENT_COM },
+  {13, true, "\007youtube\003com", false, kGooglePins, DOMAIN_YOUTUBE_COM },
+  {16, true, "\012googleapis\003com", false, kGooglePins, DOMAIN_GOOGLEAPIS_COM },
+  {22, true, "\020googleadservices\003com", false, kGooglePins, DOMAIN_GOOGLEADSERVICES_COM },
+  {16, true, "\012googlecode\003com", false, kGooglePins, DOMAIN_GOOGLECODE_COM },
+  {13, true, "\007appspot\003com", false, kGooglePins, DOMAIN_APPSPOT_COM },
+  {23, true, "\021googlesyndication\003com", false, kGooglePins, DOMAIN_GOOGLESYNDICATION_COM },
+  {17, true, "\013doubleclick\003net", false, kGooglePins, DOMAIN_DOUBLECLICK_NET },
+  {17, true, "\003ssl\007gstatic\003com", false, kGooglePins, DOMAIN_GSTATIC_COM },
+  {10, true, "\005youtu\002be", false, kGooglePins, DOMAIN_YOUTU_BE },
+  {13, true, "\007android\003com", false, kGooglePins, DOMAIN_ANDROID_COM },
+  {20, true, "\016googlecommerce\003com", false, kGooglePins, DOMAIN_GOOGLECOMMERCE_COM },
+  {12, true, "\006urchin\003com", false, kGooglePins, DOMAIN_URCHIN_COM },
+  {8, true, "\003goo\002gl", false, kGooglePins, DOMAIN_GOO_GL },
+  {6, true, "\001g\002co", false, kGooglePins, DOMAIN_G_CO },
+  {11, true, "\006google\002ac", false, kGooglePins, DOMAIN_GOOGLE_AC },
+  {11, true, "\006google\002ad", false, kGooglePins, DOMAIN_GOOGLE_AD },
+  {11, true, "\006google\002ae", false, kGooglePins, DOMAIN_GOOGLE_AE },
+  {11, true, "\006google\002af", false, kGooglePins, DOMAIN_GOOGLE_AF },
+  {11, true, "\006google\002ag", false, kGooglePins, DOMAIN_GOOGLE_AG },
+  {11, true, "\006google\002am", false, kGooglePins, DOMAIN_GOOGLE_AM },
+  {11, true, "\006google\002as", false, kGooglePins, DOMAIN_GOOGLE_AS },
+  {11, true, "\006google\002at", false, kGooglePins, DOMAIN_GOOGLE_AT },
+  {11, true, "\006google\002az", false, kGooglePins, DOMAIN_GOOGLE_AZ },
+  {11, true, "\006google\002ba", false, kGooglePins, DOMAIN_GOOGLE_BA },
+  {11, true, "\006google\002be", false, kGooglePins, DOMAIN_GOOGLE_BE },
+  {11, true, "\006google\002bf", false, kGooglePins, DOMAIN_GOOGLE_BF },
+  {11, true, "\006google\002bg", false, kGooglePins, DOMAIN_GOOGLE_BG },
+  {11, true, "\006google\002bi", false, kGooglePins, DOMAIN_GOOGLE_BI },
+  {11, true, "\006google\002bj", false, kGooglePins, DOMAIN_GOOGLE_BJ },
+  {11, true, "\006google\002bs", false, kGooglePins, DOMAIN_GOOGLE_BS },
+  {11, true, "\006google\002by", false, kGooglePins, DOMAIN_GOOGLE_BY },
+  {11, true, "\006google\002ca", false, kGooglePins, DOMAIN_GOOGLE_CA },
+  {12, true, "\006google\003cat", false, kGooglePins, DOMAIN_GOOGLE_CAT },
+  {11, true, "\006google\002cc", false, kGooglePins, DOMAIN_GOOGLE_CC },
+  {11, true, "\006google\002cd", false, kGooglePins, DOMAIN_GOOGLE_CD },
+  {11, true, "\006google\002cf", false, kGooglePins, DOMAIN_GOOGLE_CF },
+  {11, true, "\006google\002cg", false, kGooglePins, DOMAIN_GOOGLE_CG },
+  {11, true, "\006google\002ch", false, kGooglePins, DOMAIN_GOOGLE_CH },
+  {11, true, "\006google\002ci", false, kGooglePins, DOMAIN_GOOGLE_CI },
+  {11, true, "\006google\002cl", false, kGooglePins, DOMAIN_GOOGLE_CL },
+  {11, true, "\006google\002cm", false, kGooglePins, DOMAIN_GOOGLE_CM },
+  {11, true, "\006google\002cn", false, kGooglePins, DOMAIN_GOOGLE_CN },
+  {14, true, "\006google\002co\002ao", false, kGooglePins, DOMAIN_CO_AO },
+  {14, true, "\006google\002co\002bw", false, kGooglePins, DOMAIN_CO_BW },
+  {14, true, "\006google\002co\002ck", false, kGooglePins, DOMAIN_CO_CK },
+  {14, true, "\006google\002co\002cr", false, kGooglePins, DOMAIN_CO_CR },
+  {14, true, "\006google\002co\002hu", false, kGooglePins, DOMAIN_CO_HU },
+  {14, true, "\006google\002co\002id", false, kGooglePins, DOMAIN_CO_ID },
+  {14, true, "\006google\002co\002il", false, kGooglePins, DOMAIN_CO_IL },
+  {14, true, "\006google\002co\002im", false, kGooglePins, DOMAIN_CO_IM },
+  {14, true, "\006google\002co\002in", false, kGooglePins, DOMAIN_CO_IN },
+  {14, true, "\006google\002co\002je", false, kGooglePins, DOMAIN_CO_JE },
+  {14, true, "\006google\002co\002jp", false, kGooglePins, DOMAIN_CO_JP },
+  {14, true, "\006google\002co\002ke", false, kGooglePins, DOMAIN_CO_KE },
+  {14, true, "\006google\002co\002kr", false, kGooglePins, DOMAIN_CO_KR },
+  {14, true, "\006google\002co\002ls", false, kGooglePins, DOMAIN_CO_LS },
+  {14, true, "\006google\002co\002ma", false, kGooglePins, DOMAIN_CO_MA },
+  {14, true, "\006google\002co\002mz", false, kGooglePins, DOMAIN_CO_MZ },
+  {14, true, "\006google\002co\002nz", false, kGooglePins, DOMAIN_CO_NZ },
+  {14, true, "\006google\002co\002th", false, kGooglePins, DOMAIN_CO_TH },
+  {14, true, "\006google\002co\002tz", false, kGooglePins, DOMAIN_CO_TZ },
+  {14, true, "\006google\002co\002ug", false, kGooglePins, DOMAIN_CO_UG },
+  {14, true, "\006google\002co\002uk", false, kGooglePins, DOMAIN_CO_UK },
+  {14, true, "\006google\002co\002uz", false, kGooglePins, DOMAIN_CO_UZ },
+  {14, true, "\006google\002co\002ve", false, kGooglePins, DOMAIN_CO_VE },
+  {14, true, "\006google\002co\002vi", false, kGooglePins, DOMAIN_CO_VI },
+  {14, true, "\006google\002co\002za", false, kGooglePins, DOMAIN_CO_ZA },
+  {14, true, "\006google\002co\002zm", false, kGooglePins, DOMAIN_CO_ZM },
+  {14, true, "\006google\002co\002zw", false, kGooglePins, DOMAIN_CO_ZW },
+  {15, true, "\006google\003com\002af", false, kGooglePins, DOMAIN_COM_AF },
+  {15, true, "\006google\003com\002ag", false, kGooglePins, DOMAIN_COM_AG },
+  {15, true, "\006google\003com\002ai", false, kGooglePins, DOMAIN_COM_AI },
+  {15, true, "\006google\003com\002ar", false, kGooglePins, DOMAIN_COM_AR },
+  {15, true, "\006google\003com\002au", false, kGooglePins, DOMAIN_COM_AU },
+  {15, true, "\006google\003com\002bd", false, kGooglePins, DOMAIN_COM_BD },
+  {15, true, "\006google\003com\002bh", false, kGooglePins, DOMAIN_COM_BH },
+  {15, true, "\006google\003com\002bn", false, kGooglePins, DOMAIN_COM_BN },
+  {15, true, "\006google\003com\002bo", false, kGooglePins, DOMAIN_COM_BO },
+  {15, true, "\006google\003com\002br", false, kGooglePins, DOMAIN_COM_BR },
+  {15, true, "\006google\003com\002by", false, kGooglePins, DOMAIN_COM_BY },
+  {15, true, "\006google\003com\002bz", false, kGooglePins, DOMAIN_COM_BZ },
+  {15, true, "\006google\003com\002cn", false, kGooglePins, DOMAIN_COM_CN },
+  {15, true, "\006google\003com\002co", false, kGooglePins, DOMAIN_COM_CO },
+  {15, true, "\006google\003com\002cu", false, kGooglePins, DOMAIN_COM_CU },
+  {15, true, "\006google\003com\002cy", false, kGooglePins, DOMAIN_COM_CY },
+  {15, true, "\006google\003com\002do", false, kGooglePins, DOMAIN_COM_DO },
+  {15, true, "\006google\003com\002ec", false, kGooglePins, DOMAIN_COM_EC },
+  {15, true, "\006google\003com\002eg", false, kGooglePins, DOMAIN_COM_EG },
+  {15, true, "\006google\003com\002et", false, kGooglePins, DOMAIN_COM_ET },
+  {15, true, "\006google\003com\002fj", false, kGooglePins, DOMAIN_COM_FJ },
+  {15, true, "\006google\003com\002ge", false, kGooglePins, DOMAIN_COM_GE },
+  {15, true, "\006google\003com\002gh", false, kGooglePins, DOMAIN_COM_GH },
+  {15, true, "\006google\003com\002gi", false, kGooglePins, DOMAIN_COM_GI },
+  {15, true, "\006google\003com\002gr", false, kGooglePins, DOMAIN_COM_GR },
+  {15, true, "\006google\003com\002gt", false, kGooglePins, DOMAIN_COM_GT },
+  {15, true, "\006google\003com\002hk", false, kGooglePins, DOMAIN_COM_HK },
+  {15, true, "\006google\003com\002iq", false, kGooglePins, DOMAIN_COM_IQ },
+  {15, true, "\006google\003com\002jm", false, kGooglePins, DOMAIN_COM_JM },
+  {15, true, "\006google\003com\002jo", false, kGooglePins, DOMAIN_COM_JO },
+  {15, true, "\006google\003com\002kh", false, kGooglePins, DOMAIN_COM_KH },
+  {15, true, "\006google\003com\002kw", false, kGooglePins, DOMAIN_COM_KW },
+  {15, true, "\006google\003com\002lb", false, kGooglePins, DOMAIN_COM_LB },
+  {15, true, "\006google\003com\002ly", false, kGooglePins, DOMAIN_COM_LY },
+  {15, true, "\006google\003com\002mt", false, kGooglePins, DOMAIN_COM_MT },
+  {15, true, "\006google\003com\002mx", false, kGooglePins, DOMAIN_COM_MX },
+  {15, true, "\006google\003com\002my", false, kGooglePins, DOMAIN_COM_MY },
+  {15, true, "\006google\003com\002na", false, kGooglePins, DOMAIN_COM_NA },
+  {15, true, "\006google\003com\002nf", false, kGooglePins, DOMAIN_COM_NF },
+  {15, true, "\006google\003com\002ng", false, kGooglePins, DOMAIN_COM_NG },
+  {15, true, "\006google\003com\002ni", false, kGooglePins, DOMAIN_COM_NI },
+  {15, true, "\006google\003com\002np", false, kGooglePins, DOMAIN_COM_NP },
+  {15, true, "\006google\003com\002nr", false, kGooglePins, DOMAIN_COM_NR },
+  {15, true, "\006google\003com\002om", false, kGooglePins, DOMAIN_COM_OM },
+  {15, true, "\006google\003com\002pa", false, kGooglePins, DOMAIN_COM_PA },
+  {15, true, "\006google\003com\002pe", false, kGooglePins, DOMAIN_COM_PE },
+  {15, true, "\006google\003com\002ph", false, kGooglePins, DOMAIN_COM_PH },
+  {15, true, "\006google\003com\002pk", false, kGooglePins, DOMAIN_COM_PK },
+  {15, true, "\006google\003com\002pl", false, kGooglePins, DOMAIN_COM_PL },
+  {15, true, "\006google\003com\002pr", false, kGooglePins, DOMAIN_COM_PR },
+  {15, true, "\006google\003com\002py", false, kGooglePins, DOMAIN_COM_PY },
+  {15, true, "\006google\003com\002qa", false, kGooglePins, DOMAIN_COM_QA },
+  {15, true, "\006google\003com\002ru", false, kGooglePins, DOMAIN_COM_RU },
+  {15, true, "\006google\003com\002sa", false, kGooglePins, DOMAIN_COM_SA },
+  {15, true, "\006google\003com\002sb", false, kGooglePins, DOMAIN_COM_SB },
+  {15, true, "\006google\003com\002sg", false, kGooglePins, DOMAIN_COM_SG },
+  {15, true, "\006google\003com\002sl", false, kGooglePins, DOMAIN_COM_SL },
+  {15, true, "\006google\003com\002sv", false, kGooglePins, DOMAIN_COM_SV },
+  {15, true, "\006google\003com\002tj", false, kGooglePins, DOMAIN_COM_TJ },
+  {15, true, "\006google\003com\002tn", false, kGooglePins, DOMAIN_COM_TN },
+  {15, true, "\006google\003com\002tr", false, kGooglePins, DOMAIN_COM_TR },
+  {15, true, "\006google\003com\002tw", false, kGooglePins, DOMAIN_COM_TW },
+  {15, true, "\006google\003com\002ua", false, kGooglePins, DOMAIN_COM_UA },
+  {15, true, "\006google\003com\002uy", false, kGooglePins, DOMAIN_COM_UY },
+  {15, true, "\006google\003com\002vc", false, kGooglePins, DOMAIN_COM_VC },
+  {15, true, "\006google\003com\002ve", false, kGooglePins, DOMAIN_COM_VE },
+  {15, true, "\006google\003com\002vn", false, kGooglePins, DOMAIN_COM_VN },
+  {11, true, "\006google\002cv", false, kGooglePins, DOMAIN_GOOGLE_CV },
+  {11, true, "\006google\002cz", false, kGooglePins, DOMAIN_GOOGLE_CZ },
+  {11, true, "\006google\002de", false, kGooglePins, DOMAIN_GOOGLE_DE },
+  {11, true, "\006google\002dj", false, kGooglePins, DOMAIN_GOOGLE_DJ },
+  {11, true, "\006google\002dk", false, kGooglePins, DOMAIN_GOOGLE_DK },
+  {11, true, "\006google\002dm", false, kGooglePins, DOMAIN_GOOGLE_DM },
+  {11, true, "\006google\002dz", false, kGooglePins, DOMAIN_GOOGLE_DZ },
+  {11, true, "\006google\002ee", false, kGooglePins, DOMAIN_GOOGLE_EE },
+  {11, true, "\006google\002es", false, kGooglePins, DOMAIN_GOOGLE_ES },
+  {11, true, "\006google\002fi", false, kGooglePins, DOMAIN_GOOGLE_FI },
+  {11, true, "\006google\002fm", false, kGooglePins, DOMAIN_GOOGLE_FM },
+  {11, true, "\006google\002fr", false, kGooglePins, DOMAIN_GOOGLE_FR },
+  {11, true, "\006google\002ga", false, kGooglePins, DOMAIN_GOOGLE_GA },
+  {11, true, "\006google\002ge", false, kGooglePins, DOMAIN_GOOGLE_GE },
+  {11, true, "\006google\002gg", false, kGooglePins, DOMAIN_GOOGLE_GG },
+  {11, true, "\006google\002gl", false, kGooglePins, DOMAIN_GOOGLE_GL },
+  {11, true, "\006google\002gm", false, kGooglePins, DOMAIN_GOOGLE_GM },
+  {11, true, "\006google\002gp", false, kGooglePins, DOMAIN_GOOGLE_GP },
+  {11, true, "\006google\002gr", false, kGooglePins, DOMAIN_GOOGLE_GR },
+  {11, true, "\006google\002gy", false, kGooglePins, DOMAIN_GOOGLE_GY },
+  {11, true, "\006google\002hk", false, kGooglePins, DOMAIN_GOOGLE_HK },
+  {11, true, "\006google\002hn", false, kGooglePins, DOMAIN_GOOGLE_HN },
+  {11, true, "\006google\002hr", false, kGooglePins, DOMAIN_GOOGLE_HR },
+  {11, true, "\006google\002ht", false, kGooglePins, DOMAIN_GOOGLE_HT },
+  {11, true, "\006google\002hu", false, kGooglePins, DOMAIN_GOOGLE_HU },
+  {11, true, "\006google\002ie", false, kGooglePins, DOMAIN_GOOGLE_IE },
+  {11, true, "\006google\002im", false, kGooglePins, DOMAIN_GOOGLE_IM },
+  {13, true, "\006google\004info", false, kGooglePins, DOMAIN_GOOGLE_INFO },
+  {11, true, "\006google\002iq", false, kGooglePins, DOMAIN_GOOGLE_IQ },
+  {11, true, "\006google\002is", false, kGooglePins, DOMAIN_GOOGLE_IS },
+  {11, true, "\006google\002it", false, kGooglePins, DOMAIN_GOOGLE_IT },
+  {14, true, "\006google\002it\002ao", false, kGooglePins, DOMAIN_IT_AO },
+  {11, true, "\006google\002je", false, kGooglePins, DOMAIN_GOOGLE_JE },
+  {11, true, "\006google\002jo", false, kGooglePins, DOMAIN_GOOGLE_JO },
+  {13, true, "\006google\004jobs", false, kGooglePins, DOMAIN_GOOGLE_JOBS },
+  {11, true, "\006google\002jp", false, kGooglePins, DOMAIN_GOOGLE_JP },
+  {11, true, "\006google\002kg", false, kGooglePins, DOMAIN_GOOGLE_KG },
+  {11, true, "\006google\002ki", false, kGooglePins, DOMAIN_GOOGLE_KI },
+  {11, true, "\006google\002kz", false, kGooglePins, DOMAIN_GOOGLE_KZ },
+  {11, true, "\006google\002la", false, kGooglePins, DOMAIN_GOOGLE_LA },
+  {11, true, "\006google\002li", false, kGooglePins, DOMAIN_GOOGLE_LI },
+  {11, true, "\006google\002lk", false, kGooglePins, DOMAIN_GOOGLE_LK },
+  {11, true, "\006google\002lt", false, kGooglePins, DOMAIN_GOOGLE_LT },
+  {11, true, "\006google\002lu", false, kGooglePins, DOMAIN_GOOGLE_LU },
+  {11, true, "\006google\002lv", false, kGooglePins, DOMAIN_GOOGLE_LV },
+  {11, true, "\006google\002md", false, kGooglePins, DOMAIN_GOOGLE_MD },
+  {11, true, "\006google\002me", false, kGooglePins, DOMAIN_GOOGLE_ME },
+  {11, true, "\006google\002mg", false, kGooglePins, DOMAIN_GOOGLE_MG },
+  {11, true, "\006google\002mk", false, kGooglePins, DOMAIN_GOOGLE_MK },
+  {11, true, "\006google\002ml", false, kGooglePins, DOMAIN_GOOGLE_ML },
+  {11, true, "\006google\002mn", false, kGooglePins, DOMAIN_GOOGLE_MN },
+  {11, true, "\006google\002ms", false, kGooglePins, DOMAIN_GOOGLE_MS },
+  {11, true, "\006google\002mu", false, kGooglePins, DOMAIN_GOOGLE_MU },
+  {11, true, "\006google\002mv", false, kGooglePins, DOMAIN_GOOGLE_MV },
+  {11, true, "\006google\002mw", false, kGooglePins, DOMAIN_GOOGLE_MW },
+  {11, true, "\006google\002ne", false, kGooglePins, DOMAIN_GOOGLE_NE },
+  {14, true, "\006google\002ne\002jp", false, kGooglePins, DOMAIN_NE_JP },
+  {12, true, "\006google\003net", false, kGooglePins, DOMAIN_GOOGLE_NET },
+  {11, true, "\006google\002nl", false, kGooglePins, DOMAIN_GOOGLE_NL },
+  {11, true, "\006google\002no", false, kGooglePins, DOMAIN_GOOGLE_NO },
+  {11, true, "\006google\002nr", false, kGooglePins, DOMAIN_GOOGLE_NR },
+  {11, true, "\006google\002nu", false, kGooglePins, DOMAIN_GOOGLE_NU },
+  {15, true, "\006google\003off\002ai", false, kGooglePins, DOMAIN_OFF_AI },
+  {11, true, "\006google\002pk", false, kGooglePins, DOMAIN_GOOGLE_PK },
+  {11, true, "\006google\002pl", false, kGooglePins, DOMAIN_GOOGLE_PL },
+  {11, true, "\006google\002pn", false, kGooglePins, DOMAIN_GOOGLE_PN },
+  {11, true, "\006google\002ps", false, kGooglePins, DOMAIN_GOOGLE_PS },
+  {11, true, "\006google\002pt", false, kGooglePins, DOMAIN_GOOGLE_PT },
+  {11, true, "\006google\002ro", false, kGooglePins, DOMAIN_GOOGLE_RO },
+  {11, true, "\006google\002rs", false, kGooglePins, DOMAIN_GOOGLE_RS },
+  {11, true, "\006google\002ru", false, kGooglePins, DOMAIN_GOOGLE_RU },
+  {11, true, "\006google\002rw", false, kGooglePins, DOMAIN_GOOGLE_RW },
+  {11, true, "\006google\002sc", false, kGooglePins, DOMAIN_GOOGLE_SC },
+  {11, true, "\006google\002se", false, kGooglePins, DOMAIN_GOOGLE_SE },
+  {11, true, "\006google\002sh", false, kGooglePins, DOMAIN_GOOGLE_SH },
+  {11, true, "\006google\002si", false, kGooglePins, DOMAIN_GOOGLE_SI },
+  {11, true, "\006google\002sk", false, kGooglePins, DOMAIN_GOOGLE_SK },
+  {11, true, "\006google\002sm", false, kGooglePins, DOMAIN_GOOGLE_SM },
+  {11, true, "\006google\002sn", false, kGooglePins, DOMAIN_GOOGLE_SN },
+  {11, true, "\006google\002so", false, kGooglePins, DOMAIN_GOOGLE_SO },
+  {11, true, "\006google\002st", false, kGooglePins, DOMAIN_GOOGLE_ST },
+  {11, true, "\006google\002td", false, kGooglePins, DOMAIN_GOOGLE_TD },
+  {11, true, "\006google\002tg", false, kGooglePins, DOMAIN_GOOGLE_TG },
+  {11, true, "\006google\002tk", false, kGooglePins, DOMAIN_GOOGLE_TK },
+  {11, true, "\006google\002tl", false, kGooglePins, DOMAIN_GOOGLE_TL },
+  {11, true, "\006google\002tm", false, kGooglePins, DOMAIN_GOOGLE_TM },
+  {11, true, "\006google\002tn", false, kGooglePins, DOMAIN_GOOGLE_TN },
+  {11, true, "\006google\002to", false, kGooglePins, DOMAIN_GOOGLE_TO },
+  {11, true, "\006google\002tp", false, kGooglePins, DOMAIN_GOOGLE_TP },
+  {11, true, "\006google\002tt", false, kGooglePins, DOMAIN_GOOGLE_TT },
+  {11, true, "\006google\002us", false, kGooglePins, DOMAIN_GOOGLE_US },
+  {11, true, "\006google\002uz", false, kGooglePins, DOMAIN_GOOGLE_UZ },
+  {11, true, "\006google\002vg", false, kGooglePins, DOMAIN_GOOGLE_VG },
+  {11, true, "\006google\002vu", false, kGooglePins, DOMAIN_GOOGLE_VU },
+  {11, true, "\006google\002ws", false, kGooglePins, DOMAIN_GOOGLE_WS },
+  {23, true, "\005learn\013doubleclick\003net", false, kNoPins, DOMAIN_NOT_PINNED },
+  {16, false, "\003www\006paypal\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {16, false, "\003www\006elanex\003biz", true, kNoPins, DOMAIN_NOT_PINNED },
+  {12, true, "\006jottit\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {19, true, "\015sunshinepress\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {21, false, "\003www\013noisebridge\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {10, false, "\004neg9\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {12, true, "\006riseup\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {11, false, "\006factor\002cc", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, false, "\007members\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, false, "\007support\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\002id\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {20, false, "\005lists\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {28, false, "\016aladdinschools\007appspot\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, true, "\011ottospora\002nl", true, kNoPins, DOMAIN_NOT_PINNED },
+  {25, false, "\003www\017paycheckrecords\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, false, "\010lastpass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, false, "\003www\010lastpass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, true, "\010keyerror\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\010entropia\002de", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\003www\010entropia\002de", true, kNoPins, DOMAIN_NOT_PINNED },
+  {11, true, "\005romab\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {16, false, "\012logentries\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {20, false, "\003www\012logentries\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {12, true, "\006stripe\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {27, true, "\025cloudsecurityalliance\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, true, "\005login\004sapo\002pt", true, kNoPins, DOMAIN_NOT_PINNED },
+  {19, true, "\015mattmccutchen\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {11, true, "\006betnet\002fr", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, true, "\010uprotect\002it", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, false, "\010squareup\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {9, true, "\004cert\002se", true, kNoPins, DOMAIN_NOT_PINNED },
+  {11, true, "\006crypto\002is", true, kNoPins, DOMAIN_NOT_PINNED },
+  {20, true, "\005simon\007butcher\004name", true, kNoPins, DOMAIN_NOT_PINNED },
+  {10, true, "\004linx\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\007dropcam\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\003www\007dropcam\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {30, true, "\010ebanking\014indovinabank\003com\002vn", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\007epoxate\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {16, false, "\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
+  {21, true, "\004blog\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
+  {22, true, "\005check\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
+  {20, true, "\003www\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
+  {22, true, "\003www\014moneybookers\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\013ledgerscope\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {21, false, "\003www\013ledgerscope\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {10, false, "\004kyps\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, false, "\003www\004kyps\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, true, "\003app\007recurly\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, true, "\003api\007recurly\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\007greplin\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\003www\007greplin\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {27, true, "\006luneta\016nearbuysystems\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {12, true, "\006ubertt\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {9, true, "\004pixi\002me", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, true, "\010grepular\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {16, false, "\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {20, false, "\003www\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {26, false, "\011developer\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {30, false, "\003www\011developer\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {24, false, "\007sandbox\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {28, false, "\003www\007sandbox\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {12, true, "\006crypto\003cat", true, kNoPins, DOMAIN_NOT_PINNED },
+  {25, true, "\014bigshinylock\006minazo\003net", true, kNoPins, DOMAIN_NOT_PINNED },
+  {10, true, "\005crate\002io", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\007twitter\003com", false, kTwitterComPins, DOMAIN_TWITTER_COM },
+  {17, true, "\003www\007twitter\003com", false, kTwitterComPins, DOMAIN_TWITTER_COM },
+  {17, true, "\003api\007twitter\003com", false, kTwitterCDNPins, DOMAIN_TWITTER_COM },
+  {19, true, "\005oauth\007twitter\003com", false, kTwitterComPins, DOMAIN_TWITTER_COM },
+  {20, true, "\006mobile\007twitter\003com", false, kTwitterComPins, DOMAIN_TWITTER_COM },
+  {17, true, "\003dev\007twitter\003com", false, kTwitterComPins, DOMAIN_TWITTER_COM },
+  {22, true, "\010business\007twitter\003com", false, kTwitterComPins, DOMAIN_TWITTER_COM },
+  {22, true, "\010platform\007twitter\003com", false, kTwitterCDNPins, DOMAIN_TWITTER_COM },
+  {15, true, "\003si0\005twimg\003com", false, kTwitterCDNPins, DOMAIN_TWIMG_COM },
+  {23, true, "\010twimg0-a\010akamaihd\003net", false, kTwitterCDNPins, DOMAIN_AKAMAIHD_NET },
+  {22, true, "\020braintreegateway\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {23, false, "\021braintreepayments\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {27, false, "\003www\021braintreepayments\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {24, false, "\022emailprivacytester\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, true, "\007tor2web\003org", false, kTor2webPins, DOMAIN_TOR2WEB_ORG },
+  {25, true, "\010business\007medbank\003com\002mt", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, true, "\005arivo\003com\002br", true, kNoPins, DOMAIN_NOT_PINNED },
+  {21, true, "\003www\013apollo-auto\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, true, "\003www\005cueup\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {11, false, "\005jitsi\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, false, "\003www\005jitsi\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {20, false, "\010download\005jitsi\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {8, true, "\003sol\002io", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, false, "\010irccloud\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, false, "\003www\010irccloud\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {20, false, "\005alpha\010irccloud\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {11, true, "\006passwd\002io", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, true, "\011browserid\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {19, true, "\005login\007persona\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\007neonisi\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, true, "\003www\007neonisi\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {19, true, "\005shops\007neonisi\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, true, "\014piratenlogin\002de", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, true, "\011howrandom\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\010intercom\002io", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\003api\010intercom\002io", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\003www\010intercom\002io", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, true, "\010fatzebra\003com\002au", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, true, "\007csawctf\004poly\003edu", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, false, "\014makeyourlaws\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, false, "\003www\014makeyourlaws\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {16, true, "\003iop\006intuit\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, false, "\010surfeasy\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, false, "\003www\010surfeasy\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, false, "\011packagist\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, false, "\007lookout\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, false, "\003www\007lookout\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, false, "\011mylookout\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {19, false, "\003www\011mylookout\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {16, false, "\002dm\007lookout\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, false, "\002dm\011mylookout\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, true, "\011itriskltd\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, true, "\012stocktrade\002de", true, kNoPins, DOMAIN_NOT_PINNED },
+  {13, true, "\007rhcloud\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, true, "\011openshift\006redhat\003com", true, kNoPins, DOMAIN_NOT_PINNED },
 };
 static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
 
-static const net::PreloadEntry kPreloadedSNISTS[] = {
-  {false, 9, "gmail.com", true, kGooglePins, kNoTackPins},
-  {false, 14, "googlemail.com", true, kGooglePins, kNoTackPins},
-  {false, 13, "www.gmail.com", true, kGooglePins, kNoTackPins},
-  {false, 18, "www.googlemail.com", true, kGooglePins, kNoTackPins},
-  {true, 20, "google-analytics.com", false, kGooglePins, kNoTackPins},
-  {true, 16, "googlegroups.com", false, kGooglePins, kNoTackPins},
+static const struct HSTSPreload kPreloadedSNISTS[] = {
+  {11, false, "\005gmail\003com", true, kGooglePins, DOMAIN_GMAIL_COM },
+  {16, false, "\012googlemail\003com", true, kGooglePins, DOMAIN_GOOGLEMAIL_COM },
+  {15, false, "\003www\005gmail\003com", true, kGooglePins, DOMAIN_GMAIL_COM },
+  {20, false, "\003www\012googlemail\003com", true, kGooglePins, DOMAIN_GOOGLEMAIL_COM },
+  {22, true, "\020google-analytics\003com", false, kGooglePins, DOMAIN_GOOGLE_ANALYTICS_COM },
+  {18, true, "\014googlegroups\003com", false, kGooglePins, DOMAIN_GOOGLEGROUPS_COM },
 };
 static const size_t kNumPreloadedSNISTS = ARRAYSIZE_UNSAFE(kPreloadedSNISTS);
 

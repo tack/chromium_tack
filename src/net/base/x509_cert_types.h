@@ -75,17 +75,11 @@ class NET_EXPORT HashValue {
   HashValue() : tag(HASH_VALUE_SHA1) {}
 
   bool Equals(const HashValue& other) const;
-  bool ParsePin(const std::string& input);
-  std::string WriteAsPin() const;
-
   size_t size() const;
   unsigned char* data();
   const unsigned char* data() const;
 
   HashValueTag tag;
-
-  // So it can be used with std::find()
-  bool operator==(const HashValue &other) const { return Equals(other);}
 
  private:
   union {
@@ -116,10 +110,33 @@ bool NET_EXPORT IsSHA1HashInSortedArray(const SHA1HashValue& hash,
                                         const uint8* array,
                                         size_t array_byte_len);
 
+// Returns true if the intersection of |a| and |b| is not empty. If either
+// |a| or |b| is empty, returns false.
 bool NET_EXPORT HashesIntersect(const HashValueVector& a,
-                                const HashValueVector& b);
+                                const HashValueVector& b) {
+  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
+    HashValueVector::const_iterator j =
+        std::find_if(b.begin(), b.end(), HashValuesEqualPredicate(*i));
+    if (j != b.end())
+      return true;
+  }
 
-std::string NET_EXPORT HashesToBase64String(const HashValueVector& hashes);
+  return false;
+}
+
+std::string NET_EXPORT HashesToBase64String(const HashValueVector& hashes) {
+  std::vector<std::string> hashes_strs;
+  for (HashValueVector::const_iterator
+       i = hashes.begin(); i != hashes.end(); i++) {
+    std::string s;
+    const std::string hash_str(reinterpret_cast<const char*>(i->data()),
+                               i->size());
+    base::Base64Encode(hash_str, &s);
+    hashes_strs.push_back(s);
+  }
+
+  return JoinString(hashes_strs, ',');
+}
 
 // CertPrincipal represents the issuer or subject field of an X.509 certificate.
 struct NET_EXPORT CertPrincipal {

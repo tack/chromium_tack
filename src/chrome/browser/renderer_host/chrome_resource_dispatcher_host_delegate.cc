@@ -330,7 +330,11 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
     const net::URLRequestContext* context = request->context();
     net::TransportSecurityState* state = context->transport_security_state();
     if (state) {
-      if (state->ShouldUpgrade(request->url().host())) {
+      net::TransportSecurityState::DomainState domain_state;
+      bool has_sni = net::SSLConfigService::IsSNIAvailable(
+          context->ssl_config_service());
+      if (state->GetDomainState(
+              request->url().host(), has_sni, &domain_state)) {
         sender->Send(new ChromeViewMsg_AddStrictSecurityHost(
             info->GetRouteID(), request->url().host()));
       }

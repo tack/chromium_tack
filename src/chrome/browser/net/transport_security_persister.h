@@ -90,12 +90,31 @@ class TransportSecurityPersister
   // (switches::kHstsHosts).
   bool DeserializeFromCommandLine(const std::string& serialized);
 
+  // Clears any existing non-static entries, and then re-populates
+  // |transport_security_state_|.
+  //
+  // Sets |*dirty| to true if the new state differs from the persisted
+  // state; false otherwise.
+  bool LoadEntries(const std::string& serialized, bool* dirty);
+
  private:
   class Loader;
 
-  void CompleteLoad(const std::string& input);
+  // Populates |state| from the JSON string |serialized|. Returns true if
+  // all entries were parsed and deserialized correctly. If |forced| is
+  // true, updates |state|'s map of "forced" DomainState entries; normally,
+  // leave this false.
+  //
+  // Sets |*dirty| to true if the new state differs from the persisted
+  // state; false otherwise.
+  static bool Deserialize(const std::string& serialized,
+                          bool forced,
+                          bool* dirty,
+                          net::TransportSecurityState* state);
 
-  net::TransportSecurityState* state_;
+  void CompleteLoad(const std::string& state);
+
+  net::TransportSecurityState* transport_security_state_;
 
   // Helper for safely writing the data.
   ImportantFileWriter writer_;
