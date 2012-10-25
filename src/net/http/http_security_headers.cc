@@ -58,7 +58,6 @@ static bool MaxAgeToInt(std::string::const_iterator begin,
 bool ParseHSTSHeader(const base::Time& now, const std::string& value,
                      base::Time* expiry,         // OUT
                      bool* include_subdomains) {  // OUT
-
   int max_age_candidate = 0;
   bool include_subdomains_candidate = false;
 
@@ -156,7 +155,7 @@ bool ParseHSTSHeader(const base::Time& now, const std::string& value,
       // because it will not be enforced (it expires immediately,
       // essentially).
       *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
-      *include_subdomains = include_subdomains_candidate; 
+      *include_subdomains = include_subdomains_candidate;
       return true;
     case START:
     case DIRECTIVE_END:

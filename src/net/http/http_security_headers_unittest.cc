@@ -4,8 +4,8 @@
 
 #include "base/base64.h"
 #include "base/sha1.h"
-#include "crypto/sha2.h"
 #include "base/string_piece.h"
+#include "crypto/sha2.h"
 #include "net/base/asn1_util.h"
 #include "net/base/cert_test_util.h"
 #include "net/base/cert_verifier.h"
@@ -26,7 +26,6 @@ class HttpSecurityHeadersTest : public testing::Test {
 
 static bool GetPublicKeyHash(const net::X509Certificate::OSCertHandle& cert,
                              HashValue* hash) {
-
   std::string der_bytes;
   if (!net::X509Certificate::GetDEREncoded(cert, &der_bytes))
     return false;
@@ -83,61 +82,61 @@ TEST_F(HttpSecurityHeadersTest, BogusHeaders) {
   EXPECT_FALSE(ParseHSTSHeader(now, "  abc", &expiry, &include_subdomains));
   EXPECT_FALSE(ParseHSTSHeader(now, "  abc   ", &expiry, &include_subdomains));
   EXPECT_FALSE(ParseHSTSHeader(now, "max-age", &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "  max-age", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "  max-age", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "  max-age  ", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "  max-age  ", &expiry,
                                &include_subdomains));
   EXPECT_FALSE(ParseHSTSHeader(now, "max-age=", &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age=", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age=", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age=   ", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age=   ", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =     ", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =     ", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =     xy", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =     xy", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =     3488a923", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "   max-age  =     3488a923", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488a923  ", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488a923  ", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-ag=3488923", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-ag=3488923", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-aged=3488923", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-aged=3488923", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age==3488923", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age==3488923", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "amax-age=3488923", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "amax-age=3488923", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=-3488923", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=-3488923", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923;", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923;", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923     e", &expiry, 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923     e", &expiry,
                                &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, 
-                               "max-age=3488923     includesubdomain", 
+  EXPECT_FALSE(ParseHSTSHeader(now,
+                               "max-age=3488923     includesubdomain",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923includesubdomains", 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923includesubdomains",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923=includesubdomains", 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923=includesubdomains",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923 includesubdomainx", 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923 includesubdomainx",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923 includesubdomain=", 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923 includesubdomain=",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, 
-                               "max-age=3488923 includesubdomain=true", 
+  EXPECT_FALSE(ParseHSTSHeader(now,
+                               "max-age=3488923 includesubdomain=true",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923 includesubdomainsx", 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=3488923 includesubdomainsx",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, 
-                               "max-age=3488923 includesubdomains x", 
+  EXPECT_FALSE(ParseHSTSHeader(now,
+                               "max-age=3488923 includesubdomains x",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=34889.23 includesubdomains", 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=34889.23 includesubdomains",
                                &expiry, &include_subdomains));
-  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=34889 includesubdomains", 
+  EXPECT_FALSE(ParseHSTSHeader(now, "max-age=34889 includesubdomains",
                                &expiry, &include_subdomains));
 
   // Check the out args were not updated by checking the default
@@ -167,23 +166,23 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   EXPECT_FALSE(ParseHPKPHeader(now, "  abc   ", ssl_info, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "max-age", ssl_info, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "  max-age", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age  ", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age  ", ssl_info, &expiry,
                                &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "max-age=", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=   ", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=   ", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     ", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     ", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     xy", ssl_info, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     xy", ssl_info,
                                &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "   max-age  =     3488a923",
                                ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488a923  ", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488a923  ", ssl_info, &expiry,
                                &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "max-ag=3488923pins=" + good_pin + "," +
@@ -194,29 +193,29 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   EXPECT_FALSE(ParseHPKPHeader(now, "max-aged=3488923; " + backup_pin,
                                ssl_info, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
-                               "max-aged=3488923; " + backup_pin + ";" + 
+                               "max-aged=3488923; " + backup_pin + ";" +
                                backup_pin,
                                ssl_info, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
-                               "max-aged=3488923; " + good_pin + ";" + 
+                               "max-aged=3488923; " + good_pin + ";" +
                                good_pin,
                                ssl_info, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "max-aged=3488923; " + good_pin,
                                ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age==3488923", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age==3488923", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "amax-age=3488923", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "amax-age=3488923", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=-3488923", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=-3488923", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923;", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923;", ssl_info, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923     e", ssl_info, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923     e", ssl_info,
                                &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "max-age=3488923     includesubdomain",
                                ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=34889.23", ssl_info, &expiry, 
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=34889.23", ssl_info, &expiry,
                                &hashes));
 
   // Check the out args were not updated by checking the default
@@ -231,85 +230,85 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
   base::Time expect_expiry = now;
   bool include_subdomains = false;
 
-  EXPECT_TRUE(ParseHSTSHeader(now, "max-age=243", &expiry, 
+  EXPECT_TRUE(ParseHSTSHeader(now, "max-age=243", &expiry,
                               &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(243);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_FALSE(include_subdomains);
 
-  EXPECT_TRUE(ParseHSTSHeader(now, "  Max-agE    = 567", &expiry, 
+  EXPECT_TRUE(ParseHSTSHeader(now, "  Max-agE    = 567", &expiry,
                               &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(567);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_FALSE(include_subdomains);
 
-  EXPECT_TRUE(ParseHSTSHeader(now, "  mAx-aGe    = 890      ", &expiry, 
+  EXPECT_TRUE(ParseHSTSHeader(now, "  mAx-aGe    = 890      ", &expiry,
                               &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(890);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_FALSE(include_subdomains);
 
-  EXPECT_TRUE(ParseHSTSHeader(now, "max-age=123;incLudesUbdOmains", &expiry, 
+  EXPECT_TRUE(ParseHSTSHeader(now, "max-age=123;incLudesUbdOmains", &expiry,
                               &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
-  EXPECT_TRUE(ParseHSTSHeader(now, "incLudesUbdOmains; max-age=123", &expiry, 
+  EXPECT_TRUE(ParseHSTSHeader(now, "incLudesUbdOmains; max-age=123", &expiry,
                               &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
-  EXPECT_TRUE(ParseHSTSHeader(now, "   incLudesUbdOmains; max-age=123", 
+  EXPECT_TRUE(ParseHSTSHeader(now, "   incLudesUbdOmains; max-age=123",
                               &expiry, &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(now,
-      "   incLudesUbdOmains; max-age=123; pumpkin=kitten", &expiry, 
+      "   incLudesUbdOmains; max-age=123; pumpkin=kitten", &expiry,
                                    &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(now,
-      "   pumpkin=894; incLudesUbdOmains; max-age=123  ", &expiry, 
+      "   pumpkin=894; incLudesUbdOmains; max-age=123  ", &expiry,
                                    &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(now,
-      "   pumpkin; incLudesUbdOmains; max-age=123  ", &expiry, 
+      "   pumpkin; incLudesUbdOmains; max-age=123  ", &expiry,
                                    &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(now,
-      "   pumpkin; incLudesUbdOmains; max-age=\"123\"  ", &expiry, 
+      "   pumpkin; incLudesUbdOmains; max-age=\"123\"  ", &expiry,
                                    &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(now,
-      "animal=\"squirrel; distinguished\"; incLudesUbdOmains; max-age=123", 
+      "animal=\"squirrel; distinguished\"; incLudesUbdOmains; max-age=123",
                                    &expiry, &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
-  EXPECT_TRUE(ParseHSTSHeader(now, "max-age=394082;  incLudesUbdOmains", 
+  EXPECT_TRUE(ParseHSTSHeader(now, "max-age=394082;  incLudesUbdOmains",
                               &expiry, &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(394082);
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(
-      now, "max-age=39408299  ;incLudesUbdOmains", &expiry, 
+      now, "max-age=39408299  ;incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
       std::min(kMaxHSTSAgeSecs, 39408299l));
@@ -317,7 +316,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(
-      now, "max-age=394082038  ; incLudesUbdOmains", &expiry, 
+      now, "max-age=394082038  ; incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
       std::min(kMaxHSTSAgeSecs, 394082038l));
@@ -325,7 +324,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
   EXPECT_TRUE(include_subdomains);
 
   EXPECT_TRUE(ParseHSTSHeader(
-      now, "  max-age=0  ;  incLudesUbdOmains   ", &expiry, 
+      now, "  max-age=0  ;  incLudesUbdOmains   ", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(0);
   EXPECT_EQ(expect_expiry, expiry);
@@ -350,7 +349,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
   // Set up a realistic SSLInfo with a realistic cert chain.
   FilePath certs_dir = GetTestCertsDirectory();
   scoped_refptr<X509Certificate> ee_cert =
-      ImportCertFromFile(certs_dir, 
+      ImportCertFromFile(certs_dir,
                          "2048-rsa-ee-by-2048-rsa-intermediate.pem");
   ASSERT_NE(static_cast<X509Certificate*>(NULL), ee_cert);
   scoped_refptr<X509Certificate> intermediate =

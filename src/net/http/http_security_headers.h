@@ -5,6 +5,8 @@
 #ifndef NET_HTTP_HTTP_SECURITY_HEADERS_H_
 #define NET_HTTP_HTTP_SECURITY_HEADERS_H_
 
+#include <string>
+
 #include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
 #include "base/time.h"

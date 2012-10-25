@@ -206,8 +206,9 @@ bool HashValue::ParseBase64String(const std::string& value) {
   } else if (value.substr(0, 7) == "sha256/") {
     tag = HASH_VALUE_SHA256;
     b64 = value.substr(7, 44);  // length of base64 string
-  } else
+  } else {
     return false;
+  }
 
   std::string decoded;
   if (!base::Base64Decode(b64, &decoded) || decoded.size() != size()) {
