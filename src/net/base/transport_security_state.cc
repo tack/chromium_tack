@@ -178,7 +178,7 @@ void TransportSecurityState::DeleteSince(const base::Time& time) {
     DirtyNotify();
 }
 
-static bool AddHash(const char* const* sha1_hash,
+static bool AddHash(const char* sha1_hash,
                     HashValueVector* out) {
   HashValue hash(HASH_VALUE_SHA1);
   memcpy(hash.data(), sha1_hash, 20);
@@ -527,14 +527,14 @@ static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
         if (entries[j].pins.required_hashes) {
           const char* const* sha1_hash = entries[j].pins.required_hashes;
           while (*sha1_hash) {
-            AddHash(sha1_hash, &out->static_spki_hashes);
+            AddHash(*sha1_hash, &out->static_spki_hashes);
             sha1_hash++;
           }
         }
         if (entries[j].pins.excluded_hashes) {
           const char* const* sha1_hash = entries[j].pins.excluded_hashes;
           while (*sha1_hash) {
-            AddHash(sha1_hash, &out->bad_static_spki_hashes);
+            AddHash(*sha1_hash, &out->bad_static_spki_hashes);
             sha1_hash++;
           }
         }

@@ -15,7 +15,7 @@
 
 namespace net {
 
-const int32 kMaxHSTSAgeSecs = 86400 * 365;  // 1 year
+const long kMaxHSTSAgeSecs = 86400 * 365;  // 1 year
 
 // Parses |value| as a Strict-Transport-Security header value. If successful,
 // returns true and populates the expiry and include_subdomains values.
