@@ -521,10 +521,8 @@ TEST_F(TransportSecurityStateTest, BuiltinCertPins) {
 static bool AddHash(const std::string& type_and_base64,
                     HashValueVector* out) {
   HashValue hash;
-  if (!hash.ParseBase64String(type_and_base64)) {
-    LOG(WARNING) << "OK THIS IS WHY IT FAILS";
+  if (!hash.ParseBase64String(type_and_base64))
     return false;
-  }
 
   out->push_back(hash);
   return true;
