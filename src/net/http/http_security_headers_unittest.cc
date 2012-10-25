@@ -43,6 +43,7 @@ static bool GetPublicKeyHash(const net::X509Certificate::OSCertHandle& cert,
       break;
     default:
       NOTREACHED() << "Unknown HashValueTag " << hash->tag;
+      return false;
   }
 
   return true;
@@ -221,7 +222,7 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   // Check the out args were not updated by checking the default
   // values for its predictable fields.
   EXPECT_EQ(now, expiry);
-  EXPECT_TRUE(hashes.size() == 0);
+  EXPECT_EQ(hashes.size(), (size_t)0);
 }
 
 TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
@@ -311,7 +312,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
       now, "max-age=39408299  ;incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, 39408299l));
+    std::min(kMaxHSTSAgeSecs, (int64)39408299l));
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
@@ -319,7 +320,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
       now, "max-age=394082038  ; incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, 394082038l));
+    std::min(kMaxHSTSAgeSecs, (int64)394082038l));
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
@@ -430,7 +431,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
       "max-age=39408299  ;" + backup_pin + ";" + good_pin + ";  ",
       ssl_info, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, 39408299l));
+    std::min(kMaxHSTSAgeSecs, (int64)39408299l));
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
@@ -439,7 +440,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
           good_pin + ";" + backup_pin + ";   ",
       ssl_info, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, 394082038l));
+    std::min(kMaxHSTSAgeSecs, (int64)394082038l));
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
@@ -474,6 +475,5 @@ TEST_F(HttpSecurityHeadersTest, ValidPinsHeadersSHA1) {
 TEST_F(HttpSecurityHeadersTest, ValidPinsHeadersSHA256) {
   TestValidPinsHeaders(HASH_VALUE_SHA256);
 }
-
 };
 

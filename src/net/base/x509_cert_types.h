@@ -93,23 +93,9 @@ class NET_EXPORT HashValue {
   } fingerprint;
 };
 
-class NET_EXPORT HashValueLessThan {
- public:
-  bool operator()(const HashValue& lhs,
-                  const HashValue& rhs) const {
-    size_t lhs_size = lhs.size();
-    size_t rhs_size = rhs.size();
-
-    if (lhs_size != rhs_size)
-      return lhs_size < rhs_size;
-
-    return memcmp(lhs.data(), rhs.data(), lhs_size) < 0;
-  }
-};
-
-class NET_EXPORT HashValuesEqualPredicate {
+class NET_EXPORT HashValuesEqual {
   public:
-  explicit HashValuesEqualPredicate(const HashValue& fingerprint) :
+  explicit HashValuesEqual(const HashValue& fingerprint) :
       fingerprint_(fingerprint) {}
 
   bool operator()(const HashValue& other) const {
@@ -134,9 +120,12 @@ bool NET_EXPORT HashesIntersect(const HashValueVector& a,
 
 // Convert between HashValueVector and comma-separated string format:
 // "sha1/Guzek9lMwR3KeIS8wwS9gBvVtIg=,sha256/U8Sg...
+// A correct input string returns true, with hashes populated
+// An empty input string returns true, with hashes cleared
+// An incorrect input string returns false, with hashes cleared
 std::string NET_EXPORT HashesToBase64String(const HashValueVector& hashes);
-bool Base64StringToHashes(const std::string& hashes_str,
-                          HashValueVector* hashes);
+bool NET_EXPORT Base64StringToHashes(const std::string& hashes_str,
+                                     HashValueVector* hashes);
 
 // CertPrincipal represents the issuer or subject field of an X.509 certificate.
 struct NET_EXPORT CertPrincipal {

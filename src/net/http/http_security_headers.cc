@@ -176,7 +176,7 @@ static bool IsBackupPinPresent(const HashValueVector& pins,
        i = pins.begin(); i != pins.end(); ++i) {
     HashValueVector::const_iterator j =
         std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
-                     HashValuesEqualPredicate(*i));
+                     HashValuesEqual(*i));
       if (j == from_cert_chain.end())
         return true;
   }

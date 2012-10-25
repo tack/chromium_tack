@@ -668,8 +668,8 @@ void URLRequestHttpJob::FetchResponseCookies(
 // |ProcessPublicKeyPinsHeader| have very similar structures, by design.
 void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
   DCHECK(response_info_);
-  TransportSecurityState* security_state = \
-    request_->context()->transport_security_state();
+  TransportSecurityState* security_state =
+      request_->context()->transport_security_state();
   const SSLInfo& ssl_info = response_info_->ssl_info;
 
   // Only accept HSTS headers on HTTPS connections that have no
@@ -686,8 +686,8 @@ void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
 
 void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
   DCHECK(response_info_);
-  TransportSecurityState* security_state = \
-    request_->context()->transport_security_state();
+  TransportSecurityState* security_state =
+      request_->context()->transport_security_state();
   const SSLInfo& ssl_info = response_info_->ssl_info;
 
   // Only accept HPKP headers on HTTPS connections that have no

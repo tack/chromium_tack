@@ -53,7 +53,7 @@ bool HashesIntersect(const HashValueVector& a,
                      const HashValueVector& b) {
   for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
     HashValueVector::const_iterator j =
-      std::find_if(b.begin(), b.end(), HashValuesEqualPredicate(*i));
+      std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
     if (j != b.end())
       return true;
   }
@@ -72,18 +72,19 @@ std::string HashesToBase64String(const HashValueVector& hashes) {
 
 bool Base64StringToHashes(const std::string& hashes_str,
                           HashValueVector* hashes) {
-  if (!hashes_str.empty()) {
-    std::vector<std::string> type_and_b64s;
-    base::SplitString(hashes_str, ',', &type_and_b64s);
-
-    for (size_t i = 0; i != type_and_b64s.size(); i++) {
-      std::string type_and_b64;
-      RemoveChars(type_and_b64s[i], " \t\r\n", &type_and_b64);
-      net::HashValue hash;
-      if (!hash.ParseBase64String(type_and_b64))
-        return false;
-      hashes->push_back(hash);
-    }
+  hashes->clear();
+  if (hashes_str.empty())
+    return true;
+  std::vector<std::string> vector_hash_str;
+  base::SplitString(hashes_str, ',', &vector_hash_str);
+  
+  for (size_t i = 0; i != vector_hash_str.size(); ++i) {
+    std::string hash_str;
+    RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
+    net::HashValue hash;
+    if (!hash.ParseBase64String(hash_str))
+      return false;
+    hashes->push_back(hash);
   }
   return true;
 }
@@ -199,19 +200,20 @@ bool HashValue::Equals(const HashValue& other) const {
 }
 
 bool HashValue::ParseBase64String(const std::string& value) {
-  std::string b64;
+  std::string base64_str;
   if (value.substr(0, 5) == "sha1/") {
     tag = HASH_VALUE_SHA1;
-    b64 = value.substr(5, 28);  // length of base64 string
+    base64_str = value.substr(5, 28);  // length of base64 string
   } else if (value.substr(0, 7) == "sha256/") {
     tag = HASH_VALUE_SHA256;
-    b64 = value.substr(7, 44);  // length of base64 string
+    base64_str = value.substr(7, 44);  // length of base64 string
   } else {
     return false;
   }
 
   std::string decoded;
-  if (!base::Base64Decode(b64, &decoded) || decoded.size() != size()) {
+  if (!base::Base64Decode(base64_str, &decoded) ||
+      decoded.size() != size()) {
     return false;
   }
   memcpy(data(), decoded.data(), size());
@@ -219,13 +221,18 @@ bool HashValue::ParseBase64String(const std::string& value) {
 }
 
 std::string HashValue::WriteBase64String() const {
-  std::string b64;
-  base::Base64Encode(std::string((const char*)data(), size()), &b64);
-  if (tag == HASH_VALUE_SHA1)
-    return std::string("sha1/" + b64);
-  else if (tag == HASH_VALUE_SHA256)
-    return std::string("sha256/" + b64);
-  return std::string("unknown/" + b64);
+  std::string base64_str;
+  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(data()), 
+                                       size()), &base64_str);
+  switch (tag) {
+  case HASH_VALUE_SHA1:
+    return std::string("sha1/" + base64_str);
+  case HASH_VALUE_SHA256:
+    return std::string("sha256/" + base64_str);
+  default:
+    NOTREACHED() << "Unknown HashValueTag " << tag;
+    return std::string("unknown/" + base64_str);
+  }
 }
 
 size_t HashValue::size() const {
