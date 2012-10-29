@@ -28,9 +28,10 @@ const int64 kMaxHSTSAgeSecs = 86400 * 365;  // 1 year
 //
 // "Strict-Transport-Security" ":"
 //     [ directive ]  *( ";" [ directive ] )
-bool ParseHSTSHeader(const base::Time& now, const std::string& value,
-                     base::Time* expiry,         // OUT
-                     bool* include_subdomains);  // OUT
+bool NET_EXPORT_PRIVATE ParseHSTSHeader(const base::Time& now,
+                                        const std::string& value,
+                                        base::Time* expiry,         // OUT
+                                        bool* include_subdomains);  // OUT
 
 // Parses |value| as a Public-Key-Pins header value. If successful,
 // returns true and populates the expiry and hashes values.
@@ -44,11 +45,11 @@ bool ParseHSTSHeader(const base::Time& now, const std::string& value,
 // "Public-Key-Pins" ":"
 //     "max-age" "=" delta-seconds ";"
 //     "pin-" algo "=" base64 [ ";" ... ]
-bool ParseHPKPHeader(const base::Time& now,
-                     const std::string& value,
-                     const SSLInfo& ssl_info,
-                     base::Time* expiry,         // OUT
-                     HashValueVector* hashes);   // OUT
+bool NET_EXPORT_PRIVATE ParseHPKPHeader(const base::Time& now,
+                                        const std::string& value,
+                                        const SSLInfo& ssl_info,
+                                        base::Time* expiry,         // OUT
+                                        HashValueVector* hashes);   // OUT
 
 }  // namespace net
 

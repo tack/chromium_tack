@@ -18,16 +18,14 @@
 #include "net/http/http_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-
 namespace net {
 
-class HttpSecurityHeadersTest : public testing::Test {
-};
+namespace {
 
-static bool GetPublicKeyHash(const net::X509Certificate::OSCertHandle& cert,
+bool GetPublicKeyHash(const X509Certificate::OSCertHandle& cert,
                              HashValue* hash) {
   std::string der_bytes;
-  if (!net::X509Certificate::GetDEREncoded(cert, &der_bytes))
+  if (!X509Certificate::GetDEREncoded(cert, &der_bytes))
     return false;
   base::StringPiece spki;
   if (!asn1::ExtractSPKIFromDERCert(der_bytes, &spki))
@@ -49,7 +47,7 @@ static bool GetPublicKeyHash(const net::X509Certificate::OSCertHandle& cert,
   return true;
 }
 
-static std::string GetPinFromCert(X509Certificate* cert, HashValueTag tag) {
+std::string GetPinFromCert(X509Certificate* cert, HashValueTag tag) {
   HashValue spki_hash(tag);
   EXPECT_TRUE(GetPublicKeyHash(cert->os_cert_handle(), &spki_hash));
 
@@ -71,6 +69,13 @@ static std::string GetPinFromCert(X509Certificate* cert, HashValueTag tag) {
 
   return label + HttpUtil::Quote(base64);
 }
+
+};
+
+
+class HttpSecurityHeadersTest : public testing::Test {
+};
+
 
 TEST_F(HttpSecurityHeadersTest, BogusHeaders) {
   base::Time now = base::Time::Now();
@@ -383,7 +388,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
   // Normally, ssl_client_socket_nss would do this, but for a unit test we
   // fake it.
   ssl_info.public_key_hashes = result.public_key_hashes;
-  std::string good_pin = GetPinFromCert(ssl_info.cert, /*tag*/HASH_VALUE_SHA1);
+  std::string good_pin = GetPinFromCert(ssl_info.cert, tag);
   DLOG(WARNING) << "good pin: " << good_pin;
 
   // The backup pin is fake --- we just need an SPKI hash that does not match
@@ -476,4 +481,3 @@ TEST_F(HttpSecurityHeadersTest, ValidPinsHeadersSHA256) {
   TestValidPinsHeaders(HASH_VALUE_SHA256);
 }
 };
-

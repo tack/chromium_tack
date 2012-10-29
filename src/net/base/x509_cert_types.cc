@@ -77,7 +77,7 @@ bool Base64StringToHashes(const std::string& hashes_str,
     return true;
   std::vector<std::string> vector_hash_str;
   base::SplitString(hashes_str, ',', &vector_hash_str);
-  
+
   for (size_t i = 0; i != vector_hash_str.size(); ++i) {
     std::string hash_str;
     RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
@@ -222,7 +222,7 @@ bool HashValue::ParseBase64String(const std::string& value) {
 
 std::string HashValue::WriteBase64String() const {
   std::string base64_str;
-  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(data()), 
+  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(data()),
                                        size()), &base64_str);
   switch (tag) {
   case HASH_VALUE_SHA1:

@@ -45,6 +45,7 @@ class ProxyConfigService;
 class ProxyService;
 class SSLConfigService;
 class TransportSecurityState;
+class URLRequestJobFactoryImpl;
 }  // namespace net
 
 namespace policy {
@@ -186,7 +187,6 @@ class ProfileIOData {
     FilePath path;
     std::string accept_language;
     std::string accept_charset;
-    std::string referrer_charset;
     IOThread* io_thread;
     scoped_refptr<CookieSettings> cookie_settings;
     scoped_refptr<net::SSLConfigService> ssl_config_service;
@@ -224,7 +224,7 @@ class ProfileIOData {
   void ApplyProfileParamsToContext(ChromeURLRequestContext* context) const;
 
   void SetUpJobFactoryDefaults(
-      net::URLRequestJobFactory* job_factory,
+      net::URLRequestJobFactoryImpl* job_factory,
       scoped_ptr<net::URLRequestJobFactory::Interceptor>
           protocol_handler_interceptor,
       net::NetworkDelegate* network_delegate,
