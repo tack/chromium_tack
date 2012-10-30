@@ -6,14 +6,9 @@
 #include "base/sha1.h"
 #include "base/string_piece.h"
 #include "crypto/sha2.h"
-#include "net/base/asn1_util.h"
-#include "net/base/cert_test_util.h"
-#include "net/base/cert_verifier.h"
-#include "net/base/cert_verify_result.h"
 #include "net/base/net_log.h"
 #include "net/base/ssl_info.h"
 #include "net/base/test_completion_callback.h"
-#include "net/base/test_root_certs.h"
 #include "net/http/http_security_headers.h"
 #include "net/http/http_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,52 +17,27 @@ namespace net {
 
 namespace {
 
-bool GetPublicKeyHash(const X509Certificate::OSCertHandle& cert,
-                             HashValue* hash) {
-  std::string der_bytes;
-  if (!X509Certificate::GetDEREncoded(cert, &der_bytes))
-    return false;
-  base::StringPiece spki;
-  if (!asn1::ExtractSPKIFromDERCert(der_bytes, &spki))
-    return false;
-
-  switch (hash->tag) {
-    case HASH_VALUE_SHA1:
-      base::SHA1HashBytes(reinterpret_cast<const unsigned char*>(spki.data()),
-                          spki.size(), hash->data());
-      break;
-    case HASH_VALUE_SHA256:
-      crypto::SHA256HashString(spki, hash->data(), crypto::kSHA256Length);
-      break;
-    default:
-      NOTREACHED() << "Unknown HashValueTag " << hash->tag;
-      return false;
-  }
-
-  return true;
+HashValue GetTestHashValue(uint8 label, HashValueTag tag) {
+  HashValue hash_value(tag);
+  memset(hash_value.data(), label, hash_value.size());
+  return hash_value;
 }
 
-std::string GetPinFromCert(X509Certificate* cert, HashValueTag tag) {
-  HashValue spki_hash(tag);
-  EXPECT_TRUE(GetPublicKeyHash(cert->os_cert_handle(), &spki_hash));
-
+std::string GetTestPin(uint8 label, HashValueTag tag) {
+  HashValue hash_value = GetTestHashValue(label, tag);
   std::string base64;
   base::Base64Encode(base::StringPiece(
-      reinterpret_cast<char*>(spki_hash.data()), spki_hash.size()), &base64);
+      reinterpret_cast<char*>(hash_value.data()), hash_value.size()), &base64);
 
-  std::string label;
-  switch (tag) {
+  switch (hash_value.tag) {
     case HASH_VALUE_SHA1:
-      label = "pin-sha1=";
-      break;
+      return std::string("pin-sha1=\"") + base64 + "\"";
     case HASH_VALUE_SHA256:
-      label = "pin-sha256=";
-      break;
+      return std::string("pin-sha256=\"") + base64 + "\"";
     default:
-      NOTREACHED() << "Unknown HashValueTag " << tag;
+      NOTREACHED() << "Unknown HashValueTag " << hash_value.tag;
+      return std::string("ERROR");
   }
-
-  return label + HttpUtil::Quote(base64);
 }
 
 };
@@ -155,14 +125,16 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   base::Time now = base::Time::Now();
   base::Time expiry = now;
   HashValueVector hashes;
-
   SSLInfo ssl_info;
-  ssl_info.cert =
-      ImportCertFromFile(GetTestCertsDirectory(), "test_mail_google_com.pem");
-  std::string good_pin = GetPinFromCert(ssl_info.cert, tag);
 
-  // The backup pin is fake --- it just has to not be in the chain.
-  std::string backup_pin = "pin-sha1=\"6dcfXufJLW3J6S/9rRe4vUlBj5g=\"";
+  // Set some fake "chain" hashes into ssl_info
+  ssl_info.public_key_hashes.push_back(GetTestHashValue(1, tag));
+  ssl_info.public_key_hashes.push_back(GetTestHashValue(2, tag));
+  ssl_info.public_key_hashes.push_back(GetTestHashValue(3, tag));
+
+  // The good pin must be in the chain, the bad pin must not be
+  std::string good_pin = GetTestPin(2, tag);
+  std::string backup_pin = GetTestPin(4, tag);
 
   EXPECT_FALSE(ParseHPKPHeader(now, "", ssl_info, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "    ", ssl_info, &expiry, &hashes));
@@ -350,49 +322,16 @@ static void TestValidPinsHeaders(HashValueTag tag) {
   base::Time expiry = now;
   base::Time expect_expiry = now;
   HashValueVector hashes;
-
-  // Set up a realistic SSLInfo with a realistic cert chain.
-  FilePath certs_dir = GetTestCertsDirectory();
-  scoped_refptr<X509Certificate> ee_cert =
-      ImportCertFromFile(certs_dir,
-                         "2048-rsa-ee-by-2048-rsa-intermediate.pem");
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), ee_cert);
-  scoped_refptr<X509Certificate> intermediate =
-      ImportCertFromFile(certs_dir, "2048-rsa-intermediate.pem");
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), intermediate);
-  X509Certificate::OSCertHandles intermediates;
-  intermediates.push_back(intermediate->os_cert_handle());
   SSLInfo ssl_info;
-  ssl_info.cert = X509Certificate::CreateFromHandle(ee_cert->os_cert_handle(),
-                                                    intermediates);
 
-  // Add the root that signed the intermediate for this test.
-  scoped_refptr<X509Certificate> root_cert =
-      ImportCertFromFile(certs_dir, "2048-rsa-root.pem");
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), root_cert);
-  ScopedTestRoot scoped_root(root_cert);
+  // Set some fake "chain" hashes into ssl_info
+  ssl_info.public_key_hashes.push_back(GetTestHashValue(1, tag));
+  ssl_info.public_key_hashes.push_back(GetTestHashValue(2, tag));
+  ssl_info.public_key_hashes.push_back(GetTestHashValue(3, tag));
 
-  // Verify has the side-effect of populating public_key_hashes, which
-  // ParsePinsHeader needs. (It wants to check pins against the validated
-  // chain, not just the presented chain.)
-  int rv = ERR_FAILED;
-  CertVerifyResult result;
-  scoped_ptr<CertVerifier> verifier(CertVerifier::CreateDefault());
-  TestCompletionCallback callback;
-  CertVerifier::RequestHandle handle = NULL;
-  rv = verifier->Verify(ssl_info.cert, "127.0.0.1", 0, NULL, &result,
-                        callback.callback(), &handle, BoundNetLog());
-  rv = callback.GetResult(rv);
-  ASSERT_EQ(OK, rv);
-  // Normally, ssl_client_socket_nss would do this, but for a unit test we
-  // fake it.
-  ssl_info.public_key_hashes = result.public_key_hashes;
-  std::string good_pin = GetPinFromCert(ssl_info.cert, tag);
-  DLOG(WARNING) << "good pin: " << good_pin;
-
-  // The backup pin is fake --- we just need an SPKI hash that does not match
-  // the hash of any SPKI in the certificate chain.
-  std::string backup_pin = "pin-sha1=\"6dcfXufJLW3J6S/9rRe4vUlBj5g=\"";
+  // The good pin must be in the chain, the bad pin must not be
+  std::string good_pin = GetTestPin(2, tag);
+  std::string backup_pin = GetTestPin(4, tag);
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
@@ -479,3 +418,4 @@ TEST_F(HttpSecurityHeadersTest, ValidPinsHeadersSHA256) {
   TestValidPinsHeaders(HASH_VALUE_SHA256);
 }
 };
+
