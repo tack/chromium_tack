@@ -162,8 +162,7 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   std::string good_pin = GetPinFromCert(ssl_info.cert, tag);
 
   // The backup pin is fake --- it just has to not be in the chain.
-  std::string backup_pin = "pin-sha1=" +
-      HttpUtil::Quote("6dcfXufJLW3J6S/9rRe4vUlBj5g=");
+  std::string backup_pin = "pin-sha1=\"6dcfXufJLW3J6S/9rRe4vUlBj5g=\"";
 
   EXPECT_FALSE(ParseHPKPHeader(now, "", ssl_info, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "    ", ssl_info, &expiry, &hashes));
@@ -317,7 +316,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
       now, "max-age=39408299  ;incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-    std::min(kMaxHSTSAgeSecs, (int64)39408299l));
+    std::min(kMaxHSTSAgeSecs, GG_INT64_C(39408299)));
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
@@ -325,7 +324,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
       now, "max-age=394082038  ; incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-    std::min(kMaxHSTSAgeSecs, (int64)394082038l));
+    std::min(kMaxHSTSAgeSecs, GG_INT64_C(394082038)));
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
@@ -393,8 +392,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
 
   // The backup pin is fake --- we just need an SPKI hash that does not match
   // the hash of any SPKI in the certificate chain.
-  std::string backup_pin = "pin-sha1=" +
-      HttpUtil::Quote("6dcfXufJLW3J6S/9rRe4vUlBj5g=");
+  std::string backup_pin = "pin-sha1=\"6dcfXufJLW3J6S/9rRe4vUlBj5g=\"";
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
@@ -436,7 +434,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
       "max-age=39408299  ;" + backup_pin + ";" + good_pin + ";  ",
       ssl_info, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-    std::min(kMaxHSTSAgeSecs, (int64)39408299l));
+    std::min(kMaxHSTSAgeSecs, GG_INT64_C(39408299)));
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
@@ -445,7 +443,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
           good_pin + ";" + backup_pin + ";   ",
       ssl_info, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-    std::min(kMaxHSTSAgeSecs, (int64)394082038l));
+    std::min(kMaxHSTSAgeSecs, GG_INT64_C(394082038)));
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
