@@ -581,6 +581,11 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
   if (ParseHSTSHeader(now, value,
                       &domain_state.upgrade_expiry,
                       &domain_state.include_subdomains)) {
+    // Handle max-age == 0
+    if (now == domain_state.upgrade_expiry)
+      domain_state.upgrade_mode = DomainState::MODE_FORCE_HTTPS;
+    else  
+      domain_state.upgrade_mode = DomainState::MODE_DEFAULT;
     domain_state.created = now;
     EnableHost(host, domain_state);
     return true;
@@ -595,7 +600,9 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   TransportSecurityState::DomainState domain_state;
   if (ParseHPKPHeader(now, value, ssl_info,
                       &domain_state.dynamic_spki_hashes_expiry,
-                      &domain_state.dynamic_spki_hashes)) {
+                      &domain_state.dynamic_spki_hashes)) 
+  {
+    domain_state.upgrade_mode = DomainState::MODE_DEFAULT;
     domain_state.created = now;
     EnableHost(host, domain_state);
     return true;

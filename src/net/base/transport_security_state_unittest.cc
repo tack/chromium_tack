@@ -45,7 +45,6 @@ class TransportSecurityStateTest : public testing::Test {
   }
 };
 
-
 TEST_F(TransportSecurityStateTest, SimpleMatches) {
   TransportSecurityState state;
   TransportSecurityState::DomainState domain_state;
