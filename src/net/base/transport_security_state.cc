@@ -583,9 +583,9 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
                       &domain_state.include_subdomains)) {
     // Handle max-age == 0
     if (now == domain_state.upgrade_expiry)
-      domain_state.upgrade_mode = DomainState::MODE_FORCE_HTTPS;
-    else  
       domain_state.upgrade_mode = DomainState::MODE_DEFAULT;
+    else  
+      domain_state.upgrade_mode = DomainState::MODE_FORCE_HTTPS;
     domain_state.created = now;
     EnableHost(host, domain_state);
     return true;
