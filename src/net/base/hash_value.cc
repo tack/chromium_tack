@@ -1,0 +1,127 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "net/base/hash_value.h"
+
+#include <cstdlib>
+#include <cstring>
+
+#include "base/base64.h"
+#include "base/logging.h"
+#include "base/sha1.h"
+#include "base/string_split.h"
+#include "base/string_util.h"
+
+namespace net {
+
+namespace {
+
+// CompareSHA1Hashes is a helper function for using bsearch() with an array of
+// SHA1 hashes.
+int CompareSHA1Hashes(const void* a, const void* b) {
+  return memcmp(a, b, base::kSHA1Length);
+}
+
+}  // namespace
+
+bool HashValue::Equals(const HashValue& other) const {
+  if (tag != other.tag)
+    return false;
+  switch (tag) {
+    case HASH_VALUE_SHA1:
+      return fingerprint.sha1.Equals(other.fingerprint.sha1);
+    case HASH_VALUE_SHA256:
+      return fingerprint.sha256.Equals(other.fingerprint.sha256);
+    default:
+      NOTREACHED() << "Unknown HashValueTag " << tag;
+      return false;
+  }
+}
+
+bool HashValue::FromString(const std::string& value) {
+  std::string base64_str;
+  if (value.substr(0, 5) == "sha1/") {
+    if (value.size() != 5 + 28)
+      return false;
+    tag = HASH_VALUE_SHA1;
+    base64_str = value.substr(5, 28);
+  } else if (value.substr(0, 7) == "sha256/") {
+    if (value.size() != 7 + 44)
+      return false;
+    tag = HASH_VALUE_SHA256;
+    base64_str = value.substr(7, 44);
+  } else {
+    return false;
+  }
+
+  std::string decoded;
+  if (!base::Base64Decode(base64_str, &decoded) || 
+      decoded.size() != size()) {
+    return false;
+  }
+
+  memcpy(data(), decoded.data(), size());
+  return true;
+}
+
+std::string HashValue::ToString() const {
+  std::string base64_str;
+  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(data()),
+                                       size()), &base64_str);
+  switch (tag) {
+  case HASH_VALUE_SHA1:
+    return std::string("sha1/" + base64_str);
+  case HASH_VALUE_SHA256:
+    return std::string("sha256/" + base64_str);
+  default:
+    NOTREACHED() << "Unknown HashValueTag " << tag;
+    return std::string("unknown/" + base64_str);
+  }
+}
+
+size_t HashValue::size() const {
+  switch (tag) {
+    case HASH_VALUE_SHA1:
+      return sizeof(fingerprint.sha1.data);
+    case HASH_VALUE_SHA256:
+      return sizeof(fingerprint.sha256.data);
+    default:
+      NOTREACHED() << "Unknown HashValueTag " << tag;
+      // Although this is NOTREACHED, this function might be inlined and its
+      // return value can be passed to memset as the length argument. If we
+      // returned 0 here, it might result in what appears (in some stages of
+      // compilation) to be a call to to memset with a length argument of 0,
+      // which results in a warning. Therefore, we return a dummy value
+      // here.
+      return sizeof(fingerprint.sha1.data);
+  }
+}
+
+unsigned char* HashValue::data() {
+  return const_cast<unsigned char*>(const_cast<const HashValue*>(this)->data());
+}
+
+const unsigned char* HashValue::data() const {
+  switch (tag) {
+    case HASH_VALUE_SHA1:
+      return fingerprint.sha1.data;
+    case HASH_VALUE_SHA256:
+      return fingerprint.sha256.data;
+    default:
+      NOTREACHED() << "Unknown HashValueTag " << tag;
+      return NULL;
+  }
+}
+
+bool IsSHA1HashInSortedArray(const SHA1HashValue& hash,
+                             const uint8* array,
+                             size_t array_byte_len) {
+  DCHECK_EQ(0u, array_byte_len % base::kSHA1Length);
+  const size_t arraylen = array_byte_len / base::kSHA1Length;
+  return NULL != bsearch(hash.data, array, arraylen, base::kSHA1Length,
+                         CompareSHA1Hashes);
+}
+
+}  // namespace net
+

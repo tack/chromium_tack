@@ -79,7 +79,53 @@ bool IsPinListValid(const HashValueVector& pins,
          HashesIntersect(pins, from_cert_chain);
 }
 
+// Strip, Split, StringPair, and ParsePins are private implementation details
+// of ParsePinsHeader(std::string&, DomainState&).
+std::string Strip(const std::string& source) {
+  if (source.empty())
+    return source;
+
+  std::string::const_iterator start = source.begin();
+  std::string::const_iterator end = source.end();
+  HttpUtil::TrimLWS(&start, &end);
+  return std::string(start, end);
 }
+
+typedef std::pair<std::string, std::string> StringPair;
+
+StringPair Split(const std::string& source, char delimiter) {
+  StringPair pair;
+  size_t point = source.find(delimiter);
+
+  pair.first = source.substr(0, point);
+  if (std::string::npos != point)
+    pair.second = source.substr(point + 1);
+
+  return pair;
+}
+
+bool ParseAndAppendPin(const std::string& value,
+                       HashValueTag tag,
+                       HashValueVector* hashes) {
+  std::string unquoted = HttpUtil::Unquote(value);
+  std::string decoded;
+
+  // This code has to assume that 32 bytes is SHA-256 and 20 bytes is SHA-1.
+  // Currently, those are the only two possibilities, so the assumption is
+  // valid.
+  if (!base::Base64Decode(unquoted, &decoded))
+    return false;
+
+  HashValue hash(tag);
+  if (decoded.size() != hash.size())
+    return false;
+
+  memcpy(hash.data(), decoded.data(), hash.size());
+  hashes->push_back(hash);
+  return true;
+}
+
+} // namespace
 
 // Parse the Strict-Transport-Security header, as currently defined in
 // http://tools.ietf.org/html/draft-ietf-websec-strict-transport-sec-14:
@@ -213,52 +259,6 @@ bool ParseHSTSHeader(const base::Time& now, const std::string& value,
       NOTREACHED();
       return false;
   }
-}
-
-// Strip, Split, StringPair, and ParsePins are private implementation details
-// of ParsePinsHeader(std::string&, DomainState&).
-static std::string Strip(const std::string& source) {
-  if (source.empty())
-    return source;
-
-  std::string::const_iterator start = source.begin();
-  std::string::const_iterator end = source.end();
-  HttpUtil::TrimLWS(&start, &end);
-  return std::string(start, end);
-}
-
-typedef std::pair<std::string, std::string> StringPair;
-
-static StringPair Split(const std::string& source, char delimiter) {
-  StringPair pair;
-  size_t point = source.find(delimiter);
-
-  pair.first = source.substr(0, point);
-  if (std::string::npos != point)
-    pair.second = source.substr(point + 1);
-
-  return pair;
-}
-
-static bool ParseAndAppendPin(const std::string& value,
-                              HashValueTag tag,
-                              HashValueVector* hashes) {
-  std::string unquoted = HttpUtil::Unquote(value);
-  std::string decoded;
-
-  // This code has to assume that 32 bytes is SHA-256 and 20 bytes is SHA-1.
-  // Currently, those are the only two possibilities, so the assumption is
-  // valid.
-  if (!base::Base64Decode(unquoted, &decoded))
-    return false;
-
-  HashValue hash(tag);
-  if (decoded.size() != hash.size())
-    return false;
-
-  memcpy(hash.data(), decoded.data(), hash.size());
-  hashes->push_back(hash);
-  return true;
 }
 
 // "Public-Key-Pins" ":"

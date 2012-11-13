@@ -29,26 +29,31 @@ const int64 kMaxHSTSAgeSecs = 86400 * 365;  // 1 year
 //     [ directive ]  *( ";" [ directive ] )
 bool NET_EXPORT_PRIVATE ParseHSTSHeader(const base::Time& now,
                                         const std::string& value,
-                                        base::Time* expiry,         // OUT
-                                        bool* include_subdomains);  // OUT
+                                        base::Time* expiry,
+                                        bool* include_subdomains);
 
 // Parses |value| as a Public-Key-Pins header value. If successful,
 // returns true and populates the expiry and hashes values.
 // Otherwise returns false and leaves the output parameters unchanged.
 // Interprets the max-age directive relative to |now|.
-// Checks that the header's public key pins overlaps with the SSL chain
-// as specified in chain_hashes.
 //
 // value is the right-hand side of:
 //
 // "Public-Key-Pins" ":"
 //     "max-age" "=" delta-seconds ";"
 //     "pin-" algo "=" base64 [ ";" ... ]
+//
+// For this function to return true, the key hashes specified by the HPKP
+// header must pass two additional checks.  There MUST be at least one
+// key hash which matches the SSL certificate chain of the current site
+// (as specified by the chain_hashes) parameter.  In addition, there MUST
+// be at least one key hash which does NOT match the site's SSL certificate
+// chain (this is the "backup pin"). 
 bool NET_EXPORT_PRIVATE ParseHPKPHeader(const base::Time& now,
                                         const std::string& value,
                                         const HashValueVector& chain_hashes,
-                                        base::Time* expiry,         // OUT
-                                        HashValueVector* hashes);   // OUT
+                                        base::Time* expiry,
+                                        HashValueVector* hashes);
 
 }  // namespace net
 

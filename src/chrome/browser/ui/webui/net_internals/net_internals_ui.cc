@@ -1193,8 +1193,8 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   net::TransportSecurityState::DomainState state;
   state.upgrade_expiry = state.created + base::TimeDelta::FromDays(1000);
   state.include_subdomains = include_subdomains;
-  Base64StringToHashes(hashes_str, &state.dynamic_spki_hashes);
-  transport_security_state->EnableHost(domain, state);
+  if (Base64StringToHashes(hashes_str, &state.dynamic_spki_hashes))
+    transport_security_state->EnableHost(domain, state);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
