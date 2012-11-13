@@ -106,35 +106,6 @@ net::HostCache* GetHostResolverCache(net::URLRequestContext* context) {
   return context->host_resolver()->GetHostCache();
 }
 
-std::string HashesToBase64String(const net::HashValueVector& hashes) {
-  std::string str;
-  for (size_t i = 0; i != hashes.size(); ++i) {
-    if (i != 0)
-      str += ",";
-    str += hashes[i].ToString();
-  }
-  return str;
-}
-
-bool Base64StringToHashes(const std::string& hashes_str,
-                          net::HashValueVector* hashes) {
-  hashes->clear();
-  if (hashes_str.empty())
-    return true;
-  std::vector<std::string> vector_hash_str;
-  base::SplitString(hashes_str, ',', &vector_hash_str);
-
-  for (size_t i = 0; i != vector_hash_str.size(); ++i) {
-    std::string hash_str;
-    RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
-    net::HashValue hash;
-    if (!hash.FromString(hash_str))
-      return false;
-    hashes->push_back(hash);
-  }
-  return true;
-}
-
 // Returns the disk cache backend for |context| if there is one, or NULL.
 disk_cache::Backend* GetDiskCacheBackend(net::URLRequestContext* context) {
   if (!context->http_transaction_factory())
@@ -1127,6 +1098,35 @@ void NetInternalsMessageHandler::IOThreadImpl::OnStartConnectionTests(
       io_thread_->globals()->proxy_script_fetcher_context.get(),
       net_log()));
   connection_tester_->RunAllTests(url);
+}
+
+std::string HashesToBase64String(const net::HashValueVector& hashes) {
+  std::string str;
+  for (size_t i = 0; i != hashes.size(); ++i) {
+    if (i != 0)
+      str += ",";
+    str += hashes[i].ToString();
+  }
+  return str;
+}
+
+bool Base64StringToHashes(const std::string& hashes_str,
+                          net::HashValueVector* hashes) {
+  hashes->clear();
+  if (hashes_str.empty())
+    return true;
+  std::vector<std::string> vector_hash_str;
+  base::SplitString(hashes_str, ',', &vector_hash_str);
+
+  for (size_t i = 0; i != vector_hash_str.size(); ++i) {
+    std::string hash_str;
+    RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
+    net::HashValue hash;
+    if (!hash.FromString(hash_str))
+      return false;
+    hashes->push_back(hash);
+  }
+  return true;
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
