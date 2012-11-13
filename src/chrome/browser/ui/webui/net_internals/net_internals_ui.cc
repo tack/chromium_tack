@@ -21,6 +21,7 @@
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/string_number_conversions.h"
 #include "base/string_piece.h"
+#include "base/string_split.h"
 #include "base/string_util.h"
 #include "base/threading/worker_pool.h"
 #include "base/utf_string_conversions.h"
@@ -103,6 +104,35 @@ const int kLogFormatVersion = 1;
 // there is none.
 net::HostCache* GetHostResolverCache(net::URLRequestContext* context) {
   return context->host_resolver()->GetHostCache();
+}
+
+std::string HashesToBase64String(const net::HashValueVector& hashes) {
+  std::string str;
+  for (size_t i = 0; i != hashes.size(); ++i) {
+    if (i != 0)
+      str += ",";
+    str += hashes[i].ToString();
+  }
+  return str;
+}
+
+bool Base64StringToHashes(const std::string& hashes_str,
+                          net::HashValueVector* hashes) {
+  hashes->clear();
+  if (hashes_str.empty())
+    return true;
+  std::vector<std::string> vector_hash_str;
+  base::SplitString(hashes_str, ',', &vector_hash_str);
+
+  for (size_t i = 0; i != vector_hash_str.size(); ++i) {
+    std::string hash_str;
+    RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
+    net::HashValue hash;
+    if (!hash.FromString(hash_str))
+      return false;
+    hashes->push_back(hash);
+  }
+  return true;
 }
 
 // Returns the disk cache backend for |context| if there is one, or NULL.
@@ -1128,10 +1158,10 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
                           state.dynamic_spki_hashes_expiry.ToDoubleT());
 
         std::string hashes_str;
-        hashes_str = net::HashesToBase64String(state.static_spki_hashes);
+        hashes_str = HashesToBase64String(state.static_spki_hashes);
         result->SetString("static_spki_hashes", hashes_str);
 
-        hashes_str = net::HashesToBase64String(state.dynamic_spki_hashes);
+        hashes_str = HashesToBase64String(state.dynamic_spki_hashes);
         result->SetString("dynamic_spki_hashes", hashes_str);
       }
     }
@@ -1163,7 +1193,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   net::TransportSecurityState::DomainState state;
   state.upgrade_expiry = state.created + base::TimeDelta::FromDays(1000);
   state.include_subdomains = include_subdomains;
-  net::Base64StringToHashes(hashes_str, &state.dynamic_spki_hashes);
+  Base64StringToHashes(hashes_str, &state.dynamic_spki_hashes);
   transport_security_state->EnableHost(domain, state);
 }
 

@@ -11,9 +11,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/time.h"
 #include "base/values.h"
+#include "net/base/hash_value.h"
 #include "net/base/net_export.h"
-#include "net/base/ssl_info.h"
-#include "net/base/x509_cert_types.h"
 
 namespace net {
 
@@ -47,7 +46,6 @@ bool NET_EXPORT_PRIVATE ParseHSTSHeader(const base::Time& now,
 //     "pin-" algo "=" base64 [ ";" ... ]
 bool NET_EXPORT_PRIVATE ParseHPKPHeader(const base::Time& now,
                                         const std::string& value,
-                                        const SSLInfo& ssl_info,
                                         base::Time* expiry,         // OUT
                                         HashValueVector* hashes);   // OUT
 

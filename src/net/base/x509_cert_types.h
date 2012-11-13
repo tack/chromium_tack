@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/string_piece.h"
 #include "build/build_config.h"
+#include "net/base/hash_value.h"
 #include "net/base/net_export.h"
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -27,105 +28,6 @@ class Time;
 namespace net {
 
 class X509Certificate;
-
-// SHA-1 fingerprint (160 bits) of a certificate.
-struct NET_EXPORT SHA1HashValue {
-  bool Equals(const SHA1HashValue& other) const {
-    return memcmp(data, other.data, sizeof(data)) == 0;
-  }
-
-  unsigned char data[20];
-};
-
-class NET_EXPORT SHA1HashValueLessThan {
- public:
-  bool operator()(const SHA1HashValue& lhs,
-                  const SHA1HashValue& rhs) const {
-    return memcmp(lhs.data, rhs.data, sizeof(lhs.data)) < 0;
-  }
-};
-
-struct NET_EXPORT SHA256HashValue {
-  bool Equals(const SHA256HashValue& other) const {
-    return memcmp(data, other.data, sizeof(data)) == 0;
-  }
-
-  unsigned char data[32];
-};
-
-class NET_EXPORT SHA256HashValueLessThan {
- public:
-  bool operator()(const SHA256HashValue& lhs,
-                  const SHA256HashValue& rhs) const {
-    return memcmp(lhs.data, rhs.data, sizeof(lhs.data)) < 0;
-  }
-};
-
-enum HashValueTag {
-  HASH_VALUE_SHA1,
-  HASH_VALUE_SHA256,
-
-  // This must always be last.
-  HASH_VALUE_TAGS_COUNT
-};
-
-class NET_EXPORT HashValue {
- public:
-  explicit HashValue(HashValueTag tag) : tag(tag) {}
-  HashValue() : tag(HASH_VALUE_SHA1) {}
-
-  bool Equals(const HashValue& other) const;
-
-  // Parse/write in this format: "sha1/Guzek9lMwR3KeIS8wwS9gBvVtIg="
-  bool ParseBase64String(const std::string& input);
-  std::string WriteBase64String() const;
-
-  size_t size() const;
-  unsigned char* data();
-  const unsigned char* data() const;
-
-  HashValueTag tag;
-
- private:
-  union {
-    SHA1HashValue sha1;
-    SHA256HashValue sha256;
-  } fingerprint;
-};
-
-class NET_EXPORT HashValuesEqual {
-  public:
-  explicit HashValuesEqual(const HashValue& fingerprint) :
-      fingerprint_(fingerprint) {}
-
-  bool operator()(const HashValue& other) const {
-    return fingerprint_.Equals(other);
-  }
-
-  const HashValue& fingerprint_;
-};
-
-typedef std::vector<HashValue> HashValueVector;
-
-// IsSHA1HashInSortedArray returns true iff |hash| is in |array|, a sorted
-// array of SHA1 hashes.
-bool NET_EXPORT IsSHA1HashInSortedArray(const SHA1HashValue& hash,
-                                        const uint8* array,
-                                        size_t array_byte_len);
-
-// Returns true if the intersection of |a| and |b| is not empty. If either
-// |a| or |b| is empty, returns false.
-bool NET_EXPORT HashesIntersect(const HashValueVector& a,
-                                const HashValueVector& b);
-
-// Convert between HashValueVector and comma-separated string format:
-// "sha1/Guzek9lMwR3KeIS8wwS9gBvVtIg=,sha256/U8Sg...
-// A correct input string returns true, with hashes populated
-// An empty input string returns true, with hashes cleared
-// An incorrect input string returns false, with hashes cleared
-std::string NET_EXPORT HashesToBase64String(const HashValueVector& hashes);
-bool NET_EXPORT Base64StringToHashes(const std::string& hashes_str,
-                                     HashValueVector* hashes);
 
 // CertPrincipal represents the issuer or subject field of an X.509 certificate.
 struct NET_EXPORT CertPrincipal {

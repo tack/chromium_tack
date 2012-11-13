@@ -9,7 +9,7 @@
 
 #include "base/base64.h"
 #include "base/logging.h"
-#include "base/sha1.h"
+//#include "base/sha1.h"
 #include "base/string_number_conversions.h"
 #include "base/string_piece.h"
 #include "base/string_split.h"
@@ -32,61 +32,6 @@ int ParseIntAndAdvance(const char** field, size_t field_len, bool* ok) {
   return result;
 }
 
-// CompareSHA1Hashes is a helper function for using bsearch() with an array of
-// SHA1 hashes.
-int CompareSHA1Hashes(const void* a, const void* b) {
-  return memcmp(a, b, base::kSHA1Length);
-}
-
-}  // namespace
-
-bool IsSHA1HashInSortedArray(const SHA1HashValue& hash,
-                             const uint8* array,
-                             size_t array_byte_len) {
-  DCHECK_EQ(0u, array_byte_len % base::kSHA1Length);
-  const size_t arraylen = array_byte_len / base::kSHA1Length;
-  return NULL != bsearch(hash.data, array, arraylen, base::kSHA1Length,
-                         CompareSHA1Hashes);
-}
-
-bool HashesIntersect(const HashValueVector& a,
-                     const HashValueVector& b) {
-  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
-    HashValueVector::const_iterator j =
-      std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
-    if (j != b.end())
-      return true;
-  }
-  return false;
-}
-
-std::string HashesToBase64String(const HashValueVector& hashes) {
-  std::string str;
-  for (size_t i = 0; i != hashes.size(); ++i) {
-    if (i != 0)
-      str += ",";
-    str += hashes[i].WriteBase64String();
-  }
-  return str;
-}
-
-bool Base64StringToHashes(const std::string& hashes_str,
-                          HashValueVector* hashes) {
-  hashes->clear();
-  if (hashes_str.empty())
-    return true;
-  std::vector<std::string> vector_hash_str;
-  base::SplitString(hashes_str, ',', &vector_hash_str);
-
-  for (size_t i = 0; i != vector_hash_str.size(); ++i) {
-    std::string hash_str;
-    RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
-    net::HashValue hash;
-    if (!hash.ParseBase64String(hash_str))
-      return false;
-    hashes->push_back(hash);
-  }
-  return true;
 }
 
 CertPrincipal::CertPrincipal() {
@@ -183,90 +128,6 @@ bool ParseCertificateDate(const base::StringPiece& raw_date,
 
   *time = base::Time::FromUTCExploded(exploded);
   return true;
-}
-
-bool HashValue::Equals(const HashValue& other) const {
-  if (tag != other.tag)
-    return false;
-  switch (tag) {
-    case HASH_VALUE_SHA1:
-      return fingerprint.sha1.Equals(other.fingerprint.sha1);
-    case HASH_VALUE_SHA256:
-      return fingerprint.sha256.Equals(other.fingerprint.sha256);
-    default:
-      NOTREACHED() << "Unknown HashValueTag " << tag;
-      return false;
-  }
-}
-
-bool HashValue::ParseBase64String(const std::string& value) {
-  std::string base64_str;
-  if (value.substr(0, 5) == "sha1/") {
-    tag = HASH_VALUE_SHA1;
-    base64_str = value.substr(5, 28);  // length of base64 string
-  } else if (value.substr(0, 7) == "sha256/") {
-    tag = HASH_VALUE_SHA256;
-    base64_str = value.substr(7, 44);  // length of base64 string
-  } else {
-    return false;
-  }
-
-  std::string decoded;
-  if (!base::Base64Decode(base64_str, &decoded) ||
-      decoded.size() != size()) {
-    return false;
-  }
-  memcpy(data(), decoded.data(), size());
-  return true;
-}
-
-std::string HashValue::WriteBase64String() const {
-  std::string base64_str;
-  base::Base64Encode(base::StringPiece(reinterpret_cast<const char*>(data()),
-                                       size()), &base64_str);
-  switch (tag) {
-  case HASH_VALUE_SHA1:
-    return std::string("sha1/" + base64_str);
-  case HASH_VALUE_SHA256:
-    return std::string("sha256/" + base64_str);
-  default:
-    NOTREACHED() << "Unknown HashValueTag " << tag;
-    return std::string("unknown/" + base64_str);
-  }
-}
-
-size_t HashValue::size() const {
-  switch (tag) {
-    case HASH_VALUE_SHA1:
-      return sizeof(fingerprint.sha1.data);
-    case HASH_VALUE_SHA256:
-      return sizeof(fingerprint.sha256.data);
-    default:
-      NOTREACHED() << "Unknown HashValueTag " << tag;
-      // Although this is NOTREACHED, this function might be inlined and its
-      // return value can be passed to memset as the length argument. If we
-      // returned 0 here, it might result in what appears (in some stages of
-      // compilation) to be a call to to memset with a length argument of 0,
-      // which results in a warning. Therefore, we return a dummy value
-      // here.
-      return sizeof(fingerprint.sha1.data);
-  }
-}
-
-unsigned char* HashValue::data() {
-  return const_cast<unsigned char*>(const_cast<const HashValue*>(this)->data());
-}
-
-const unsigned char* HashValue::data() const {
-  switch (tag) {
-    case HASH_VALUE_SHA1:
-      return fingerprint.sha1.data;
-    case HASH_VALUE_SHA256:
-      return fingerprint.sha256.data;
-    default:
-      NOTREACHED() << "Unknown HashValueTag " << tag;
-      return NULL;
-  }
 }
 
 }  // namespace net

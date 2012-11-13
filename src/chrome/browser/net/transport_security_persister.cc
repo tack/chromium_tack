@@ -30,7 +30,7 @@ namespace {
 ListValue* SPKIHashesToListValue(const HashValueVector& hashes) {
   ListValue* pins = new ListValue;
   for (size_t i = 0; i != hashes.size(); i++)
-    pins->Append(new StringValue(hashes[i].WriteBase64String()));
+    pins->Append(new StringValue(hashes[i].ToString()));
   return pins;
 }
 
@@ -40,7 +40,7 @@ void SPKIHashesFromListValue(const ListValue& pins, HashValueVector* hashes) {
     std::string type_and_base64;
     HashValue fingerprint;
     if (pins.GetString(i, &type_and_base64) &&
-        fingerprint.ParseBase64String(type_and_base64)) {
+        fingerprint.FromString(type_and_base64)) {
       hashes->push_back(fingerprint);
     }
   }

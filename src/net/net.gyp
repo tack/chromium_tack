@@ -151,6 +151,8 @@
         'base/gzip_filter.h',
         'base/gzip_header.cc',
         'base/gzip_header.h',
+        'base/hash_value.cc',
+        'base/hash_value.h',
         'base/host_cache.cc',
         'base/host_cache.h',
         'base/host_mapping_rules.cc',

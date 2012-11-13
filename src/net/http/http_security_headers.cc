@@ -163,42 +163,6 @@ bool ParseHSTSHeader(const base::Time& now, const std::string& value,
   }
 }
 
-// Returns true iff there is an item in |pins| which is not present in
-// |from_cert_chain|. Such an SPKI hash is called a "backup pin".
-static bool IsBackupPinPresent(const HashValueVector& pins,
-                               const HashValueVector& from_cert_chain) {
-  for (HashValueVector::const_iterator
-       i = pins.begin(); i != pins.end(); ++i) {
-    HashValueVector::const_iterator j =
-        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
-                     HashValuesEqual(*i));
-      if (j == from_cert_chain.end())
-        return true;
-  }
-
-  return false;
-}
-
-// Returns true iff |pins| contains both a live and a backup pin. A live pin
-// is a pin whose SPKI is present in the certificate chain in |ssl_info|. A
-// backup pin is a pin intended for disaster recovery, not day-to-day use, and
-// thus must be absent from the certificate chain. The Public-Key-Pins header
-// specification requires both.
-static bool IsPinListValid(const HashValueVector& pins,
-                           const SSLInfo& ssl_info) {
-  // Fast fail: 1 live + 1 backup = at least 2 pins. (Check for actual
-  // liveness and backupness below.)
-  if (pins.size() < 2)
-    return false;
-
-  const HashValueVector& from_cert_chain = ssl_info.public_key_hashes;
-  if (from_cert_chain.empty())
-    return false;
-
-  return IsBackupPinPresent(pins, from_cert_chain) &&
-         HashesIntersect(pins, from_cert_chain);
-}
-
 // Strip, Split, StringPair, and ParsePins are private implementation details
 // of ParsePinsHeader(std::string&, DomainState&).
 static std::string Strip(const std::string& source) {
@@ -248,12 +212,10 @@ static bool ParseAndAppendPin(const std::string& value,
 // "Public-Key-Pins" ":"
 //     "max-age" "=" delta-seconds ";"
 //     "pin-" algo "=" base64 [ ";" ... ]
-bool ParseHPKPHeader(
-    const base::Time& now,
-    const std::string& value,
-    const SSLInfo& ssl_info,
-    base::Time* expiry,
-    HashValueVector* hashes) {
+bool ParseHPKPHeader(const base::Time& now,
+                     const std::string& value,
+                     base::Time* expiry,
+                     HashValueVector* hashes) {
   bool parsed_max_age = false;
   int max_age_candidate = 0;
   HashValueVector pins;
@@ -295,14 +257,6 @@ bool ParseHPKPHeader(
   }
 
   if (!parsed_max_age)
-    return false;
-
-  // Check that the header is valid
-  if (!IsPinListValid(pins, ssl_info))
-    return false;
-
-  // If ssl_info wasn't passed in, this is a good idea...
-  if (pins.size() == 0)
     return false;
 
   *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);
