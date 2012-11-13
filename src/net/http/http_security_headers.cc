@@ -11,13 +11,15 @@
 
 namespace net {
 
+namespace {
+
 // MaxAgeToInt converts a string representation of a number of seconds into a
 // int. We use strtol in order to handle overflow correctly. The string may
 // contain an arbitary number which we should truncate correctly rather than
 // throwing a parse failure.
-static bool MaxAgeToInt(std::string::const_iterator begin,
-                        std::string::const_iterator end,
-                        int* result) {
+bool MaxAgeToInt(std::string::const_iterator begin,
+                 std::string::const_iterator end,
+                 int* result) {
   const std::string s(begin, end);
   char* endptr;
   long int i = strtol(s.data(), &endptr, 10 /* base */);
@@ -27,6 +29,56 @@ static bool MaxAgeToInt(std::string::const_iterator begin,
     i = kMaxHSTSAgeSecs;
   *result = i;
   return true;
+}
+
+// Returns true iff there is an item in |pins| which is not present in
+// |from_cert_chain|. Such an SPKI hash is called a "backup pin".
+bool IsBackupPinPresent(const HashValueVector& pins,
+                        const HashValueVector& from_cert_chain) {
+  for (HashValueVector::const_iterator
+       i = pins.begin(); i != pins.end(); ++i) {
+    HashValueVector::const_iterator j =
+        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
+                     HashValuesEqual(*i));
+      if (j == from_cert_chain.end())
+        return true;
+  }
+
+  return false;
+}
+
+// Returns true if the intersection of |a| and |b| is not empty. If either
+// |a| or |b| is empty, returns false.
+bool HashesIntersect(const HashValueVector& a,
+                     const HashValueVector& b) {
+  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
+    HashValueVector::const_iterator j =
+      std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
+    if (j != b.end())
+      return true;
+  }
+  return false;
+}
+
+// Returns true iff |pins| contains both a live and a backup pin. A live pin
+// is a pin whose SPKI is present in the certificate chain in |ssl_info|. A
+// backup pin is a pin intended for disaster recovery, not day-to-day use, and
+// thus must be absent from the certificate chain. The Public-Key-Pins header
+// specification requires both.
+bool IsPinListValid(const HashValueVector& pins,
+                    const HashValueVector& from_cert_chain) {
+  // Fast fail: 1 live + 1 backup = at least 2 pins. (Check for actual
+  // liveness and backupness below.)
+  if (pins.size() < 2)
+    return false;
+
+  if (from_cert_chain.empty())
+    return false;
+
+  return IsBackupPinPresent(pins, from_cert_chain) &&
+         HashesIntersect(pins, from_cert_chain);
+}
+
 }
 
 // Parse the Strict-Transport-Security header, as currently defined in
@@ -214,6 +266,7 @@ static bool ParseAndAppendPin(const std::string& value,
 //     "pin-" algo "=" base64 [ ";" ... ]
 bool ParseHPKPHeader(const base::Time& now,
                      const std::string& value,
+                     const HashValueVector& chain_hashes,
                      base::Time* expiry,
                      HashValueVector* hashes) {
   bool parsed_max_age = false;
@@ -257,6 +310,9 @@ bool ParseHPKPHeader(const base::Time& now,
   }
 
   if (!parsed_max_age)
+    return false;
+
+  if (!IsPinListValid(pins, chain_hashes))
     return false;
 
   *expiry = now + base::TimeDelta::FromSeconds(max_age_candidate);

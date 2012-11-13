@@ -37,7 +37,7 @@ bool NET_EXPORT_PRIVATE ParseHSTSHeader(const base::Time& now,
 // Otherwise returns false and leaves the output parameters unchanged.
 // Interprets the max-age directive relative to |now|.
 // Checks that the header's public key pins overlaps with the SSL chain
-// as specified in ssl_info.
+// as specified in chain_hashes.
 //
 // value is the right-hand side of:
 //
@@ -46,6 +46,7 @@ bool NET_EXPORT_PRIVATE ParseHSTSHeader(const base::Time& now,
 //     "pin-" algo "=" base64 [ ";" ... ]
 bool NET_EXPORT_PRIVATE ParseHPKPHeader(const base::Time& now,
                                         const std::string& value,
+                                        const HashValueVector& chain_hashes,
                                         base::Time* expiry,         // OUT
                                         HashValueVector* hashes);   // OUT
 

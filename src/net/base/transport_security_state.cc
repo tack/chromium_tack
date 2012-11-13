@@ -179,22 +179,6 @@ void TransportSecurityState::DeleteSince(const base::Time& time) {
     DirtyNotify();
 }
 
-// Returns true iff there is an item in |pins| which is not present in
-// |from_cert_chain|. Such an SPKI hash is called a "backup pin".
-static bool IsBackupPinPresent(const HashValueVector& pins,
-                               const HashValueVector& from_cert_chain) {
-  for (HashValueVector::const_iterator
-       i = pins.begin(); i != pins.end(); ++i) {
-    HashValueVector::const_iterator j =
-        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
-                     HashValuesEqual(*i));
-      if (j == from_cert_chain.end())
-        return true;
-  }
-
-  return false;
-}
-
 // Returns true if the intersection of |a| and |b| is not empty. If either
 // |a| or |b| is empty, returns false.
 static bool HashesIntersect(const HashValueVector& a,
@@ -206,26 +190,6 @@ static bool HashesIntersect(const HashValueVector& a,
       return true;
   }
   return false;
-}
-
-// Returns true iff |pins| contains both a live and a backup pin. A live pin
-// is a pin whose SPKI is present in the certificate chain in |ssl_info|. A
-// backup pin is a pin intended for disaster recovery, not day-to-day use, and
-// thus must be absent from the certificate chain. The Public-Key-Pins header
-// specification requires both.
-static bool IsPinListValid(const HashValueVector& pins,
-                           const SSLInfo& ssl_info) {
-  // Fast fail: 1 live + 1 backup = at least 2 pins. (Check for actual
-  // liveness and backupness below.)
-  if (pins.size() < 2)
-    return false;
-
-  const HashValueVector& from_cert_chain = ssl_info.public_key_hashes;
-  if (from_cert_chain.empty())
-    return false;
-
-  return IsBackupPinPresent(pins, from_cert_chain) &&
-         HashesIntersect(pins, from_cert_chain);
 }
 
 static bool AddHash(const char* sha1_hash,
@@ -649,10 +613,9 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
   base::Time now = base::Time::Now();
   TransportSecurityState::DomainState domain_state;
   if (ParseHPKPHeader(now, value,
+                      ssl_info.public_key_hashes,
                       &domain_state.dynamic_spki_hashes_expiry,
                       &domain_state.dynamic_spki_hashes)) {
-    if (!IsPinListValid(domain_state.dynamic_spki_hashes, ssl_info))
-      return false;
     domain_state.upgrade_mode = DomainState::MODE_DEFAULT;
     domain_state.created = now;
     EnableHost(host, domain_state);

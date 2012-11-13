@@ -7,7 +7,6 @@
 #include "base/string_piece.h"
 #include "crypto/sha2.h"
 #include "net/base/net_log.h"
-#include "net/base/ssl_info.h"
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_security_headers.h"
 #include "net/http/http_util.h"
@@ -125,74 +124,74 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   base::Time now = base::Time::Now();
   base::Time expiry = now;
   HashValueVector hashes;
-  SSLInfo ssl_info;
+  HashValueVector chain_hashes;
 
-  // Set some fake "chain" hashes into ssl_info
-  ssl_info.public_key_hashes.push_back(GetTestHashValue(1, tag));
-  ssl_info.public_key_hashes.push_back(GetTestHashValue(2, tag));
-  ssl_info.public_key_hashes.push_back(GetTestHashValue(3, tag));
+  // Set some fake "chain" hashes
+  chain_hashes.push_back(GetTestHashValue(1, tag));
+  chain_hashes.push_back(GetTestHashValue(2, tag));
+  chain_hashes.push_back(GetTestHashValue(3, tag));
 
-  // The good pin must be in the chain, the bad pin must not be
+  // The good pin must be in the chain, the backup pin must not be
   std::string good_pin = GetTestPin(2, tag);
   std::string backup_pin = GetTestPin(4, tag);
 
-  EXPECT_FALSE(ParseHPKPHeader(now, "", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "    ", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "abc", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "  abc", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "  abc   ", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age  ", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "    ", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "abc", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "  abc", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "  abc   ", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age  ", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=", ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=   ", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=   ", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     ", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     ", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     xy", ssl_info,
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     xy", chain_hashes,
                                &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "   max-age  =     3488a923",
-                               ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488a923  ", ssl_info, &expiry,
+                               chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488a923  ", chain_hashes, &expiry,
                                &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "max-ag=3488923pins=" + good_pin + "," +
                                backup_pin,
-                               ssl_info, &expiry, &hashes));
+                               chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "max-aged=3488923" + backup_pin,
-                               ssl_info, &expiry, &hashes));
+                               chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "max-aged=3488923; " + backup_pin,
-                               ssl_info, &expiry, &hashes));
+                               chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "max-aged=3488923; " + backup_pin + ";" +
                                backup_pin,
-                               ssl_info, &expiry, &hashes));
+                               chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "max-aged=3488923; " + good_pin + ";" +
                                good_pin,
-                               ssl_info, &expiry, &hashes));
+                               chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "max-aged=3488923; " + good_pin,
-                               ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age==3488923", ssl_info, &expiry,
+                               chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age==3488923", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "amax-age=3488923", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "amax-age=3488923", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=-3488923", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=-3488923", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923;", ssl_info, &expiry,
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923;", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923     e", ssl_info,
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488923     e", chain_hashes,
                                &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "max-age=3488923     includesubdomain",
-                               ssl_info, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=34889.23", ssl_info, &expiry,
+                               chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=34889.23", chain_hashes, &expiry,
                                &hashes));
 
   // Check the out args were not updated by checking the default
@@ -322,56 +321,56 @@ static void TestValidPinsHeaders(HashValueTag tag) {
   base::Time expiry = now;
   base::Time expect_expiry = now;
   HashValueVector hashes;
-  SSLInfo ssl_info;
+  HashValueVector chain_hashes;
 
-  // Set some fake "chain" hashes into ssl_info
-  ssl_info.public_key_hashes.push_back(GetTestHashValue(1, tag));
-  ssl_info.public_key_hashes.push_back(GetTestHashValue(2, tag));
-  ssl_info.public_key_hashes.push_back(GetTestHashValue(3, tag));
+  // Set some fake "chain" hashes into chain_hashes
+  chain_hashes.push_back(GetTestHashValue(1, tag));
+  chain_hashes.push_back(GetTestHashValue(2, tag));
+  chain_hashes.push_back(GetTestHashValue(3, tag));
 
-  // The good pin must be in the chain, the bad pin must not be
+  // The good pin must be in the chain, the backup pin must not be
   std::string good_pin = GetTestPin(2, tag);
   std::string backup_pin = GetTestPin(4, tag);
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
       "max-age=243; " + good_pin + ";" + backup_pin,
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(243);
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
       "   " + good_pin + "; " + backup_pin + "  ; Max-agE    = 567",
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(567);
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
       good_pin + ";" + backup_pin + "  ; mAx-aGe    = 890      ",
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(890);
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
       good_pin + ";" + backup_pin + "; max-age=123;IGNORED;",
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(123);
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
       "max-age=394082;" + backup_pin + ";" + good_pin + ";  ",
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(394082);
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
       "max-age=39408299  ;" + backup_pin + ";" + good_pin + ";  ",
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
     std::min(kMaxHSTSAgeSecs, GG_INT64_C(39408299)));
   EXPECT_EQ(expect_expiry, expiry);
@@ -380,7 +379,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
       now,
       "max-age=39408038  ;    cybers=39408038  ;  " +
           good_pin + ";" + backup_pin + ";   ",
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
     std::min(kMaxHSTSAgeSecs, GG_INT64_C(394082038)));
   EXPECT_EQ(expect_expiry, expiry);
@@ -388,7 +387,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
   EXPECT_TRUE(ParseHPKPHeader(
       now,
       "  max-age=0  ;  " + good_pin + ";" + backup_pin,
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(0);
   EXPECT_EQ(expect_expiry, expiry);
 
@@ -396,7 +395,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
       now,
       "  max-age=999999999999999999999999999999999999999999999  ;  " +
           backup_pin + ";" + good_pin + ";   ",
-      ssl_info, &expiry, &hashes));
+      chain_hashes, &expiry, &hashes));
   expect_expiry = now +
       base::TimeDelta::FromSeconds(kMaxHSTSAgeSecs);
   EXPECT_EQ(expect_expiry, expiry);
