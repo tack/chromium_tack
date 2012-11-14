@@ -39,18 +39,14 @@ bool HashValue::Equals(const HashValue& other) const {
   }
 }
 
-bool HashValue::FromString(const std::string& value) {
-  std::string base64_str;
+bool HashValue::FromString(const base::StringPiece value) {
+  base::StringPiece base64_str;
   if (value.substr(0, 5) == "sha1/") {
-    if (value.size() != 5 + 28)
-      return false;
     tag = HASH_VALUE_SHA1;
-    base64_str = value.substr(5, 28);
+    base64_str = value.substr(5);
   } else if (value.substr(0, 7) == "sha256/") {
-    if (value.size() != 7 + 44)
-      return false;
     tag = HASH_VALUE_SHA256;
-    base64_str = value.substr(7, 44);
+    base64_str = value.substr(7);
   } else {
     return false;
   }

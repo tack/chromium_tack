@@ -79,8 +79,6 @@ bool IsPinListValid(const HashValueVector& pins,
          HashesIntersect(pins, from_cert_chain);
 }
 
-// Strip, Split, StringPair, and ParsePins are private implementation details
-// of ParsePinsHeader(std::string&, DomainState&).
 std::string Strip(const std::string& source) {
   if (source.empty())
     return source;

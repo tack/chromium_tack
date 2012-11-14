@@ -11,11 +11,13 @@
 #include <vector>
 
 #include "base/basictypes.h"
+#include "base/string_piece.h"
 #include "build/build_config.h"
+#include "net/base/net_export.h"
 
 namespace net {
 
-struct SHA1HashValue {
+struct NET_EXPORT SHA1HashValue {
   bool Equals(const SHA1HashValue& other) const {
     return memcmp(data, other.data, sizeof(data)) == 0;
   }
@@ -23,7 +25,7 @@ struct SHA1HashValue {
   unsigned char data[20];
 };
 
-struct SHA256HashValue {
+struct NET_EXPORT SHA256HashValue {
   bool Equals(const SHA256HashValue& other) const {
     return memcmp(data, other.data, sizeof(data)) == 0;
   }
@@ -39,7 +41,7 @@ enum HashValueTag {
   HASH_VALUE_TAGS_COUNT
 };
 
-class HashValue {
+class NET_EXPORT HashValue {
  public:
   explicit HashValue(HashValueTag tag) : tag(tag) {}
   HashValue() : tag(HASH_VALUE_SHA1) {}
@@ -57,7 +59,7 @@ class HashValue {
   //   HashValue containing incorrect data
   // ToString() errors (ie unknown tag) returns "unknown/"<base64>
   //   (but ToString() errors should not occur!)
-  bool FromString(const std::string& input);
+  bool FromString(const base::StringPiece input);
   std::string ToString() const;
 
   size_t size() const;
