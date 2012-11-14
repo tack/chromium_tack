@@ -288,16 +288,12 @@ bool ParseHPKPHeader(const base::Time& now,
         return false;
       }
       parsed_max_age = true;
-    } else if (StartsWithASCII(equals.first, "pin-", false)) {
-      HashValueTag tag;
-      if (LowerCaseEqualsASCII(equals.first, "pin-sha1")) {
-        tag = HASH_VALUE_SHA1;
-      } else if (LowerCaseEqualsASCII(equals.first, "pin-sha256")) {
-        tag = HASH_VALUE_SHA256;
-      } else {
+    } else if (LowerCaseEqualsASCII(equals.first, "pin-sha1")) {
+      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA1, &pins)) {
         return false;
       }
-      if (!ParseAndAppendPin(equals.second, tag, &pins)) {
+    } else if (LowerCaseEqualsASCII(equals.first, "pin-sha256")) {
+      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA256, &pins)) {
         return false;
       }
     } else {

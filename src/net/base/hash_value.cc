@@ -52,7 +52,7 @@ bool HashValue::FromString(const base::StringPiece value) {
   }
 
   std::string decoded;
-  if (!base::Base64Decode(base64_str, &decoded) || 
+  if (!base::Base64Decode(base64_str, &decoded) ||
       decoded.size() != size()) {
     return false;
   }

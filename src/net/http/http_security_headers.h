@@ -48,7 +48,7 @@ bool NET_EXPORT_PRIVATE ParseHSTSHeader(const base::Time& now,
 // key hash which matches the SSL certificate chain of the current site
 // (as specified by the chain_hashes) parameter.  In addition, there MUST
 // be at least one key hash which does NOT match the site's SSL certificate
-// chain (this is the "backup pin"). 
+// chain (this is the "backup pin").
 bool NET_EXPORT_PRIVATE ParseHPKPHeader(const base::Time& now,
                                         const std::string& value,
                                         const HashValueVector& chain_hashes,
