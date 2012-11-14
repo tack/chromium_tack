@@ -1122,6 +1122,9 @@ bool Base64StringToHashes(const std::string& hashes_str,
     std::string hash_str;
     RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
     net::HashValue hash;
+    // Skip past unrecognized hash algos
+    if (hash_str.substr(0, 4) != "sha1" && hash_str.substr(0, 6) != "sha256")
+      continue;
     if (!hash.FromString(hash_str))
       return false;
     hashes->push_back(hash);
