@@ -41,11 +41,46 @@
 
 namespace net {
 
-static std::string HashHost(const std::string& canonicalized_host) {
+namespace {
+
+std::string HashesToBase64String(const HashValueVector& hashes) {
+  std::string str;
+  for (size_t i = 0; i != hashes.size(); ++i) {
+    if (i != 0)
+      str += ",";
+    str += hashes[i].ToString();
+  }
+  return str;
+}
+
+std::string HashHost(const std::string& canonicalized_host) {
   char hashed[crypto::kSHA256Length];
   crypto::SHA256HashString(canonicalized_host, hashed, sizeof(hashed));
   return std::string(hashed, sizeof(hashed));
 }
+
+// Returns true if the intersection of |a| and |b| is not empty. If either
+// |a| or |b| is empty, returns false.
+bool HashesIntersect(const HashValueVector& a,
+                     const HashValueVector& b) {
+  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
+    HashValueVector::const_iterator j =
+      std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
+    if (j != b.end())
+      return true;
+  }
+  return false;
+}
+
+bool AddHash(const char* sha1_hash,
+             HashValueVector* out) {
+  HashValue hash(HASH_VALUE_SHA1);
+  memcpy(hash.data(), sha1_hash, 20);
+  out->push_back(hash);
+  return true;
+}
+
+} // namespace
 
 TransportSecurityState::TransportSecurityState()
   : delegate_(NULL) {
@@ -177,27 +212,6 @@ void TransportSecurityState::DeleteSince(const base::Time& time) {
 
   if (dirtied)
     DirtyNotify();
-}
-
-// Returns true if the intersection of |a| and |b| is not empty. If either
-// |a| or |b| is empty, returns false.
-static bool HashesIntersect(const HashValueVector& a,
-                            const HashValueVector& b) {
-  for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
-    HashValueVector::const_iterator j =
-      std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
-    if (j != b.end())
-      return true;
-  }
-  return false;
-}
-
-static bool AddHash(const char* sha1_hash,
-                    HashValueVector* out) {
-  HashValue hash(HASH_VALUE_SHA1);
-  memcpy(hash.data(), sha1_hash, 20);
-  out->push_back(hash);
-  return true;
 }
 
 TransportSecurityState::~TransportSecurityState() {}
@@ -711,16 +725,6 @@ void TransportSecurityState::AddOrUpdateEnabledHosts(
 void TransportSecurityState::AddOrUpdateForcedHosts(
     const std::string& hashed_host, const DomainState& state) {
   forced_hosts_[hashed_host] = state;
-}
-
-static std::string HashesToBase64String(const HashValueVector& hashes) {
-  std::string str;
-  for (size_t i = 0; i != hashes.size(); ++i) {
-    if (i != 0)
-      str += ",";
-    str += hashes[i].ToString();
-  }
-  return str;
 }
 
 TransportSecurityState::DomainState::DomainState()
