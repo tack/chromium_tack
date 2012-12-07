@@ -182,7 +182,7 @@ void TransportSecurityState::DeleteSince(const base::Time& time) {
 // Returns true if the intersection of |a| and |b| is not empty. If either
 // |a| or |b| is empty, returns false.
 static bool HashesIntersect(const HashValueVector& a,
-                     const HashValueVector& b) {
+                            const HashValueVector& b) {
   for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
     HashValueVector::const_iterator j =
       std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
@@ -608,8 +608,8 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
 }
 
 bool TransportSecurityState::AddHPKPHeader(const std::string& host,
-                                               const std::string& value,
-                                               const SSLInfo& ssl_info) {
+                                           const std::string& value,
+                                           const SSLInfo& ssl_info) {
   base::Time now = base::Time::Now();
   TransportSecurityState::DomainState domain_state;
   if (ParseHPKPHeader(now, value,
