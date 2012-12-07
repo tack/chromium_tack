@@ -702,6 +702,11 @@ void URLRequestHttpJob::ProcessPublicKeyPinsHeader() {
       !security_state)
     return;
 
+  // http://tools.ietf.org/html/draft-ietf-websec-key-pinning
+  //
+  //   If a UA receives more than one PKP header field in an HTTP
+  //   response message over secure transport, then the UA MUST process
+  //   only the first such header field.
   HttpResponseHeaders* headers = GetResponseHeaders();
   std::string value;
   if (headers->EnumerateHeader(NULL, "Public-Key-Pins", &value))
