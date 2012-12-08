@@ -1160,7 +1160,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
 
         result->SetString("static_spki_hashes",
                           HashesToBase64String(state.static_spki_hashes));
-        result->SetString("dynamic_spki_hashes", 
+        result->SetString("dynamic_spki_hashes",
                           HashesToBase64String(state.dynamic_spki_hashes));
       }
     }

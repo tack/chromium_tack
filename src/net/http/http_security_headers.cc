@@ -38,7 +38,7 @@ bool MaxAgeToInt(std::string::const_iterator begin,
 // |from_cert_chain|. Such an SPKI hash is called a "backup pin".
 bool IsBackupPinPresent(const HashValueVector& pins,
                         const HashValueVector& from_cert_chain) {
-  for (HashValueVector::const_iterator i = pins.begin(); i != pins.end(); 
+  for (HashValueVector::const_iterator i = pins.begin(); i != pins.end();
        ++i) {
     HashValueVector::const_iterator j =
       std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
@@ -46,7 +46,7 @@ bool IsBackupPinPresent(const HashValueVector& pins,
     if (j == from_cert_chain.end())
       return true;
   }
-  
+
   return false;
 }
 
