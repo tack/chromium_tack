@@ -4,9 +4,6 @@
 
 #include "net/base/hash_value.h"
 
-#include <cstdlib>
-#include <cstring>
-
 #include "base/base64.h"
 #include "base/logging.h"
 #include "base/sha1.h"
@@ -67,9 +64,9 @@ std::string HashValue::ToString() const {
                                        size()), &base64_str);
   switch (tag) {
   case HASH_VALUE_SHA1:
-    return std::string("sha1/" + base64_str);
+    return std::string("sha1/") + base64_str;
   case HASH_VALUE_SHA256:
-    return std::string("sha256/" + base64_str);
+    return std::string("sha256/") + base64_str;
   default:
     NOTREACHED() << "Unknown HashValueTag " << tag;
     return std::string("unknown/" + base64_str);
@@ -84,12 +81,9 @@ size_t HashValue::size() const {
       return sizeof(fingerprint.sha256.data);
     default:
       NOTREACHED() << "Unknown HashValueTag " << tag;
-      // Although this is NOTREACHED, this function might be inlined and its
-      // return value can be passed to memset as the length argument. If we
-      // returned 0 here, it might result in what appears (in some stages of
-      // compilation) to be a call to to memset with a length argument of 0,
-      // which results in a warning. Therefore, we return a dummy value
-      // here.
+      // While an invalid tag should not happen, return a non-zero length
+      // to avoid compiler warnings when the result of size() is
+      // used with functions like memset.
       return sizeof(fingerprint.sha1.data);
   }
 }

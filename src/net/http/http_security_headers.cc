@@ -13,21 +13,24 @@ namespace net {
 
 namespace {
 
-// MaxAgeToInt converts a string representation of a number of seconds into a
-// int. We use strtol in order to handle overflow correctly. The string may
-// contain an arbitary number which we should truncate correctly rather than
-// throwing a parse failure.
+// MaxAgeToInt converts a string representation of a number of seconds
+// into a int. We use StringToInt64 in order to handle overflow and
+// negative numbers correctly.  The string may contain an arbitary
+// number which we should truncate correctly rather than throwing a
+// parse failure.
+
 bool MaxAgeToInt(std::string::const_iterator begin,
                  std::string::const_iterator end,
                  int* result) {
   const std::string s(begin, end);
-  char* endptr;
-  long int i = strtol(s.data(), &endptr, 10 /* base */);
-  if (*endptr || i < 0)
+  int64 i = 0;
+  if (!base::StringToInt64(s, &i))
+    return false;
+  if (i < 0)
     return false;
   if (i > kMaxHSTSAgeSecs)
     i = kMaxHSTSAgeSecs;
-  *result = i;
+  *result = (int)i;
   return true;
 }
 
@@ -35,15 +38,15 @@ bool MaxAgeToInt(std::string::const_iterator begin,
 // |from_cert_chain|. Such an SPKI hash is called a "backup pin".
 bool IsBackupPinPresent(const HashValueVector& pins,
                         const HashValueVector& from_cert_chain) {
-  for (HashValueVector::const_iterator
-       i = pins.begin(); i != pins.end(); ++i) {
+  for (HashValueVector::const_iterator i = pins.begin(); i != pins.end(); 
+       ++i) {
     HashValueVector::const_iterator j =
-        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
-                     HashValuesEqual(*i));
-      if (j == from_cert_chain.end())
-        return true;
+      std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
+                   HashValuesEqual(*i));
+    if (j == from_cert_chain.end())
+      return true;
   }
-
+  
   return false;
 }
 
@@ -108,9 +111,6 @@ bool ParseAndAppendPin(const std::string& value,
   std::string unquoted = HttpUtil::Unquote(value);
   std::string decoded;
 
-  // This code has to assume that 32 bytes is SHA-256 and 20 bytes is SHA-1.
-  // Currently, those are the only two possibilities, so the assumption is
-  // valid.
   if (!base::Base64Decode(unquoted, &decoded))
     return false;
 
@@ -209,9 +209,7 @@ bool ParseHSTSHeader(const base::Time& now, const std::string& value,
         if (IsAsciiWhitespace(*tokenizer.token_begin()))
           continue;
         unquoted = HttpUtil::Unquote(tokenizer.token());
-        if (!MaxAgeToInt(unquoted.begin(),
-                         unquoted.end(),
-                         &max_age_candidate))
+        if (!MaxAgeToInt(unquoted.begin(), unquoted.end(), &max_age_candidate))
           return false;
         state = AFTER_MAX_AGE;
         break;
@@ -289,13 +287,11 @@ bool ParseHPKPHeader(const base::Time& now,
       }
       parsed_max_age = true;
     } else if (LowerCaseEqualsASCII(equals.first, "pin-sha1")) {
-      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA1, &pins)) {
+      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA1, &pins))
         return false;
-      }
     } else if (LowerCaseEqualsASCII(equals.first, "pin-sha256")) {
-      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA256, &pins)) {
+      if (!ParseAndAppendPin(equals.second, HASH_VALUE_SHA256, &pins))
         return false;
-      }
     } else {
       // Silently ignore unknown directives for forward compatibility.
     }

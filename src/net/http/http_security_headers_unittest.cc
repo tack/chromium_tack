@@ -308,7 +308,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
 
   EXPECT_TRUE(ParseHSTSHeader(
       now,
-      "  max-age=999999999999999999999999999999999999999999999  ;"
+      "  max-age=99999999999  ;"
       "  incLudesUbdOmains   ", &expiry, &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
       kMaxHSTSAgeSecs);
@@ -393,7 +393,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
 
   EXPECT_TRUE(ParseHPKPHeader(
       now,
-      "  max-age=999999999999999999999999999999999999999999999  ;  " +
+      "  max-age=99999999999  ;  " +
           backup_pin + ";" + good_pin + ";   ",
       chain_hashes, &expiry, &hashes));
   expect_expiry = now +

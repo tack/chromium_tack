@@ -48,18 +48,23 @@ class NET_EXPORT HashValue {
 
   bool Equals(const HashValue& other) const;
 
-  // Parse/write in this format: "sha1/Guzek9lMwR3KeIS8wwS9gBvVtIg="
-  // i.e. <hash-name>"/"<base64-hash-value>
+  // Serializes/Deserializes hashes in the form of
+  // <hash-name>"/"<base64-hash-value>
+  // (eg: "sha1/...")
+  // This format may be persisted to permanent storage, so
+  // care should be taken before changing the serialization.
+  //
   // This format is used for:
   //   - net_internals display/setting public-key pins
   //   - logging public-key pins
   //   - serializing public-key pins
-  //
-  // FromString() parse errors SHALL return false, and MAY leave the
-  //   HashValue containing incorrect data
-  // ToString() errors (ie unknown tag) returns "unknown/"<base64>
-  //   (but ToString() errors should not occur!)
+
+  // Deserializes a HashValue from a string. On error, returns
+  // false and MAY change the contents of HashValue to contain invalid data.
   bool FromString(const base::StringPiece input);
+
+  // Serializes the HashValue to a string. If an invalid HashValue
+  // is supplied (eg: an unknown hash tag), returns "unknown"/<base64>
   std::string ToString() const;
 
   size_t size() const;

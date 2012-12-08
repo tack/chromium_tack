@@ -75,7 +75,7 @@ bool HashesIntersect(const HashValueVector& a,
 bool AddHash(const char* sha1_hash,
              HashValueVector* out) {
   HashValue hash(HASH_VALUE_SHA1);
-  memcpy(hash.data(), sha1_hash, 20);
+  memcpy(hash.data(), sha1_hash, hash.size());
   out->push_back(hash);
   return true;
 }
@@ -606,8 +606,7 @@ bool TransportSecurityState::AddHSTSHeader(const std::string& host,
                                            const std::string& value) {
   base::Time now = base::Time::Now();
   TransportSecurityState::DomainState domain_state;
-  if (ParseHSTSHeader(now, value,
-                      &domain_state.upgrade_expiry,
+  if (ParseHSTSHeader(now, value, &domain_state.upgrade_expiry,
                       &domain_state.include_subdomains)) {
     // Handle max-age == 0
     if (now == domain_state.upgrade_expiry)
@@ -626,8 +625,7 @@ bool TransportSecurityState::AddHPKPHeader(const std::string& host,
                                            const SSLInfo& ssl_info) {
   base::Time now = base::Time::Now();
   TransportSecurityState::DomainState domain_state;
-  if (ParseHPKPHeader(now, value,
-                      ssl_info.public_key_hashes,
+  if (ParseHPKPHeader(now, value, ssl_info.public_key_hashes,
                       &domain_state.dynamic_spki_hashes_expiry,
                       &domain_state.dynamic_spki_hashes)) {
     domain_state.upgrade_mode = DomainState::MODE_DEFAULT;

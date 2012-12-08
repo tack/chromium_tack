@@ -119,8 +119,6 @@ std::string HashesToBase64String(const net::HashValueVector& hashes) {
 bool Base64StringToHashes(const std::string& hashes_str,
                           net::HashValueVector* hashes) {
   hashes->clear();
-  if (hashes_str.empty())
-    return true;
   std::vector<std::string> vector_hash_str;
   base::SplitString(hashes_str, ',', &vector_hash_str);
 
@@ -1160,12 +1158,10 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
         result->SetDouble("dynamic_spki_hashes_expiry",
                           state.dynamic_spki_hashes_expiry.ToDoubleT());
 
-        std::string hashes_str;
-        hashes_str = HashesToBase64String(state.static_spki_hashes);
-        result->SetString("static_spki_hashes", hashes_str);
-
-        hashes_str = HashesToBase64String(state.dynamic_spki_hashes);
-        result->SetString("dynamic_spki_hashes", hashes_str);
+        result->SetString("static_spki_hashes",
+                          HashesToBase64String(state.static_spki_hashes));
+        result->SetString("dynamic_spki_hashes", 
+                          HashesToBase64String(state.dynamic_spki_hashes));
       }
     }
   }
@@ -1196,8 +1192,11 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   net::TransportSecurityState::DomainState state;
   state.upgrade_expiry = state.created + base::TimeDelta::FromDays(1000);
   state.include_subdomains = include_subdomains;
-  if (Base64StringToHashes(hashes_str, &state.dynamic_spki_hashes))
-    transport_security_state->EnableHost(domain, state);
+  if (!hashes_str.empty()) {
+    if (!Base64StringToHashes(hashes_str, &state.dynamic_spki_hashes))
+      return;
+  }
+  transport_security_state->EnableHost(domain, state);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnHSTSDelete(
