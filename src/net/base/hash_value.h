@@ -13,22 +13,19 @@
 #include "base/basictypes.h"
 #include "base/string_piece.h"
 #include "build/build_config.h"
+#include "crypto/secure_util.h"
 #include "net/base/net_export.h"
 
 namespace net {
 
 struct NET_EXPORT SHA1HashValue {
-  bool Equals(const SHA1HashValue& other) const {
-    return memcmp(data, other.data, sizeof(data)) == 0;
-  }
+  bool Equals(const SHA1HashValue& other) const;
 
   unsigned char data[20];
 };
 
 struct NET_EXPORT SHA256HashValue {
-  bool Equals(const SHA256HashValue& other) const {
-    return memcmp(data, other.data, sizeof(data)) == 0;
-  }
+  bool Equals(const SHA256HashValue& other) const;
 
   unsigned char data[32];
 };

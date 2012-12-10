@@ -127,7 +127,11 @@ bool Base64StringToHashes(const std::string& hashes_str,
     RemoveChars(vector_hash_str[i], " \t\r\n", &hash_str);
     net::HashValue hash;
     // Skip past unrecognized hash algos
-    if (hash_str.substr(0, 4) != "sha1" && hash_str.substr(0, 6) != "sha256")
+    // But return false on malformatted input
+    if (hash_str.empty()) /* pair of commas with no content between them */
+      return false;
+    /* hash_str.substr() will not throw, as hash_str is non-empty */
+    if (hash_str.substr(0, 5) != "sha1/" && hash_str.substr(0, 7) != "sha256/")
       continue;
     if (!hash.FromString(hash_str))
       return false;
