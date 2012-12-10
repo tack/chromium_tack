@@ -114,4 +114,3 @@ bool IsSHA1HashInSortedArray(const SHA1HashValue& hash,
 }
 
 }  // namespace net
-

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/base64.h"
+#include "base/basictypes.h"
 #include "base/string_number_conversions.h"
 #include "base/string_tokenizer.h"
 #include "base/string_util.h"
@@ -21,16 +22,17 @@ namespace {
 
 bool MaxAgeToInt(std::string::const_iterator begin,
                  std::string::const_iterator end,
-                 int* result) {
+                 uint32* result) {
   const std::string s(begin, end);
   int64 i = 0;
   if (!base::StringToInt64(s, &i))
     return false;
   if (i < 0)
     return false;
+  COMPILE_ASSERT(kMaxHSTSAgeSecs <= kuint32max, kMaxHSTSAgeSecsTooLarge);
   if (i > kMaxHSTSAgeSecs)
     i = kMaxHSTSAgeSecs;
-  *result = (int)i;
+  *result = (uint32)i;
   return true;
 }
 
@@ -41,8 +43,8 @@ bool IsBackupPinPresent(const HashValueVector& pins,
   for (HashValueVector::const_iterator i = pins.begin(); i != pins.end();
        ++i) {
     HashValueVector::const_iterator j =
-      std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
-                   HashValuesEqual(*i));
+        std::find_if(from_cert_chain.begin(), from_cert_chain.end(),
+                     HashValuesEqual(*i));
     if (j == from_cert_chain.end())
       return true;
   }
@@ -56,7 +58,7 @@ bool HashesIntersect(const HashValueVector& a,
                      const HashValueVector& b) {
   for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
     HashValueVector::const_iterator j =
-      std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
+        std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
     if (j != b.end())
       return true;
   }
@@ -154,7 +156,7 @@ bool ParseAndAppendPin(const std::string& value,
 bool ParseHSTSHeader(const base::Time& now, const std::string& value,
                      base::Time* expiry,         // OUT
                      bool* include_subdomains) {  // OUT
-  int max_age_candidate = 0;
+  uint32 max_age_candidate = 0;
   bool include_subdomains_candidate = false;
 
   // We must see max-age exactly once.
@@ -266,7 +268,7 @@ bool ParseHPKPHeader(const base::Time& now,
                      base::Time* expiry,
                      HashValueVector* hashes) {
   bool parsed_max_age = false;
-  int max_age_candidate = 0;
+  uint32 max_age_candidate = 0;
   HashValueVector pins;
 
   std::string source = value;
@@ -315,4 +317,3 @@ bool ParseHPKPHeader(const base::Time& now,
 }
 
 }  // namespace net
-

@@ -65,7 +65,7 @@ bool HashesIntersect(const HashValueVector& a,
                      const HashValueVector& b) {
   for (HashValueVector::const_iterator i = a.begin(); i != a.end(); ++i) {
     HashValueVector::const_iterator j =
-      std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
+        std::find_if(b.begin(), b.end(), HashValuesEqual(*i));
     if (j != b.end())
       return true;
   }

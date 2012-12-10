@@ -57,6 +57,4 @@ bool NET_EXPORT_PRIVATE ParseHPKPHeader(const base::Time& now,
 
 }  // namespace net
 
-
 #endif  // NET_HTTP_HTTP_SECURITY_HEADERS_H_
-
