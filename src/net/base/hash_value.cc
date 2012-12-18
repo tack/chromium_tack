@@ -27,7 +27,7 @@ int CompareSHA1Hashes(const void* a, const void* b) {
 bool SHA1HashValue::Equals(const SHA1HashValue& other) const {
   return crypto::SecureMemEqual(data, other.data, sizeof(data));
 }
-  
+
 bool SHA256HashValue::Equals(const SHA256HashValue& other) const {
   return crypto::SecureMemEqual(data, other.data, sizeof(data));
 }
@@ -48,7 +48,7 @@ bool HashValue::Equals(const HashValue& other) const {
 
 bool HashValue::FromString(const base::StringPiece value) {
   base::StringPiece base64_str;
-  /* Cannot take substr(pos, ...) with 'pos' past end of string, 
+  /* Cannot take substr(pos, ...) with 'pos' past end of string,
      so check for adequate string length first */
   if (value.size() > 5 && value.substr(0, 5) == "sha1/") {
     tag = HASH_VALUE_SHA1;

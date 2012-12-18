@@ -13,7 +13,6 @@
 #include "base/basictypes.h"
 #include "base/string_piece.h"
 #include "build/build_config.h"
-#include "crypto/secure_util.h"
 #include "net/base/net_export.h"
 
 namespace net {

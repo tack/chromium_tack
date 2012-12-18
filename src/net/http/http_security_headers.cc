@@ -25,7 +25,8 @@ bool MaxAgeToInt(std::string::const_iterator begin,
                  uint32* result) {
   const std::string s(begin, end);
   int64 i = 0;
-  if (!base::StringToInt64(s, &i))
+  /* Reject any parse failures *except* overflow, which is handled below */
+  if (!base::StringToInt64(s, &i) && i != kint64max)
     return false;
   if (i < 0)
     return false;
