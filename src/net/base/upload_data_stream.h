@@ -11,7 +11,6 @@
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_export.h"
-#include "net/base/upload_data.h"
 
 namespace net {
 
@@ -22,12 +21,29 @@ class UploadElementReader;
 // A class to read all elements from an UploadData object.
 class NET_EXPORT UploadDataStream {
  public:
-  explicit UploadDataStream(UploadData* upload_data);
+  // An enum used to construct chunked data stream.
+  enum Chunked { CHUNKED };
+
+  // Constructs a non-chunked data stream.
+  // |element_readers| is cleared by this ctor.
+  UploadDataStream(ScopedVector<UploadElementReader>* element_readers,
+                   int64 identifier);
+
+  // Constructs a chunked data stream.
+  UploadDataStream(Chunked chunked, int64 identifier);
+
   ~UploadDataStream();
 
-  // Initializes the stream. This function must be called exactly once,
-  // before calling any other method. It is not valid to call any method
-  // (other than the destructor) if Init() returns a failure.
+  // Creates UploadDataStream with a reader.
+  static UploadDataStream* CreateWithReader(
+      scoped_ptr<UploadElementReader> reader,
+      int64 identifier);
+
+  // Initializes the stream. This function must be called before calling any
+  // other method. It is not valid to call any method (other than the
+  // destructor) if Init() returns a failure. This method can be called multiple
+  // times. Calling this method after a Init() success results in resetting the
+  // state.
   //
   // Does the initialization synchronously and returns the result if possible,
   // otherwise returns ERR_IO_PENDING and runs the callback with the result.
@@ -36,10 +52,6 @@ class NET_EXPORT UploadDataStream {
   // file modification time is set (usually not set, but set for sliced
   // files) and the target file is changed.
   int Init(const CompletionCallback& callback);
-
-  // Initializes the stream synchronously.
-  // Use this method only if the thread is IO allowed or the data is in-memory.
-  int InitSync();
 
   // When possible, reads up to |buf_len| bytes synchronously from the upload
   // data stream to |buf| and returns the number of bytes read; otherwise,
@@ -53,9 +65,10 @@ class NET_EXPORT UploadDataStream {
   // size() bytes can be read, which can happen for TYPE_FILE payloads.
   int Read(IOBuffer* buf, int buf_len, const CompletionCallback& callback);
 
-  // Reads data always synchronously.
-  // Use this method only if the thread is IO allowed or the data is in-memory.
-  int ReadSync(IOBuffer* buf, int buf_len);
+  // Identifies a particular upload instance, which is used by the cache to
+  // formulate a cache key.  This value should be unique across browser
+  // sessions.  A value of 0 is used to indicate an unspecified identifier.
+  int64 identifier() const { return identifier_; }
 
   // Returns the total size of the data stream and the current position.
   // size() is not to be used to determine whether the stream has ended
@@ -65,7 +78,12 @@ class NET_EXPORT UploadDataStream {
   uint64 size() const { return total_size_; }
   uint64 position() const { return current_position_; }
 
-  bool is_chunked() const { return upload_data_->is_chunked(); }
+  bool is_chunked() const { return is_chunked_; }
+  bool last_chunk_appended() const { return last_chunk_appended_; }
+
+  const ScopedVector<UploadElementReader>& element_readers() const {
+    return element_readers_;
+  }
 
   // Returns true if all data has been consumed from this upload data
   // stream.
@@ -74,28 +92,26 @@ class NET_EXPORT UploadDataStream {
   // Returns true if the upload data in the stream is entirely in memory.
   bool IsInMemory() const;
 
+  // Adds the given chunk of bytes to be sent with chunked transfer encoding.
+  void AppendChunk(const char* bytes, int bytes_len, bool is_last_chunk);
+
  private:
   friend class SpdyHttpStreamSpdy2Test;
   friend class SpdyHttpStreamSpdy3Test;
   friend class SpdyNetworkTransactionSpdy2Test;
   friend class SpdyNetworkTransactionSpdy3Test;
 
-  // TODO(hashimoto): Stop directly accsssing element_readers_ from tests and
-  // remove these friend declarations.
-  FRIEND_TEST_ALL_PREFIXES(UploadDataStreamTest, InitAsync);
-  FRIEND_TEST_ALL_PREFIXES(UploadDataStreamTest, InitAsyncFailureAsync);
-  FRIEND_TEST_ALL_PREFIXES(UploadDataStreamTest, InitAsyncFailureSync);
-  FRIEND_TEST_ALL_PREFIXES(UploadDataStreamTest, ReadAsync);
+  // Resets this instance to the uninitialized state.
+  void Reset();
 
   // Runs Init() for all element readers.
   // This method is used to implement Init().
-  void InitInternal(int start_index,
-                    const CompletionCallback& callback,
-                    int previous_result);
+  int InitInternal(int start_index, const CompletionCallback& callback);
 
-  // Finalizes the initialization process.
-  // This method is used to implement Init().
-  void FinalizeInitialization();
+  // Resumes initialization and runs callback with the result when necessary.
+  void ResumePendingInit(int start_index,
+                         const CompletionCallback& callback,
+                         int previous_result);
 
   // Reads data from the element readers.
   // This method is used to implement Read().
@@ -107,14 +123,15 @@ class NET_EXPORT UploadDataStream {
                          const CompletionCallback& callback,
                          int previous_result);
 
-  // This method is called when a new chunk is available.
-  void OnChunkAvailable();
+  // Processes result of UploadElementReader::Read(). If |result| indicates
+  // success, updates |buf|'s offset. Otherwise, sets |read_failed_| to true.
+  void ProcessReadResult(scoped_refptr<DrainableIOBuffer> buf,
+                         int result);
 
   // These methods are provided only to be used by unit tests.
   static void ResetMergeChunks();
   static void set_merge_chunks(bool merge) { merge_chunks_ = merge; }
 
-  scoped_refptr<UploadData> upload_data_;
   ScopedVector<UploadElementReader> element_readers_;
 
   // Index of the current upload element (i.e. the element currently being
@@ -126,6 +143,14 @@ class NET_EXPORT UploadDataStream {
   // |total_size_| is set to zero when the data is chunked.
   uint64 total_size_;
   uint64 current_position_;
+
+  const int64 identifier_;
+
+  const bool is_chunked_;
+  bool last_chunk_appended_;
+
+  // True if an error occcured during read operation.
+  bool read_failed_;
 
   // True if the initialization was successful.
   bool initialized_successfully_;

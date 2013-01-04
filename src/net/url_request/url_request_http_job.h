@@ -24,6 +24,8 @@ namespace net {
 class HttpResponseHeaders;
 class HttpResponseInfo;
 class HttpTransaction;
+class HttpUserAgentSettings;
+class UploadDataStream;
 class URLRequestContext;
 
 // A URLRequestJob subclass that is built on top of HttpTransaction.  It
@@ -35,7 +37,9 @@ class URLRequestHttpJob : public URLRequestJob {
                                 const std::string& scheme);
 
  protected:
-  URLRequestHttpJob(URLRequest* request, NetworkDelegate* network_delegate);
+  URLRequestHttpJob(URLRequest* request,
+                    NetworkDelegate* network_delegate,
+                    const HttpUserAgentSettings* http_user_agent_settings);
 
   // Shadows URLRequestJob's version of this method so we can grab cookies.
   void NotifyHeadersComplete();
@@ -66,7 +70,7 @@ class URLRequestHttpJob : public URLRequestJob {
   void RestartTransactionWithAuth(const AuthCredentials& credentials);
 
   // Overridden from URLRequestJob:
-  virtual void SetUpload(UploadData* upload) OVERRIDE;
+  virtual void SetUpload(UploadDataStream* upload) OVERRIDE;
   virtual void SetExtraRequestHeaders(
       const HttpRequestHeaders& headers) OVERRIDE;
   virtual void Start() OVERRIDE;
@@ -98,6 +102,7 @@ class URLRequestHttpJob : public URLRequestJob {
 
   std::vector<std::string> response_cookies_;
   size_t response_cookies_save_index_;
+  base::Time response_date_;
 
   // Auth states for proxy and origin server.
   AuthState proxy_auth_state_;
@@ -242,6 +247,8 @@ class URLRequestHttpJob : public URLRequestJob {
   bool awaiting_callback_;
 
   scoped_ptr<HttpTransactionDelegateImpl> http_transaction_delegate_;
+
+  const HttpUserAgentSettings* http_user_agent_settings_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestHttpJob);
 };

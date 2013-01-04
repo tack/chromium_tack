@@ -16,8 +16,10 @@
 
 #if defined(USE_NSS) || defined(OS_IOS)
 #include "net/base/cert_verify_proc_nss.h"
-#elif defined(USE_OPENSSL)
+#elif defined(USE_OPENSSL) && !defined(OS_ANDROID)
 #include "net/base/cert_verify_proc_openssl.h"
+#elif defined(OS_ANDROID)
+#include "net/base/cert_verify_proc_android.h"
 #elif defined(OS_MACOSX)
 #include "net/base/cert_verify_proc_mac.h"
 #elif defined(OS_WIN)
@@ -51,8 +53,10 @@ bool IsWeakKey(X509Certificate::PublicKeyType type, size_t size_bits) {
 CertVerifyProc* CertVerifyProc::CreateDefault() {
 #if defined(USE_NSS) || defined(OS_IOS)
   return new CertVerifyProcNSS();
-#elif defined(USE_OPENSSL)
+#elif defined(USE_OPENSSL) && !defined(OS_ANDROID)
   return new CertVerifyProcOpenSSL();
+#elif defined(OS_ANDROID)
+  return new CertVerifyProcAndroid();
 #elif defined(OS_MACOSX)
   return new CertVerifyProcMac();
 #elif defined(OS_WIN)
@@ -220,7 +224,7 @@ bool CertVerifyProc::IsBlacklisted(X509Certificate* cert) {
 // NOTE: This implementation assumes and enforces that the hashes are SHA1.
 bool CertVerifyProc::IsPublicKeyBlacklisted(
     const HashValueVector& public_key_hashes) {
-  static const unsigned kNumHashes = 9;
+  static const unsigned kNumHashes = 10;
   static const uint8 kHashes[kNumHashes][base::kSHA1Length] = {
     // Subject: CN=DigiNotar Root CA
     // Issuer: CN=Entrust.net x2 and self-signed
@@ -262,6 +266,9 @@ bool CertVerifyProc::IsPublicKeyBlacklisted(
     // in 2036, but we can probably remove in a couple of years (2014).
     {0xd9, 0xf5, 0xc6, 0xce, 0x57, 0xff, 0xaa, 0x39, 0xcc, 0x7e,
      0xd1, 0x72, 0xbd, 0x53, 0xe0, 0xd3, 0x07, 0x83, 0x4b, 0xd1},
+    // Win32/Sirefef.gen!C generates fake certifciates with this public key.
+    {0xa4, 0xf5, 0x6e, 0x9e, 0x1d, 0x9a, 0x3b, 0x7b, 0x1a, 0xc3,
+     0x31, 0xcf, 0x64, 0xfc, 0x76, 0x2c, 0xd0, 0x51, 0xfb, 0xa4},
   };
 
   for (unsigned i = 0; i < kNumHashes; i++) {

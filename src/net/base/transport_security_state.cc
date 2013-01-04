@@ -18,6 +18,7 @@
 #include <algorithm>
 
 #include "base/base64.h"
+#include "base/build_time.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
@@ -80,7 +81,7 @@ bool AddHash(const char* sha1_hash,
   return true;
 }
 
-} // namespace
+}  // namespace
 
 TransportSecurityState::TransportSecurityState()
   : delegate_(NULL) {
@@ -517,6 +518,10 @@ enum SecondLevelDomainName {
   DOMAIN_GOOGLE_VU,
   DOMAIN_GOOGLE_WS,
 
+  DOMAIN_CHROMIUM_ORG,
+
+  DOMAIN_CRYPTO_CAT,
+
   // Boundary value for UMA_HISTOGRAM_ENUMERATION:
   DOMAIN_NUM_EVENTS
 };
@@ -681,6 +686,13 @@ void TransportSecurityState::ReportUMAOnPinFailure(const std::string& host) {
                             entry->second_level_domain_name, DOMAIN_NUM_EVENTS);
 }
 
+// static
+bool TransportSecurityState::IsBuildTimely() {
+  const base::Time build_time = base::GetBuildTime();
+  // We consider built-in information to be timely for 10 weeks.
+  return (base::Time::Now() - build_time).InDays() < 70 /* 10 weeks */;
+}
+
 bool TransportSecurityState::GetStaticDomainState(
     const std::string& canonicalized_host,
     bool sni_enabled,
@@ -689,6 +701,8 @@ bool TransportSecurityState::GetStaticDomainState(
 
   out->upgrade_mode = DomainState::MODE_FORCE_HTTPS;
   out->include_subdomains = false;
+
+  const bool is_build_timely = IsBuildTimely();
 
   for (size_t i = 0; canonicalized_host[i]; i += canonicalized_host[i] + 1) {
     std::string host_sub_chunk(&canonicalized_host[i],
@@ -701,11 +715,13 @@ bool TransportSecurityState::GetStaticDomainState(
       return true;
     }
     bool ret;
-    if (HasPreload(kPreloadedSTS, kNumPreloadedSTS, canonicalized_host, i, out,
+    if (is_build_timely &&
+        HasPreload(kPreloadedSTS, kNumPreloadedSTS, canonicalized_host, i, out,
                    &ret)) {
       return ret;
     }
     if (sni_enabled &&
+        is_build_timely &&
         HasPreload(kPreloadedSNISTS, kNumPreloadedSNISTS, canonicalized_host, i,
                    out, &ret)) {
       return ret;

@@ -8,7 +8,7 @@
 #define NET_BASE_TRANSPORT_SECURITY_STATE_STATIC_H_
 
 // These are SubjectPublicKeyInfo hashes for public key pinning. The
-// hashes are base64 encoded, SHA1 digests.
+// hashes are SHA1 digests.
 
 static const char kSPKIHash_TestSPKI[] =
     "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
@@ -163,6 +163,9 @@ static const char kSPKIHash_Tor2web[] =
 static const char kSPKIHash_AlphaSSL_G2[] =
     "\xe5\x24\xe9\x8e\x31\x7d\xc8\xfc\xad\x90\x53\x7c\x91\xe7\x0d\xa4\x70\x93\x90\x5f";
 
+static const char kSPKIHash_CryptoCat1[] =
+    "\x4c\x87\xce\x85\x2c\xf4\xc0\x4d\x67\xa9\xe0\xec\x51\x0c\x7f\x3b\x14\xb3\xe9\xc9";
+
 // The following is static data describing the hosts that are hardcoded with
 // certificate pins or HSTS information.
 
@@ -186,6 +189,7 @@ static const char* const kGoogleAcceptableCerts[] = {
   kSPKIHash_Google1024,
   kSPKIHash_Google2048,
   kSPKIHash_EquifaxSecureCA,
+  kSPKIHash_GeoTrustGlobal,
   NULL,
 };
 static const char* const kGoogleRejectedCerts[] = {
@@ -294,6 +298,16 @@ static const char* const kTor2webAcceptableCerts[] = {
   kNoRejectedPublicKeys, \
 }
 
+static const char* const kCryptoCatAcceptableCerts[] = {
+  kSPKIHash_DigiCertEVRoot,
+  kSPKIHash_CryptoCat1,
+  NULL,
+};
+#define kCryptoCatPins { \
+  kCryptoCatAcceptableCerts, \
+  kNoRejectedPublicKeys, \
+}
+
 #define kNoPins {\
   NULL, NULL, \
 }
@@ -326,15 +340,15 @@ static const struct HSTSPreload kPreloadedSTS[] = {
   {17, true, "\004apis\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
   {32, true, "\022chromiumcodereview\007appspot\003com", true, kGooglePins, DOMAIN_APPSPOT_COM },
   {24, true, "\012codereview\007appspot\003com", true, kGooglePins, DOMAIN_APPSPOT_COM },
-  {25, true, "\012codereview\010chromium\003org", true, kGooglePins, DOMAIN_APPSPOT_COM },
+  {25, true, "\012codereview\010chromium\003org", true, kGooglePins, DOMAIN_CHROMIUM_ORG },
+  {17, false, "\004code\006google\003com", true, kGooglePins, DOMAIN_GOOGLE_COM },
+  {16, true, "\012googlecode\003com", false, kGooglePins, DOMAIN_GOOGLECODE_COM },
   {23, true, "\005chart\004apis\006google\003com", false, kGooglePins, DOMAIN_GOOGLE_COM },
   {11, true, "\005ytimg\003com", false, kGooglePins, DOMAIN_YTIMG_COM },
   {23, true, "\021googleusercontent\003com", false, kGooglePins, DOMAIN_GOOGLEUSERCONTENT_COM },
   {13, true, "\007youtube\003com", false, kGooglePins, DOMAIN_YOUTUBE_COM },
   {16, true, "\012googleapis\003com", false, kGooglePins, DOMAIN_GOOGLEAPIS_COM },
   {22, true, "\020googleadservices\003com", false, kGooglePins, DOMAIN_GOOGLEADSERVICES_COM },
-  {16, true, "\012googlecode\003com", false, kGooglePins, DOMAIN_GOOGLECODE_COM },
-  {17, false, "\004code\006google\003com", true, kGooglePins, DOMAIN_GOOGLECODE_COM },
   {13, true, "\007appspot\003com", false, kGooglePins, DOMAIN_APPSPOT_COM },
   {23, true, "\021googlesyndication\003com", false, kGooglePins, DOMAIN_GOOGLESYNDICATION_COM },
   {17, true, "\013doubleclick\003net", false, kGooglePins, DOMAIN_DOUBLECLICK_NET },
@@ -571,10 +585,12 @@ static const struct HSTSPreload kPreloadedSTS[] = {
   {10, false, "\004neg9\003org", true, kNoPins, DOMAIN_NOT_PINNED },
   {12, true, "\006riseup\003net", true, kNoPins, DOMAIN_NOT_PINNED },
   {11, false, "\006factor\002cc", true, kNoPins, DOMAIN_NOT_PINNED },
-  {22, false, "\007members\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
-  {22, false, "\007support\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
-  {17, false, "\002id\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
-  {20, false, "\005lists\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, true, "\007members\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, true, "\007support\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, true, "\002id\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {20, true, "\005lists\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, true, "\007webmail\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {24, true, "\011roundcube\010mayfirst\003org", true, kNoPins, DOMAIN_NOT_PINNED },
   {28, false, "\016aladdinschools\007appspot\003com", true, kNoPins, DOMAIN_NOT_PINNED },
   {14, true, "\011ottospora\002nl", true, kNoPins, DOMAIN_NOT_PINNED },
   {25, false, "\003www\017paycheckrecords\003com", true, kNoPins, DOMAIN_NOT_PINNED },
@@ -605,6 +621,7 @@ static const struct HSTSPreload kPreloadedSTS[] = {
   {21, true, "\004blog\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
   {22, true, "\005check\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
   {20, true, "\003www\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
+  {21, true, "\004dist\012torproject\003org", true, kTorPins, DOMAIN_TORPROJECT_ORG },
   {22, true, "\003www\014moneybookers\003com", true, kNoPins, DOMAIN_NOT_PINNED },
   {17, false, "\013ledgerscope\003net", true, kNoPins, DOMAIN_NOT_PINNED },
   {21, false, "\003www\013ledgerscope\003net", true, kNoPins, DOMAIN_NOT_PINNED },
@@ -624,7 +641,7 @@ static const struct HSTSPreload kPreloadedSTS[] = {
   {30, false, "\003www\011developer\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
   {24, false, "\007sandbox\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
   {28, false, "\003www\007sandbox\012mydigipass\003com", true, kNoPins, DOMAIN_NOT_PINNED },
-  {12, true, "\006crypto\003cat", true, kNoPins, DOMAIN_NOT_PINNED },
+  {12, true, "\006crypto\003cat", true, kCryptoCatPins, DOMAIN_CRYPTO_CAT },
   {25, true, "\014bigshinylock\006minazo\003net", true, kNoPins, DOMAIN_NOT_PINNED },
   {10, true, "\005crate\002io", true, kNoPins, DOMAIN_NOT_PINNED },
   {13, false, "\007twitter\003com", true, kTwitterComPins, DOMAIN_TWITTER_COM },
@@ -682,6 +699,18 @@ static const struct HSTSPreload kPreloadedSTS[] = {
   {15, true, "\012stocktrade\002de", true, kNoPins, DOMAIN_NOT_PINNED },
   {13, true, "\007rhcloud\003com", true, kNoPins, DOMAIN_NOT_PINNED },
   {22, true, "\011openshift\006redhat\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, false, "\014therapynotes\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {22, false, "\003www\014therapynotes\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {9, true, "\003wiz\003biz", true, kNoPins, DOMAIN_NOT_PINNED },
+  {14, true, "\002my\006onlime\002ch", true, kNoPins, DOMAIN_NOT_PINNED },
+  {19, true, "\007webmail\006onlime\002ch", true, kNoPins, DOMAIN_NOT_PINNED },
+  {15, true, "\003crm\006onlime\002ch", true, kNoPins, DOMAIN_NOT_PINNED },
+  {12, true, "\003www\003gov\002uk", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, true, "\014silentcircle\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, true, "\014silentcircle\003org", true, kNoPins, DOMAIN_NOT_PINNED },
+  {18, true, "\015serverdensity\002io", true, kNoPins, DOMAIN_NOT_PINNED },
+  {17, true, "\002my\010alfresco\003com", true, kNoPins, DOMAIN_NOT_PINNED },
+  {21, true, "\007webmail\010gigahost\002dk", true, kNoPins, DOMAIN_NOT_PINNED },
 };
 static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
 

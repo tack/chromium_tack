@@ -108,17 +108,10 @@ class NET_EXPORT HostResolverImpl
   // run at once. This upper-bounds the total number of outstanding
   // DNS transactions (not counting retransmissions and retries).
   //
-  // |dns_config_service| will be used to detect changes to DNS configuration
-  // and obtain DnsConfig for DnsClient.
-  //
-  // |dns_client|, if set, will be used to resolve requests.
-  //
   // |net_log| must remain valid for the life of the HostResolverImpl.
-  // TODO(szym): change to scoped_ptr<HostCache>.
   HostResolverImpl(scoped_ptr<HostCache> cache,
                    const PrioritizedDispatcher::Limits& job_limits,
                    const ProcTaskParams& proc_params,
-                   scoped_ptr<DnsClient> dns_client,
                    NetLog* net_log);
 
   // If any completion callbacks are pending when the resolver is destroyed,
@@ -129,6 +122,12 @@ class NET_EXPORT HostResolverImpl
   // Configures maximum number of Jobs in the queue. Exposed for testing.
   // Only allowed when the queue is empty.
   void SetMaxQueuedJobs(size_t value);
+
+  // Set the DnsClient to be used for resolution. In case of failure, the
+  // HostResolverProc from ProcTaskParams will be queried. If the DnsClient is
+  // not pre-configured with a valid DnsConfig, a new config is fetched from
+  // NetworkChangeNotifier.
+  void SetDnsClient(scoped_ptr<DnsClient> dns_client);
 
   // HostResolver methods:
   virtual int Resolve(const RequestInfo& info,
@@ -143,6 +142,7 @@ class NET_EXPORT HostResolverImpl
   virtual void SetDefaultAddressFamily(AddressFamily address_family) OVERRIDE;
   virtual AddressFamily GetDefaultAddressFamily() const OVERRIDE;
   virtual void ProbeIPv6Support() OVERRIDE;
+  virtual void SetDnsClientEnabled(bool enabled) OVERRIDE;
   virtual HostCache* GetHostCache() OVERRIDE;
   virtual base::Value* GetDnsConfigAsValue() const OVERRIDE;
 
@@ -151,6 +151,7 @@ class NET_EXPORT HostResolverImpl
   class Job;
   class ProcTask;
   class IPv6ProbeJob;
+  class LoopbackProbeJob;
   class DnsTask;
   class Request;
   typedef HostCache::Key Key;
@@ -187,9 +188,6 @@ class NET_EXPORT HostResolverImpl
                       const RequestInfo& info,
                       AddressList* addresses);
 
-  // Notifies IPv6ProbeJob not to call back, and discard reference to the job.
-  void DiscardIPv6ProbeJob();
-
   // Callback from IPv6 probe activity.
   void IPv6ProbeSetDefaultAddressFamily(AddressFamily address_family);
 
@@ -209,8 +207,8 @@ class NET_EXPORT HostResolverImpl
   // Removes |job| from |jobs_|, only if it exists.
   void RemoveJob(Job* job);
 
-  // Aborts all in progress jobs and notifies their requests.
-  // Might start new jobs.
+  // Aborts all in progress jobs with ERR_NETWORK_CHANGED and notifies their
+  // requests. Might start new jobs.
   void AbortAllInProgressJobs();
 
   // Attempts to serve each Job in |jobs_| from the HOSTS file if we have
@@ -225,6 +223,10 @@ class NET_EXPORT HostResolverImpl
 
   // True if have a DnsClient with a valid DnsConfig.
   bool HaveDnsConfig() const;
+
+  // Called when a host name is successfully resolved and DnsTask was run on it
+  // and resulted in |net_error|.
+  void OnDnsTaskResolve(int net_error);
 
   // Allows the tests to catch slots leaking out of the dispatcher.
   size_t num_running_jobs_for_tests() const {
@@ -251,6 +253,8 @@ class NET_EXPORT HostResolverImpl
 
   base::WeakPtrFactory<HostResolverImpl> weak_ptr_factory_;
 
+  base::WeakPtrFactory<HostResolverImpl> probe_weak_ptr_factory_;
+
   // If present, used by DnsTask and ServeFromHosts to resolve requests.
   scoped_ptr<DnsClient> dns_client_;
 
@@ -258,12 +262,13 @@ class NET_EXPORT HostResolverImpl
   // to measure performance of DnsConfigService: http://crbug.com/125599
   bool received_dns_config_;
 
-  // Indicate if probing is done after each network change event to set address
-  // family. When false, explicit setting of address family is used.
-  bool ipv6_probe_monitoring_;
+  // Number of consecutive failures of DnsTask, counted when fallback succeeds.
+  unsigned num_dns_failures_;
 
-  // The last un-cancelled IPv6ProbeJob (if any).
-  scoped_refptr<IPv6ProbeJob> ipv6_probe_job_;
+  // Indicate if probing is done after each network change event to set address
+  // family. When false, explicit setting of address family is used and results
+  // of the IPv6 probe job are ignored.
+  bool ipv6_probe_monitoring_;
 
   // Any resolver flags that should be added to a request by default.
   HostResolverFlags additional_resolver_flags_;

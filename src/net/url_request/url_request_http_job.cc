@@ -39,6 +39,7 @@
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_util.h"
 #include "net/url_request/fraudulent_certificate_reporter.h"
+#include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_error_job.h"
@@ -209,14 +210,22 @@ URLRequestJob* URLRequestHttpJob::Factory(URLRequest* request,
   }
 
   GURL redirect_url;
-  if (request->GetHSTSRedirect(&redirect_url))
-    return new URLRequestRedirectJob(request, network_delegate, redirect_url);
-  return new URLRequestHttpJob(request, network_delegate);
+  if (request->GetHSTSRedirect(&redirect_url)) {
+    return new URLRequestRedirectJob(
+        request, network_delegate, redirect_url,
+        // Use status code 307 to preserve the method, so POST requests work.
+        URLRequestRedirectJob::REDIRECT_307_TEMPORARY_REDIRECT);
+  }
+  return new URLRequestHttpJob(request,
+                               network_delegate,
+                               request->context()->http_user_agent_settings());
 }
 
 
-URLRequestHttpJob::URLRequestHttpJob(URLRequest* request,
-                                     NetworkDelegate* network_delegate)
+URLRequestHttpJob::URLRequestHttpJob(
+    URLRequest* request,
+    NetworkDelegate* network_delegate,
+    const HttpUserAgentSettings* http_user_agent_settings)
     : URLRequestJob(request, network_delegate),
       response_info_(NULL),
       response_cookies_save_index_(0),
@@ -248,7 +257,8 @@ URLRequestHttpJob::URLRequestHttpJob(URLRequest* request,
           base::Bind(&URLRequestHttpJob::OnHeadersReceivedCallback,
                      base::Unretained(this)))),
       awaiting_callback_(false),
-      http_transaction_delegate_(new HttpTransactionDelegateImpl(request)) {
+      http_transaction_delegate_(new HttpTransactionDelegateImpl(request)),
+      http_user_agent_settings_(http_user_agent_settings) {
   URLRequestThrottlerManager* manager = request->context()->throttler_manager();
   if (manager)
     throttling_entry_ = manager->RegisterRequestUrl(request->url());
@@ -471,18 +481,22 @@ void URLRequestHttpJob::AddExtraHeaders() {
     }
   }
 
-  const URLRequestContext* context = request_->context();
-  // Only add default Accept-Language and Accept-Charset if the request
-  // didn't have them specified.
-  if (!context->accept_language().empty()) {
-    request_info_.extra_headers.SetHeaderIfMissing(
-        HttpRequestHeaders::kAcceptLanguage,
-        context->accept_language());
-  }
-  if (!context->accept_charset().empty()) {
-    request_info_.extra_headers.SetHeaderIfMissing(
-        HttpRequestHeaders::kAcceptCharset,
-        context->accept_charset());
+  if (http_user_agent_settings_) {
+    // Only add default Accept-Language and Accept-Charset if the request
+    // didn't have them specified.
+    std::string accept_language =
+        http_user_agent_settings_->GetAcceptLanguage();
+    if (!accept_language.empty()) {
+      request_info_.extra_headers.SetHeaderIfMissing(
+          HttpRequestHeaders::kAcceptLanguage,
+          accept_language);
+    }
+    std::string accept_charset = http_user_agent_settings_->GetAcceptCharset();
+    if (!accept_charset.empty()) {
+      request_info_.extra_headers.SetHeaderIfMissing(
+          HttpRequestHeaders::kAcceptCharset,
+          accept_charset);
+    }
   }
 }
 
@@ -504,7 +518,7 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
           base::Bind(&URLRequestHttpJob::CheckCookiePolicyAndLoad,
                      weak_factory_.GetWeakPtr()));
     } else {
-      DoLoadCookies();
+      CheckCookiePolicyAndLoad(CookieList());
     }
   } else {
     DoStartTransaction();
@@ -566,6 +580,9 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
 
   FetchResponseCookies(&response_cookies_);
 
+  if (!GetResponseHeaders()->GetDateValue(&response_date_))
+    response_date_ = base::Time();
+
   // Now, loop over the response cookies, and attempt to persist each.
   SaveNextCookie();
 }
@@ -592,6 +609,7 @@ void URLRequestHttpJob::SaveNextCookie() {
       response_cookies_.size() > 0) {
     CookieOptions options;
     options.set_include_httponly();
+    options.set_server_time(response_date_);
 
     net::CookieStore::SetCookiesCallback callback(
         base::Bind(&URLRequestHttpJob::OnCookieSaved,
@@ -756,8 +774,7 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
       if (error != net::OK) {
         if (error == net::ERR_IO_PENDING) {
           awaiting_callback_ = true;
-          request_->net_log().BeginEvent(
-              NetLog::TYPE_URL_REQUEST_BLOCKED_ON_DELEGATE);
+          SetBlockedOnDelegate();
         } else {
           std::string source("delegate");
           request_->net_log().AddEvent(NetLog::TYPE_CANCELLED,
@@ -792,7 +809,7 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
 }
 
 void URLRequestHttpJob::OnHeadersReceivedCallback(int result) {
-  request_->net_log().EndEvent(NetLog::TYPE_URL_REQUEST_BLOCKED_ON_DELEGATE);
+  SetUnblockedOnDelegate();
   awaiting_callback_ = false;
 
   // Check that there are no callbacks to already canceled requests.
@@ -837,9 +854,9 @@ void URLRequestHttpJob::RestartTransactionWithAuth(
   AddCookieHeaderAndStart();
 }
 
-void URLRequestHttpJob::SetUpload(UploadData* upload) {
+void URLRequestHttpJob::SetUpload(UploadDataStream* upload) {
   DCHECK(!transaction_.get()) << "cannot change once started";
-  request_info_.upload_data = upload;
+  request_info_.upload_data_stream = upload;
 }
 
 void URLRequestHttpJob::SetExtraRequestHeaders(
@@ -874,7 +891,9 @@ void URLRequestHttpJob::Start() {
 
   request_info_.extra_headers.SetHeaderIfMissing(
       HttpRequestHeaders::kUserAgent,
-      request_->context()->GetUserAgent(request_->url()));
+      http_user_agent_settings_ ?
+          http_user_agent_settings_->GetUserAgent(request_->url()) :
+          EmptyString());
 
   AddExtraHeaders();
   AddCookieHeaderAndStart();
@@ -1487,6 +1506,41 @@ void URLRequestHttpJob::RecordPerfHistograms(CompletionCause reason) {
         UMA_HISTOGRAM_TIMES(
             base::FieldTrial::MakeName("Net.HttpJob.TotalTimeNotCached",
                                        "OverlappedReadImpact"),
+            total_time);
+      }
+    }
+  }
+
+  static const bool cache_sensitivity_analysis =
+      base::FieldTrialList::TrialExists("CacheSensitivityAnalysis");
+  if (cache_sensitivity_analysis) {
+    UMA_HISTOGRAM_TIMES(
+        base::FieldTrial::MakeName("Net.HttpJob.TotalTime",
+                                   "CacheSensitivityAnalysis"),
+        total_time);
+
+    if (reason == FINISHED) {
+      UMA_HISTOGRAM_TIMES(
+          base::FieldTrial::MakeName("Net.HttpJob.TotalTimeSuccess",
+                                     "CacheSensitivityAnalysis"),
+          total_time);
+    } else {
+      UMA_HISTOGRAM_TIMES(
+          base::FieldTrial::MakeName("Net.HttpJob.TotalTimeCancel",
+                                     "CacheSensitivityAnalysis"),
+          total_time);
+    }
+
+    if (response_info_) {
+      if (response_info_->was_cached) {
+        UMA_HISTOGRAM_TIMES(
+            base::FieldTrial::MakeName("Net.HttpJob.TotalTimeCached",
+                                       "CacheSensitivityAnalysis"),
+            total_time);
+      } else  {
+        UMA_HISTOGRAM_TIMES(
+            base::FieldTrial::MakeName("Net.HttpJob.TotalTimeNotCached",
+                                       "CacheSensitivityAnalysis"),
             total_time);
       }
     }

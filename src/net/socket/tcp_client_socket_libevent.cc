@@ -13,10 +13,10 @@
 #include <netinet/in.h>
 #endif
 
-#include "base/eintr_wrapper.h"
 #include "base/logging.h"
 #include "base/message_loop.h"
 #include "base/metrics/stats_counters.h"
+#include "base/posix/eintr_wrapper.h"
 #include "base/string_util.h"
 #include "net/base/connection_type_histograms.h"
 #include "net/base/io_buffer.h"
@@ -181,7 +181,7 @@ int TCPClientSocketLibevent::Bind(const IPEndPoint& address) {
     return ERR_INVALID_ARGUMENT;
 
   // Create |bound_socket_| and try to bind it to |address|.
-  int error = CreateSocket(address.GetFamily(), &bound_socket_);
+  int error = CreateSocket(address.GetSockAddrFamily(), &bound_socket_);
   if (error)
     return MapSystemError(error);
 
@@ -278,7 +278,7 @@ int TCPClientSocketLibevent::DoConnect() {
     bound_socket_ = kInvalidSocket;
   } else {
     // Create a non-blocking socket.
-    connect_os_error_ = CreateSocket(endpoint.GetFamily(), &socket_);
+    connect_os_error_ = CreateSocket(endpoint.GetSockAddrFamily(), &socket_);
     if (connect_os_error_)
       return MapSystemError(connect_os_error_);
 

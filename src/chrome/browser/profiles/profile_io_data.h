@@ -13,8 +13,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/prefs/public/pref_member.h"
 #include "base/synchronization/lock.h"
-#include "chrome/browser/api/prefs/pref_member.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_url_request_context.h"
 #include "chrome/browser/profiles/storage_partition_descriptor.h"
@@ -23,23 +23,26 @@
 #include "net/http/http_network_session.h"
 #include "net/url_request/url_request_job_factory.h"
 
+class ChromeHttpUserAgentSettings;
+class ChromeNetworkDelegate;
 class CookieSettings;
 class DesktopNotificationService;
 class ExtensionInfoMap;
 class HostContentSettingsMap;
 class Profile;
 class ProtocolHandlerRegistry;
+class SigninNamesOnIOThread;
 class TransportSecurityPersister;
 
 namespace chrome_browser_net {
 class LoadTimeStats;
-class HttpServerPropertiesManager;
 class ResourcePrefetchPredictorObserver;
 }
 
 namespace net {
 class CookieStore;
 class FraudulentCertificateReporter;
+class HttpServerProperties;
 class HttpTransactionFactory;
 class ServerBoundCertService;
 class ProxyConfigService;
@@ -105,6 +108,26 @@ class ProfileIOData {
     return &session_startup_pref_;
   }
 
+  SigninNamesOnIOThread* signin_names() const {
+    return signin_names_.get();
+  }
+
+  StringPrefMember* google_services_username() const {
+    return &google_services_username_;
+  }
+
+  StringPrefMember* google_services_username_pattern() const {
+    return &google_services_username_pattern_;
+  }
+
+  BooleanPrefMember* reverse_autologin_enabled() const {
+    return &reverse_autologin_enabled_;
+  }
+
+  StringListPrefMember* one_click_signin_rejected_email_list() const {
+    return &one_click_signin_rejected_email_list_;
+  }
+
   ChromeURLRequestContext* extensions_request_context() const {
     return extensions_request_context_.get();
   }
@@ -120,9 +143,6 @@ class ProfileIOData {
   net::TransportSecurityState* transport_security_state() const {
     return transport_security_state_.get();
   }
-
-  chrome_browser_net::HttpServerPropertiesManager*
-      http_server_properties_manager() const;
 
   bool is_incognito() const {
     return is_incognito_;
@@ -186,8 +206,6 @@ class ProfileIOData {
     ~ProfileParams();
 
     FilePath path;
-    std::string accept_language;
-    std::string accept_charset;
     IOThread* io_thread;
     scoped_refptr<CookieSettings> cookie_settings;
     scoped_refptr<net::SSLConfigService> ssl_config_service;
@@ -252,7 +270,7 @@ class ProfileIOData {
   void set_server_bound_cert_service(
       net::ServerBoundCertService* server_bound_cert_service) const;
 
-  net::NetworkDelegate* network_delegate() const {
+  ChromeNetworkDelegate* network_delegate() const {
     return network_delegate_.get();
   }
 
@@ -264,8 +282,10 @@ class ProfileIOData {
     return proxy_service_.get();
   }
 
-  void set_http_server_properties_manager(
-      chrome_browser_net::HttpServerPropertiesManager* manager) const;
+  net::HttpServerProperties* http_server_properties() const;
+
+  void set_http_server_properties(
+      net::HttpServerProperties* http_server_properties) const;
 
   ChromeURLRequestContext* main_request_context() const {
     return main_request_context_.get();
@@ -285,6 +305,10 @@ class ProfileIOData {
   void PopulateNetworkSessionParams(
       const ProfileParams* profile_params,
       net::HttpNetworkSession::Params* params) const;
+
+  void SetCookieSettingsForTesting(CookieSettings* cookie_settings);
+
+  void set_signin_names_for_testing(SigninNamesOnIOThread* signin_names);
 
  private:
   class ResourceContext : public content::ResourceContext {
@@ -320,6 +344,9 @@ class ProfileIOData {
   // should use the static helper functions above to implement this.
   virtual void LazyInitializeInternal(ProfileParams* profile_params) const = 0;
 
+  // Initializes the RequestContext for extensions.
+  virtual void InitializeExtensionsRequestContext(
+      ProfileParams* profile_params) const = 0;
   // Does an on-demand initialization of a RequestContext for the given
   // isolated app.
   virtual ChromeURLRequestContext* InitializeAppRequestContext(
@@ -373,9 +400,18 @@ class ProfileIOData {
   // Deleted after lazy initialization.
   mutable scoped_ptr<ProfileParams> profile_params_;
 
+  // Provides access to the email addresses of all signed in profiles.
+  mutable scoped_ptr<SigninNamesOnIOThread> signin_names_;
+
+  mutable StringPrefMember google_services_username_;
+  mutable StringPrefMember google_services_username_pattern_;
+  mutable BooleanPrefMember reverse_autologin_enabled_;
+  mutable StringListPrefMember one_click_signin_rejected_email_list_;
+
   // Member variables which are pointed to by the various context objects.
   mutable BooleanPrefMember enable_referrers_;
   mutable BooleanPrefMember enable_do_not_track_;
+  mutable BooleanPrefMember force_safesearch_;
   mutable BooleanPrefMember safe_browsing_enabled_;
   mutable BooleanPrefMember printing_enabled_;
   // TODO(marja): Remove session_startup_pref_ if no longer needed.
@@ -398,13 +434,13 @@ class ProfileIOData {
   mutable scoped_ptr<ChromeURLDataManagerBackend>
       chrome_url_data_manager_backend_;
   mutable scoped_ptr<net::ServerBoundCertService> server_bound_cert_service_;
-  mutable scoped_ptr<net::NetworkDelegate> network_delegate_;
+  mutable scoped_ptr<ChromeNetworkDelegate> network_delegate_;
   mutable scoped_ptr<net::FraudulentCertificateReporter>
       fraudulent_certificate_reporter_;
   mutable scoped_ptr<net::ProxyService> proxy_service_;
   mutable scoped_ptr<net::TransportSecurityState> transport_security_state_;
-  mutable scoped_ptr<chrome_browser_net::HttpServerPropertiesManager>
-      http_server_properties_manager_;
+  mutable scoped_ptr<net::HttpServerProperties>
+      http_server_properties_;
 
 #if defined(ENABLE_NOTIFICATIONS)
   mutable DesktopNotificationService* notification_service_;
@@ -427,6 +463,9 @@ class ProfileIOData {
 
   mutable scoped_ptr<chrome_browser_net::ResourcePrefetchPredictorObserver>
       resource_prefetch_predictor_observer_;
+
+  mutable scoped_ptr<ChromeHttpUserAgentSettings>
+      chrome_http_user_agent_settings_;
 
   mutable chrome_browser_net::LoadTimeStats* load_time_stats_;
 

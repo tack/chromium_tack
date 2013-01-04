@@ -42,6 +42,12 @@ class NET_EXPORT HashValue {
   explicit HashValue(HashValueTag tag) : tag(tag) {}
   HashValue() : tag(HASH_VALUE_SHA1) {}
 
+  // Check for equality of hash values
+  // This function may have VARIABLE timing which leaks information
+  // about its inputs.  For example it may exit early once a
+  // nonequal character is discovered.  Thus, for security reasons
+  // this function MUST NOT be used with secret values (such as
+  // password hashes, MAC tags, etc.)
   bool Equals(const HashValue& other) const;
 
   // Serializes/Deserializes hashes in the form of

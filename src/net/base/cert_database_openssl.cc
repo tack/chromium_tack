@@ -35,7 +35,6 @@ int CertDatabase::CheckUserCert(X509Certificate* cert) {
 }
 
 int CertDatabase::AddUserCert(X509Certificate* cert) {
-  // TODO(bulach): implement me.
   NOTIMPLEMENTED();
   return ERR_NOT_IMPLEMENTED;
 }

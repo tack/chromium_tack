@@ -17,7 +17,7 @@ class LoadTimingObserverTest : public InProcessBrowserTest {
 };
 
 // http://crbug.com/102030
-IN_PROC_BROWSER_TEST_F(LoadTimingObserverTest, FLAKY_CacheHitAfterRedirect) {
+IN_PROC_BROWSER_TEST_F(LoadTimingObserverTest, DISABLED_CacheHitAfterRedirect) {
   ASSERT_TRUE(test_server()->Start());
   GURL cached_page = test_server()->GetURL("cachetime");
   std::string redirect = "server-redirect?" + cached_page.spec();
@@ -29,14 +29,18 @@ IN_PROC_BROWSER_TEST_F(LoadTimingObserverTest, FLAKY_CacheHitAfterRedirect) {
   content::RenderViewHost* render_view_host =
       chrome::GetActiveWebContents(browser())->GetRenderViewHost();
   ASSERT_TRUE(content::ExecuteJavaScriptAndExtractInt(
-      render_view_host, L"",
-      L"window.domAutomationController.send("
-      L"window.performance.timing.responseStart - "
-      L"window.performance.timing.navigationStart)", &response_start));
+      render_view_host,
+      "",
+      "window.domAutomationController.send("
+      "    window.performance.timing.responseStart - "
+      "    window.performance.timing.navigationStart)",
+      &response_start));
   ASSERT_TRUE(content::ExecuteJavaScriptAndExtractInt(
-      render_view_host, L"",
-      L"window.domAutomationController.send("
-      L"window.performance.timing.responseEnd - "
-      L"window.performance.timing.navigationStart)", &response_end));
+      render_view_host,
+      "",
+      "window.domAutomationController.send("
+      "    window.performance.timing.responseEnd - "
+      "    window.performance.timing.navigationStart)",
+      &response_end));
   EXPECT_LE(response_start, response_end);
 }

@@ -9,7 +9,6 @@
 #include "base/sha1.h"
 #include "base/string_split.h"
 #include "base/string_util.h"
-#include "crypto/secure_util.h"
 
 namespace net {
 
@@ -25,11 +24,11 @@ int CompareSHA1Hashes(const void* a, const void* b) {
 
 
 bool SHA1HashValue::Equals(const SHA1HashValue& other) const {
-  return crypto::SecureMemEqual(data, other.data, sizeof(data));
+  return memcmp(data, other.data, sizeof(data)) == 0;
 }
 
 bool SHA256HashValue::Equals(const SHA256HashValue& other) const {
-  return crypto::SecureMemEqual(data, other.data, sizeof(data));
+  return memcmp(data, other.data, sizeof(data)) == 0;
 }
 
 bool HashValue::Equals(const HashValue& other) const {
@@ -48,12 +47,10 @@ bool HashValue::Equals(const HashValue& other) const {
 
 bool HashValue::FromString(const base::StringPiece value) {
   base::StringPiece base64_str;
-  /* Cannot take substr(pos, ...) with 'pos' past end of string,
-     so check for adequate string length first */
-  if (value.size() > 5 && value.substr(0, 5) == "sha1/") {
+  if (value.starts_with("sha1/")) {
     tag = HASH_VALUE_SHA1;
     base64_str = value.substr(5);
-  } else if (value.size() > 7 && value.substr(0, 7) == "sha256/") {
+  } else if (value.starts_with("sha256/")) {
     tag = HASH_VALUE_SHA256;
     base64_str = value.substr(7);
   } else {
@@ -61,10 +58,8 @@ bool HashValue::FromString(const base::StringPiece value) {
   }
 
   std::string decoded;
-  if (!base::Base64Decode(base64_str, &decoded) ||
-      decoded.size() != size()) {
+  if (!base::Base64Decode(base64_str, &decoded) || decoded.size() != size())
     return false;
-  }
 
   memcpy(data(), decoded.data(), size());
   return true;

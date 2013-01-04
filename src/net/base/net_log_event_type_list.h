@@ -717,8 +717,13 @@ EVENT_TYPE(URL_REQUEST_START_JOB)
 //   }
 EVENT_TYPE(URL_REQUEST_REDIRECTED)
 
-// Measures the time a net::URLRequest is blocked waiting for a delegate
-// (usually an extension) to respond to the onBeforeRequest extension event.
+// Measures the time a net::URLRequest is blocked waiting for either the
+// NetworkDelegate or a URLRequest::Delegate to respond.
+//
+// The parameters attached to the event are:
+//   {
+//     "delegate": <What's blocking the request, if known>,
+//   }
 EVENT_TYPE(URL_REQUEST_BLOCKED_ON_DELEGATE)
 
 // The specified number of bytes were read from the net::URLRequest.
@@ -1306,6 +1311,13 @@ EVENT_TYPE(NETWORK_IP_ADDRESSES_CHANGED)
 //   }
 EVENT_TYPE(NETWORK_CONNECTIVITY_CHANGED)
 
+// This event is emitted whenever NetworkChangeNotifier determines that a change
+// occurs to the host computer's hardware or software that affects the route
+// network packets take to any network server.
+//   {
+//     "new_connection_type": <Type of the new connection>
+//   }
+EVENT_TYPE(NETWORK_CHANGED)
 
 // This event is emitted whenever HostResolverImpl receives a new DnsConfig
 // from the DnsConfigService.
@@ -1386,6 +1398,17 @@ EVENT_TYPE(DNS_TRANSACTION_QUERY)
 //                           attempt>,
 //   }
 EVENT_TYPE(DNS_TRANSACTION_ATTEMPT)
+
+// This event is created when DnsTransaction creates a new TCP socket and
+// tries to resolve the fully-qualified name.
+//
+// It has a single parameter:
+//
+//   {
+//     "source_dependency": <Source id of the TCP socket created for the
+//                           attempt>,
+//   }
+EVENT_TYPE(DNS_TRANSACTION_TCP_ATTEMPT)
 
 // This event is created when DnsTransaction receives a matching response.
 //
@@ -1555,6 +1578,8 @@ EVENT_TYPE(DOWNLOAD_URL_REQUEST)
 //   }
 // The END event will occur when the download is interrupted, canceled or
 // completed.
+// DownloadItems that are loaded from history and are never active simply ADD
+// one of these events.
 EVENT_TYPE(DOWNLOAD_ITEM_ACTIVE)
 
 // This event is created when a download item has been checked by the
@@ -1564,13 +1589,6 @@ EVENT_TYPE(DOWNLOAD_ITEM_ACTIVE)
 //     "safety_state": <SAFE, DANGEROUS, DANGEROUS_BUT_VALIDATED>,
 //   }
 EVENT_TYPE(DOWNLOAD_ITEM_SAFETY_STATE_UPDATED)
-
-// This event is created when a download item has been inserted into the
-// history database.
-//   {
-//     "db_handle": <The database handle for the item>,
-//   }
-EVENT_TYPE(DOWNLOAD_ITEM_IN_HISTORY)
 
 // This event is created when a download item is updated.
 //   {
@@ -1702,10 +1720,6 @@ EVENT_TYPE(FILE_STREAM_BOUND_TO_OWNER)
 //   }
 EVENT_TYPE(FILE_STREAM_OPEN)
 
-// This event is created when a file stream's Close() is called.
-// This may occur even when the file is not open.
-EVENT_TYPE(FILE_STREAM_CLOSE)
-
 // This event is created when a file stream operation has an error.
 //   {
 //     "operation": <open, write, close, etc>,
@@ -1729,3 +1743,36 @@ EVENT_TYPE(FILE_STREAM_ERROR)
 //                  if any>
 //   }
 EVENT_TYPE(IPV6_PROBE_RUNNING)
+
+// -----------------------------------------------------------------------------
+// FTP events.
+// -----------------------------------------------------------------------------
+
+// This event is created when an FTP command is sent. It contains following
+// parameters:
+//   {
+//     "command": <String - the command sent to remote server>
+//   }
+EVENT_TYPE(FTP_COMMAND_SENT)
+
+// This event is created when FTP control connection is made. It contains
+// following parameters:
+//   {
+//     "source_dependency": <id of log for control connection socket>
+//   }
+EVENT_TYPE(FTP_CONTROL_CONNECTION)
+
+// This event is created when FTP data connection is made. It contains
+// following parameters:
+//   {
+//     "source_dependency": <id of log for data connection socket>
+//   }
+EVENT_TYPE(FTP_DATA_CONNECTION)
+
+// This event is created when FTP control connection response is processed.
+// It contains following parameters:
+//   {
+//     "lines": <list of strings - each representing a line of the response>
+//     "status_code": <numeric status code of the response>
+//   }
+EVENT_TYPE(FTP_CONTROL_RESPONSE)

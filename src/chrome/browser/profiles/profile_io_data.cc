@@ -17,7 +17,6 @@
 #include "base/string_util.h"
 #include "base/stringprintf.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/net/about_protocol_handler.h"
 #include "chrome/browser/content_settings/cookie_settings.h"
 #include "chrome/browser/content_settings/host_content_settings_map.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -29,11 +28,12 @@
 #include "chrome/browser/extensions/extension_resource_protocols.h"
 #include "chrome/browser/extensions/extension_system.h"
 #include "chrome/browser/io_thread.h"
+#include "chrome/browser/net/about_protocol_handler.h"
 #include "chrome/browser/net/chrome_cookie_notification_details.h"
 #include "chrome/browser/net/chrome_fraudulent_certificate_reporter.h"
+#include "chrome/browser/net/chrome_http_user_agent_settings.h"
 #include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
-#include "chrome/browser/net/http_server_properties_manager.h"
 #include "chrome/browser/net/load_time_stats.h"
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/net/resource_prefetch_predictor_observer.h"
@@ -45,6 +45,7 @@
 #include "chrome/browser/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/signin/signin_names_io_thread.h"
 #include "chrome/browser/ui/webui/chrome_url_data_manager_backend.h"
 #include "chrome/common/chrome_notification_types.h"
 #include "chrome/common/chrome_switches.h"
@@ -54,6 +55,7 @@
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/resource_context.h"
+#include "extensions/common/constants.h"
 #include "net/base/server_bound_cert_service.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_monster.h"
@@ -68,13 +70,8 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 
-#if !defined(OS_ANDROID)
-#include "chrome/browser/managed_mode/managed_mode.h"
-#endif
-
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/drive/drive_protocol_handler.h"
-#include "chrome/browser/chromeos/gview_request_interceptor.h"
 #include "chrome/browser/chromeos/proxy_config_service_impl.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/cros_settings_names.h"
@@ -141,16 +138,10 @@ Profile* GetProfileOnUI(ProfileManager* profile_manager, Profile* profile) {
 void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   PrefService* pref_service = profile->GetPrefs();
+  PrefService* local_state_pref_service = g_browser_process->local_state();
 
   scoped_ptr<ProfileParams> params(new ProfileParams);
   params->path = profile->GetPath();
-
-  // Set up Accept-Language and Accept-Charset header values
-  params->accept_language = net::HttpUtil::GenerateAcceptLanguageHeader(
-      pref_service->GetString(prefs::kAcceptLanguages));
-  std::string default_charset = pref_service->GetString(prefs::kDefaultCharset);
-  params->accept_charset =
-      net::HttpUtil::GenerateAcceptCharsetHeader(default_charset);
 
   params->io_thread = g_browser_process->io_thread();
 
@@ -197,13 +188,42 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   ChromeNetworkDelegate::InitializePrefsOnUIThread(
       &enable_referrers_,
       &enable_do_not_track_,
+      &force_safesearch_,
       pref_service);
 
 #if defined(ENABLE_PRINTING)
-  printing_enabled_.Init(prefs::kPrintingEnabled, pref_service, NULL);
+  printing_enabled_.Init(prefs::kPrintingEnabled, pref_service);
   printing_enabled_.MoveToThread(
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
 #endif
+  chrome_http_user_agent_settings_.reset(
+      new ChromeHttpUserAgentSettings(pref_service));
+
+  // These members are used only for one click sign in, which is not enabled
+  // in incognito mode.  So no need to initialize them.
+  if (!is_incognito()) {
+    signin_names_.reset(new SigninNamesOnIOThread());
+
+    google_services_username_.Init(prefs::kGoogleServicesUsername,
+                                   pref_service);
+    google_services_username_.MoveToThread(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+
+    google_services_username_pattern_.Init(
+        prefs::kGoogleServicesUsernamePattern, local_state_pref_service);
+    google_services_username_pattern_.MoveToThread(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+
+    reverse_autologin_enabled_.Init(
+        prefs::kReverseAutologinEnabled, pref_service);
+    reverse_autologin_enabled_.MoveToThread(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+
+    one_click_signin_rejected_email_list_.Init(
+        prefs::kReverseAutologinRejectedEmailList, pref_service);
+    one_click_signin_rejected_email_list_.MoveToThread(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+  }
 
   // The URLBlacklistManager has to be created on the UI thread to register
   // observers of |pref_service|, and it also has to clean up on
@@ -312,7 +332,7 @@ ProfileIOData* ProfileIOData::FromResourceContext(
 bool ProfileIOData::IsHandledProtocol(const std::string& scheme) {
   DCHECK_EQ(scheme, StringToLowerASCII(scheme));
   static const char* const kProtocolList[] = {
-    chrome::kExtensionScheme,
+    extensions::kExtensionScheme,
     chrome::kChromeUIScheme,
     chrome::kChromeDevToolsScheme,
 #if defined(OS_CHROMEOS)
@@ -435,8 +455,7 @@ void ProfileIOData::InitializeMetricsEnabledStateOnUIThread() {
   // Prep the PrefMember and send it to the IO thread, since this value will be
   // read from there.
   enable_metrics_.Init(prefs::kMetricsReportingEnabled,
-                       g_browser_process->local_state(),
-                       NULL);
+                       g_browser_process->local_state());
   enable_metrics_.MoveToThread(
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
 #endif  // defined(OS_CHROMEOS)
@@ -451,14 +470,13 @@ bool ProfileIOData::GetMetricsEnabledStateOnIOThread() const {
 #endif  // defined(OS_CHROMEOS)
 }
 
-chrome_browser_net::HttpServerPropertiesManager*
-    ProfileIOData::http_server_properties_manager() const {
-  return http_server_properties_manager_.get();
+net::HttpServerProperties* ProfileIOData::http_server_properties() const {
+  return http_server_properties_.get();
 }
 
-void ProfileIOData::set_http_server_properties_manager(
-    chrome_browser_net::HttpServerPropertiesManager* manager) const {
-  http_server_properties_manager_.reset(manager);
+void ProfileIOData::set_http_server_properties(
+    net::HttpServerProperties* http_server_properties) const {
+  http_server_properties_.reset(http_server_properties);
 }
 
 ProfileIOData::ResourceContext::ResourceContext(ProfileIOData* io_data)
@@ -524,20 +542,18 @@ void ProfileIOData::LazyInitialize() const {
 
   chrome_url_data_manager_backend_.reset(new ChromeURLDataManagerBackend);
 
-  network_delegate_.reset(new ChromeNetworkDelegate(
-        io_thread_globals->extension_event_router_forwarder.get(),
-        profile_params_->extension_info_map,
-        url_blacklist_manager_.get(),
-#if !defined(OS_ANDROID)
-        ManagedMode::GetURLFilter(),
-#else
-        NULL,
-#endif
-        profile_params_->profile,
-        profile_params_->cookie_settings,
-        &enable_referrers_,
-        &enable_do_not_track_,
-        load_time_stats_));
+  ChromeNetworkDelegate* network_delegate =
+      new ChromeNetworkDelegate(
+          io_thread_globals->extension_event_router_forwarder.get(),
+          &enable_referrers_);
+  network_delegate->set_extension_info_map(profile_params_->extension_info_map);
+  network_delegate->set_url_blacklist_manager(url_blacklist_manager_.get());
+  network_delegate->set_profile(profile_params_->profile);
+  network_delegate->set_cookie_settings(profile_params_->cookie_settings);
+  network_delegate->set_enable_do_not_track(&enable_do_not_track_);
+  network_delegate->set_force_google_safe_search(&force_safesearch_);
+  network_delegate->set_load_time_stats(load_time_stats_);
+  network_delegate_.reset(network_delegate);
 
   fraudulent_certificate_reporter_.reset(
       new chrome_browser_net::ChromeFraudulentCertificateReporter(
@@ -583,8 +599,8 @@ void ProfileIOData::LazyInitialize() const {
 void ProfileIOData::ApplyProfileParamsToContext(
     ChromeURLRequestContext* context) const {
   context->set_is_incognito(is_incognito());
-  context->set_accept_language(profile_params_->accept_language);
-  context->set_accept_charset(profile_params_->accept_charset);
+  context->set_http_user_agent_settings(
+      chrome_http_user_agent_settings_.get());
   context->set_ssl_config_service(profile_params_->ssl_config_service);
 }
 
@@ -612,7 +628,7 @@ void ProfileIOData::SetUpJobFactoryDefaults(
   }
 
   set_protocol = job_factory->SetProtocolHandler(
-      chrome::kExtensionScheme,
+      extensions::kExtensionScheme,
       CreateExtensionProtocolHandler(is_incognito(), GetExtensionInfoMap()));
   DCHECK(set_protocol);
   set_protocol = job_factory->SetProtocolHandler(
@@ -633,13 +649,6 @@ void ProfileIOData::SetUpJobFactoryDefaults(
         chrome::kDriveScheme, new drive::DriveProtocolHandler());
     DCHECK(set_protocol);
   }
-#if !defined(GOOGLE_CHROME_BUILD)
-  // Install the GView request interceptor that will redirect requests
-  // of compatible documents (PDF, etc) to the GView document viewer.
-  const CommandLine& parsed_command_line = *CommandLine::ForCurrentProcess();
-  if (parsed_command_line.HasSwitch(switches::kEnableGView))
-    job_factory->AddInterceptor(new chromeos::GViewRequestInterceptor);
-#endif  // !defined(GOOGLE_CHROME_BUILD)
 #endif  // defined(OS_CHROMEOS)
 
   job_factory->SetProtocolHandler(
@@ -656,8 +665,17 @@ void ProfileIOData::SetUpJobFactoryDefaults(
 
 void ProfileIOData::ShutdownOnUIThread() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+
+  if (signin_names_)
+    signin_names_->ReleaseResourcesOnUIThread();
+
+  google_services_username_.Destroy();
+  google_services_username_pattern_.Destroy();
+  reverse_autologin_enabled_.Destroy();
+  one_click_signin_rejected_email_list_.Destroy();
   enable_referrers_.Destroy();
   enable_do_not_track_.Destroy();
+  force_safesearch_.Destroy();
 #if !defined(OS_CHROMEOS)
   enable_metrics_.Destroy();
 #endif
@@ -668,6 +686,8 @@ void ProfileIOData::ShutdownOnUIThread() {
   if (url_blacklist_manager_.get())
     url_blacklist_manager_->ShutdownOnUIThread();
 #endif
+  if (chrome_http_user_agent_settings_.get())
+    chrome_http_user_agent_settings_->CleanupOnUIThread();
   bool posted = BrowserThread::DeleteSoon(BrowserThread::IO, FROM_HERE, this);
   if (!posted)
     delete this;
@@ -689,7 +709,8 @@ void ProfileIOData::PopulateNetworkSessionParams(
   ChromeURLRequestContext* context = main_request_context();
 
   IOThread* const io_thread = profile_params->io_thread;
-  IOThread::Globals* const globals = io_thread->globals();
+
+  io_thread->InitializeNetworkSessionParams(params);
 
   params->host_resolver = context->host_resolver();
   params->cert_verifier = context->cert_verifier();
@@ -702,15 +723,15 @@ void ProfileIOData::PopulateNetworkSessionParams(
   params->network_delegate = context->network_delegate();
   params->http_server_properties = context->http_server_properties();
   params->net_log = context->net_log();
-  params->host_mapping_rules = globals->host_mapping_rules.get();
-  params->ignore_certificate_errors = globals->ignore_certificate_errors;
-  params->http_pipelining_enabled = globals->http_pipelining_enabled;
-  params->testing_fixed_http_port = globals->testing_fixed_http_port;
-  params->testing_fixed_https_port = globals->testing_fixed_https_port;
+}
 
-  const CommandLine& command_line = *CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kTrustedSpdyProxy)) {
-    params->trusted_spdy_proxy = command_line.GetSwitchValueASCII(
-        switches::kTrustedSpdyProxy);
-  }
+void ProfileIOData::SetCookieSettingsForTesting(
+    CookieSettings* cookie_settings) {
+  DCHECK(!cookie_settings_.get());
+  cookie_settings_ = cookie_settings;
+}
+
+void ProfileIOData::set_signin_names_for_testing(
+    SigninNamesOnIOThread* signin_names) {
+  signin_names_.reset(signin_names);
 }

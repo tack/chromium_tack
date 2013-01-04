@@ -66,6 +66,10 @@ const unsigned kNegativeCacheEntryTTLSeconds = 0;
 // Minimum TTL for successful resolutions with DnsTask.
 const unsigned kMinimumTTLSeconds = kCacheEntryTTLSeconds;
 
+// Number of consecutive failures of DnsTask (with successful fallback) before
+// the DnsClient is disabled until the next DNS change.
+const unsigned kMaximumDnsFailures = 16;
+
 // We use a separate histogram name for each platform to facilitate the
 // display of error codes by their symbolic name (since each platform has
 // different mappings).
@@ -235,42 +239,6 @@ AddressList EnsurePortOnAddressList(const AddressList& list, uint16 port) {
     return list;
   return AddressList::CopyWithPort(list, port);
 }
-
-// Wraps a call to HaveOnlyLoopbackAddresses to be executed on the WorkerPool as
-// it takes 40-100ms and should not block initialization.
-class HaveOnlyLoopbackProbeJob
-    : public base::RefCountedThreadSafe<HaveOnlyLoopbackProbeJob> {
- public:
-  typedef base::Callback<void(bool)> CallbackType;
-  explicit HaveOnlyLoopbackProbeJob(const CallbackType& callback)
-      : result_(false) {
-    const bool kIsSlow = true;
-    base::WorkerPool::PostTaskAndReply(
-        FROM_HERE,
-        base::Bind(&HaveOnlyLoopbackProbeJob::DoProbe, this),
-        base::Bind(&HaveOnlyLoopbackProbeJob::OnProbeComplete, this, callback),
-        kIsSlow);
-  }
-
- private:
-  friend class base::RefCountedThreadSafe<HaveOnlyLoopbackProbeJob>;
-
-  virtual ~HaveOnlyLoopbackProbeJob() {}
-
-  // Runs on worker thread.
-  void DoProbe() {
-    result_ = HaveOnlyLoopbackAddresses();
-  }
-
-  void OnProbeComplete(const CallbackType& callback) {
-    callback.Run(result_);
-  }
-
-  bool result_;
-
-  DISALLOW_COPY_AND_ASSIGN(HaveOnlyLoopbackProbeJob);
-};
-
 
 // Creates NetLog parameters when the resolve failed.
 base::Value* NetLogProcTaskFailedCallback(uint32 attempt_number,
@@ -918,87 +886,89 @@ class HostResolverImpl::ProcTask
 
 //-----------------------------------------------------------------------------
 
-// Represents a request to the worker pool for a "probe for IPv6 support" call.
-//
-// TODO(szym): This could also be replaced with PostTaskAndReply and Callbacks.
-class HostResolverImpl::IPv6ProbeJob
-    : public base::RefCountedThreadSafe<HostResolverImpl::IPv6ProbeJob> {
+// Wraps a call to TestIPv6Support to be executed on the WorkerPool as it takes
+// 40-100ms.
+class HostResolverImpl::IPv6ProbeJob {
  public:
-  IPv6ProbeJob(HostResolverImpl* resolver, NetLog* net_log)
+  IPv6ProbeJob(const base::WeakPtr<HostResolverImpl>& resolver, NetLog* net_log)
       : resolver_(resolver),
-        origin_loop_(base::MessageLoopProxy::current()),
-        net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_IPV6_PROBE_JOB)) {
+        net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_IPV6_PROBE_JOB)),
+        result_(false, IPV6_SUPPORT_MAX, OK) {
     DCHECK(resolver);
-  }
-
-  void Start() {
-    DCHECK(origin_loop_->BelongsToCurrentThread());
-    if (was_canceled())
-      return;
     net_log_.BeginEvent(NetLog::TYPE_IPV6_PROBE_RUNNING);
     const bool kIsSlow = true;
-    base::WorkerPool::PostTask(
-        FROM_HERE, base::Bind(&IPv6ProbeJob::DoProbe, this), kIsSlow);
+    base::WorkerPool::PostTaskAndReply(
+        FROM_HERE,
+        base::Bind(&IPv6ProbeJob::DoProbe, base::Unretained(this)),
+        base::Bind(&IPv6ProbeJob::OnProbeComplete, base::Owned(this)),
+        kIsSlow);
   }
 
-  // Cancels the current job.
-  void Cancel() {
-    DCHECK(origin_loop_->BelongsToCurrentThread());
-    if (was_canceled())
-      return;
-    net_log_.AddEvent(NetLog::TYPE_CANCELLED);
-    resolver_ = NULL;  // Read/write ONLY on origin thread.
-  }
+  virtual ~IPv6ProbeJob() {}
 
  private:
-  friend class base::RefCountedThreadSafe<HostResolverImpl::IPv6ProbeJob>;
-
-  ~IPv6ProbeJob() {
-  }
-
-  // Returns true if cancelled or if probe results have already been received
-  // on the origin thread.
-  bool was_canceled() const {
-    DCHECK(origin_loop_->BelongsToCurrentThread());
-    return !resolver_;
-  }
-
-  // Run on worker thread.
+  // Runs on worker thread.
   void DoProbe() {
-    // Do actual testing on this thread, as it takes 40-100ms.
-    origin_loop_->PostTask(
-        FROM_HERE,
-        base::Bind(&IPv6ProbeJob::OnProbeComplete, this, TestIPv6Support()));
+    result_ = TestIPv6Support();
   }
 
-  // Callback for when DoProbe() completes.
-  void OnProbeComplete(const IPv6SupportResult& support_result) {
-    DCHECK(origin_loop_->BelongsToCurrentThread());
-    net_log_.EndEvent(
-        NetLog::TYPE_IPV6_PROBE_RUNNING,
-        base::Bind(&IPv6SupportResult::ToNetLogValue,
-                   base::Unretained(&support_result)));
-    if (was_canceled())
+  void OnProbeComplete() {
+    net_log_.EndEvent(NetLog::TYPE_IPV6_PROBE_RUNNING,
+                      base::Bind(&IPv6SupportResult::ToNetLogValue,
+                                 base::Unretained(&result_)));
+    if (!resolver_)
       return;
-
-    // Clear |resolver_| so that no cancel event is logged.
-    HostResolverImpl* resolver = resolver_;
-    resolver_ = NULL;
-
-    resolver->IPv6ProbeSetDefaultAddressFamily(
-        support_result.ipv6_supported ? ADDRESS_FAMILY_UNSPECIFIED
+    resolver_->IPv6ProbeSetDefaultAddressFamily(
+        result_.ipv6_supported ? ADDRESS_FAMILY_UNSPECIFIED
                                       : ADDRESS_FAMILY_IPV4);
   }
 
   // Used/set only on origin thread.
-  HostResolverImpl* resolver_;
-
-  // Used to post ourselves onto the origin thread.
-  scoped_refptr<base::MessageLoopProxy> origin_loop_;
+  base::WeakPtr<HostResolverImpl> resolver_;
 
   BoundNetLog net_log_;
 
+  IPv6SupportResult result_;
+
   DISALLOW_COPY_AND_ASSIGN(IPv6ProbeJob);
+};
+
+// Wraps a call to HaveOnlyLoopbackAddresses to be executed on the WorkerPool as
+// it takes 40-100ms and should not block initialization.
+class HostResolverImpl::LoopbackProbeJob {
+ public:
+  explicit LoopbackProbeJob(const base::WeakPtr<HostResolverImpl>& resolver)
+      : resolver_(resolver),
+        result_(false) {
+    DCHECK(resolver);
+    const bool kIsSlow = true;
+    base::WorkerPool::PostTaskAndReply(
+        FROM_HERE,
+        base::Bind(&LoopbackProbeJob::DoProbe, base::Unretained(this)),
+        base::Bind(&LoopbackProbeJob::OnProbeComplete, base::Owned(this)),
+        kIsSlow);
+  }
+
+  virtual ~LoopbackProbeJob() {}
+
+ private:
+  // Runs on worker thread.
+  void DoProbe() {
+    result_ = HaveOnlyLoopbackAddresses();
+  }
+
+  void OnProbeComplete() {
+    if (!resolver_)
+      return;
+    resolver_->SetHaveOnlyLoopbackAddresses(result_);
+  }
+
+  // Used/set only on origin thread.
+  base::WeakPtr<HostResolverImpl> resolver_;
+
+  bool result_;
+
+  DISALLOW_COPY_AND_ASSIGN(LoopbackProbeJob);
 };
 
 //-----------------------------------------------------------------------------
@@ -1181,11 +1151,11 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
  public:
   // Creates new job for |key| where |request_net_log| is bound to the
   // request that spawned it.
-  Job(HostResolverImpl* resolver,
+  Job(const base::WeakPtr<HostResolverImpl>& resolver,
       const Key& key,
       RequestPriority priority,
       const BoundNetLog& request_net_log)
-      : resolver_(resolver->weak_ptr_factory_.GetWeakPtr()),
+      : resolver_(resolver),
         key_(key),
         priority_tracker_(priority),
         had_non_speculative_request_(false),
@@ -1297,11 +1267,20 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     }
   }
 
-  // Called from AbortAllInProgressJobs. Completes all requests as aborted
-  // and destroys the job.
+  // Called from AbortAllInProgressJobs. Completes all requests and destroys
+  // the job. This currently assumes the abort is due to a network change.
   void Abort() {
     DCHECK(is_running());
-    CompleteRequestsWithError(ERR_ABORTED);
+    CompleteRequestsWithError(ERR_NETWORK_CHANGED);
+  }
+
+  // If DnsTask present, abort it and fall back to ProcTask.
+  void AbortDnsTask() {
+    if (dns_task_) {
+      dns_task_.reset();
+      dns_task_error_ = OK;
+      StartProcTask();
+    }
   }
 
   // Called by HostResolverImpl when this job is evicted due to queue overflow.
@@ -1432,6 +1411,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
         UMA_HISTOGRAM_CUSTOM_ENUMERATION("AsyncDNS.ResolveError",
                                          std::abs(dns_task_error_),
                                          GetAllErrorCodesForUma());
+        resolver_->OnDnsTaskResolve(dns_task_error_);
       } else {
         DNS_HISTOGRAM("AsyncDNS.FallbackFail", duration);
         UmaAsyncDnsResolveStatus(RESOLVE_STATUS_FAIL);
@@ -1494,6 +1474,8 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
     UmaAsyncDnsResolveStatus(RESOLVE_STATUS_DNS_SUCCESS);
     RecordTTL(ttl);
 
+    resolver_->OnDnsTaskResolve(OK);
+
     base::TimeDelta bounded_ttl =
         std::max(ttl, base::TimeDelta::FromSeconds(kMinimumTTLSeconds));
 
@@ -1549,7 +1531,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
                             resolver_->received_dns_config_);
     }
 
-    bool did_complete = (entry.error != ERR_ABORTED) &&
+    bool did_complete = (entry.error != ERR_NETWORK_CHANGED) &&
                         (entry.error != ERR_HOST_RESOLVER_QUEUE_TOO_LARGE);
     if (did_complete)
       resolver_->CacheResult(key_, entry, ttl);
@@ -1653,7 +1635,6 @@ HostResolverImpl::HostResolverImpl(
     scoped_ptr<HostCache> cache,
     const PrioritizedDispatcher::Limits& job_limits,
     const ProcTaskParams& proc_params,
-    scoped_ptr<DnsClient> dns_client,
     NetLog* net_log)
     : cache_(cache.Pass()),
       dispatcher_(job_limits),
@@ -1661,8 +1642,9 @@ HostResolverImpl::HostResolverImpl(
       proc_params_(proc_params),
       default_address_family_(ADDRESS_FAMILY_UNSPECIFIED),
       weak_ptr_factory_(this),
-      dns_client_(dns_client.Pass()),
+      probe_weak_ptr_factory_(this),
       received_dns_config_(false),
+      num_dns_failures_(0),
       ipv6_probe_monitoring_(false),
       additional_resolver_flags_(0),
       net_log_(net_log) {
@@ -1679,23 +1661,25 @@ HostResolverImpl::HostResolverImpl(
   EnsureWinsockInit();
 #endif
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
-  new HaveOnlyLoopbackProbeJob(
-      base::Bind(&HostResolverImpl::SetHaveOnlyLoopbackAddresses,
-                 weak_ptr_factory_.GetWeakPtr()));
+  new LoopbackProbeJob(weak_ptr_factory_.GetWeakPtr());
 #endif
   NetworkChangeNotifier::AddIPAddressObserver(this);
   NetworkChangeNotifier::AddDNSObserver(this);
-  if (!HaveDnsConfig())
-    OnDNSChanged();
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_OPENBSD) && \
     !defined(OS_ANDROID)
   EnsureDnsReloaderInit();
 #endif
+
+  // TODO(szym): Remove when received_dns_config_ is removed, once
+  // http://crbug.com/137914 is resolved.
+  {
+    DnsConfig dns_config;
+    NetworkChangeNotifier::GetDnsConfig(&dns_config);
+    received_dns_config_ = dns_config.IsValid();
+  }
 }
 
 HostResolverImpl::~HostResolverImpl() {
-  DiscardIPv6ProbeJob();
-
   // This will also cancel all outstanding requests.
   STLDeleteValues(&jobs_);
 
@@ -1780,8 +1764,8 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
                                 AF_WASTE_MAX);
     }
 
-    // Create new Job.
-    job = new Job(this, key, info.priority(), request_net_log);
+    job = new Job(weak_ptr_factory_.GetWeakPtr(), key, info.priority(),
+                  request_net_log);
     job->Schedule();
 
     // Check for queue overflow.
@@ -1871,9 +1855,8 @@ void HostResolverImpl::CancelRequest(RequestHandle req_handle) {
 
 void HostResolverImpl::SetDefaultAddressFamily(AddressFamily address_family) {
   DCHECK(CalledOnValidThread());
-  ipv6_probe_monitoring_ = false;
-  DiscardIPv6ProbeJob();
   default_address_family_ = address_family;
+  ipv6_probe_monitoring_ = false;
 }
 
 AddressFamily HostResolverImpl::GetDefaultAddressFamily() const {
@@ -1884,7 +1867,18 @@ void HostResolverImpl::ProbeIPv6Support() {
   DCHECK(CalledOnValidThread());
   DCHECK(!ipv6_probe_monitoring_);
   ipv6_probe_monitoring_ = true;
-  OnIPAddressChanged();  // Give initial setup call.
+  OnIPAddressChanged();
+}
+
+void HostResolverImpl::SetDnsClientEnabled(bool enabled) {
+  DCHECK(CalledOnValidThread());
+#if defined(ENABLE_BUILT_IN_DNS)
+  if (enabled && !dns_client_) {
+    SetDnsClient(DnsClient::CreateClient(net_log_));
+  } else if (!enabled && dns_client_) {
+    SetDnsClient(scoped_ptr<DnsClient>());
+  }
+#endif
 }
 
 HostCache* HostResolverImpl::GetHostCache() {
@@ -2002,25 +1996,18 @@ void HostResolverImpl::RemoveJob(Job* job) {
     jobs_.erase(it);
 }
 
-void HostResolverImpl::DiscardIPv6ProbeJob() {
-  if (ipv6_probe_job_.get()) {
-    ipv6_probe_job_->Cancel();
-    ipv6_probe_job_ = NULL;
-  }
-}
-
 void HostResolverImpl::IPv6ProbeSetDefaultAddressFamily(
     AddressFamily address_family) {
   DCHECK(address_family == ADDRESS_FAMILY_UNSPECIFIED ||
          address_family == ADDRESS_FAMILY_IPV4);
+  if (!ipv6_probe_monitoring_)
+    return;
   if (default_address_family_ != address_family) {
     VLOG(1) << "IPv6Probe forced AddressFamily setting to "
             << ((address_family == ADDRESS_FAMILY_UNSPECIFIED) ?
                 "ADDRESS_FAMILY_UNSPECIFIED" : "ADDRESS_FAMILY_IPV4");
   }
   default_address_family_ = address_family;
-  // Drop reference since the job has called us back.
-  DiscardIPv6ProbeJob();
 }
 
 void HostResolverImpl::SetHaveOnlyLoopbackAddresses(bool result) {
@@ -2092,16 +2079,14 @@ void HostResolverImpl::TryServingAllJobsFromHosts() {
 }
 
 void HostResolverImpl::OnIPAddressChanged() {
+  // Abandon all ProbeJobs.
+  probe_weak_ptr_factory_.InvalidateWeakPtrs();
   if (cache_.get())
     cache_->clear();
-  if (ipv6_probe_monitoring_) {
-    DiscardIPv6ProbeJob();
-    ipv6_probe_job_ = new IPv6ProbeJob(this, net_log_);
-    ipv6_probe_job_->Start();
-  }
+  if (ipv6_probe_monitoring_)
+    new IPv6ProbeJob(probe_weak_ptr_factory_.GetWeakPtr(), net_log_);
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
-  // TODO(szym): Use HaveOnlyLoopbackProbeJob. http://crbug.com/157933
-  SetHaveOnlyLoopbackAddresses(HaveOnlyLoopbackAddresses());
+  new LoopbackProbeJob(probe_weak_ptr_factory_.GetWeakPtr());
 #endif
   AbortAllInProgressJobs();
   // |this| may be deleted inside AbortAllInProgressJobs().
@@ -2119,13 +2104,15 @@ void HostResolverImpl::OnDNSChanged() {
   // TODO(szym): Remove once http://crbug.com/137914 is resolved.
   received_dns_config_ = dns_config.IsValid();
 
-  // Life check to bail once |this| is deleted.
-  base::WeakPtr<HostResolverImpl> self = weak_ptr_factory_.GetWeakPtr();
+  num_dns_failures_ = 0;
 
   // We want a new DnsSession in place, before we Abort running Jobs, so that
   // the newly started jobs use the new config.
-  if (dns_client_.get())
+  if (dns_client_.get()) {
     dns_client_->SetConfig(dns_config);
+    if (dns_config.IsValid())
+      UMA_HISTOGRAM_BOOLEAN("AsyncDNS.DnsClientEnabled", true);
+  }
 
   // If the DNS server has changed, existing cached info could be wrong so we
   // have to drop our internal cache :( Note that OS level DNS caches, such
@@ -2133,6 +2120,9 @@ void HostResolverImpl::OnDNSChanged() {
   // resolv.conf changes so we don't need to do anything to clear that cache.
   if (cache_.get())
     cache_->clear();
+
+  // Life check to bail once |this| is deleted.
+  base::WeakPtr<HostResolverImpl> self = weak_ptr_factory_.GetWeakPtr();
 
   // Existing jobs will have been sent to the original server so they need to
   // be aborted.
@@ -2145,6 +2135,43 @@ void HostResolverImpl::OnDNSChanged() {
 
 bool HostResolverImpl::HaveDnsConfig() const {
   return (dns_client_.get() != NULL) && (dns_client_->GetConfig() != NULL);
+}
+
+void HostResolverImpl::OnDnsTaskResolve(int net_error) {
+  DCHECK(dns_client_);
+  if (net_error == OK) {
+    num_dns_failures_ = 0;
+    return;
+  }
+  ++num_dns_failures_;
+  if (num_dns_failures_ < kMaximumDnsFailures)
+    return;
+  // Disable DnsClient until the next DNS change.
+  for (JobMap::iterator it = jobs_.begin(); it != jobs_.end(); ++it)
+    it->second->AbortDnsTask();
+  dns_client_->SetConfig(DnsConfig());
+  UMA_HISTOGRAM_BOOLEAN("AsyncDNS.DnsClientEnabled", false);
+  UMA_HISTOGRAM_CUSTOM_ENUMERATION("AsyncDNS.DnsClientDisabledReason",
+                                   std::abs(net_error),
+                                   GetAllErrorCodesForUma());
+}
+
+void HostResolverImpl::SetDnsClient(scoped_ptr<DnsClient> dns_client) {
+  if (HaveDnsConfig()) {
+    for (JobMap::iterator it = jobs_.begin(); it != jobs_.end(); ++it)
+      it->second->AbortDnsTask();
+  }
+  dns_client_ = dns_client.Pass();
+  if (!dns_client_ || dns_client_->GetConfig() ||
+      num_dns_failures_ >= kMaximumDnsFailures) {
+    return;
+  }
+  DnsConfig dns_config;
+  NetworkChangeNotifier::GetDnsConfig(&dns_config);
+  dns_client_->SetConfig(dns_config);
+  num_dns_failures_ = 0;
+  if (dns_config.IsValid())
+    UMA_HISTOGRAM_BOOLEAN("AsyncDNS.DnsClientEnabled", true);
 }
 
 }  // namespace net

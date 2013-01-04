@@ -15,7 +15,7 @@
 #include <netinet/in.h>
 #endif
 
-#include "base/eintr_wrapper.h"
+#include "base/posix/eintr_wrapper.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
@@ -59,7 +59,7 @@ int TCPServerSocketLibevent::Listen(const IPEndPoint& address, int backlog) {
   DCHECK_GT(backlog, 0);
   DCHECK_EQ(socket_, kInvalidSocket);
 
-  socket_ = socket(address.GetFamily(), SOCK_STREAM, IPPROTO_TCP);
+  socket_ = socket(address.GetSockAddrFamily(), SOCK_STREAM, IPPROTO_TCP);
   if (socket_ < 0) {
     PLOG(ERROR) << "socket() returned an error";
     return MapSystemError(errno);

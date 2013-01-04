@@ -23,22 +23,17 @@ NetPrefObserver::NetPrefObserver(PrefService* prefs,
   DCHECK(prefs);
   DCHECK(predictor);
 
+  base::Closure prefs_callback = base::Bind(&NetPrefObserver::ApplySettings,
+                                            base::Unretained(this));
   network_prediction_enabled_.Init(prefs::kNetworkPredictionEnabled, prefs,
-                                   this);
-  spdy_disabled_.Init(prefs::kDisableSpdy, prefs, this);
+                                   prefs_callback);
+  spdy_disabled_.Init(prefs::kDisableSpdy, prefs, prefs_callback);
 
   ApplySettings();
 }
 
 NetPrefObserver::~NetPrefObserver() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-}
-
-void NetPrefObserver::Observe(int type,
-                              const content::NotificationSource& source,
-                              const content::NotificationDetails& details) {
-  DCHECK_EQ(type, chrome::NOTIFICATION_PREF_CHANGED);
-  ApplySettings();
 }
 
 void NetPrefObserver::ApplySettings() {
@@ -52,11 +47,11 @@ void NetPrefObserver::ApplySettings() {
 }
 
 // static
-void NetPrefObserver::RegisterPrefs(PrefService* prefs) {
+void NetPrefObserver::RegisterUserPrefs(PrefServiceSyncable* prefs) {
   prefs->RegisterBooleanPref(prefs::kNetworkPredictionEnabled,
                              true,
-                             PrefService::SYNCABLE_PREF);
+                             PrefServiceSyncable::SYNCABLE_PREF);
   prefs->RegisterBooleanPref(prefs::kDisableSpdy,
                              false,
-                             PrefService::UNSYNCABLE_PREF);
+                             PrefServiceSyncable::UNSYNCABLE_PREF);
 }

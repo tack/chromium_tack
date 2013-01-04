@@ -11,11 +11,12 @@
 #include "base/observer_list.h"
 #include "base/prefs/public/pref_change_registrar.h"
 #include "chrome/browser/prefs/proxy_config_dictionary.h"
-#include "content/public/browser/notification_observer.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_config_service.h"
 
 class PrefService;
+class PrefServiceSimple;
+class PrefServiceSyncable;
 
 // A net::ProxyConfigService implementation that applies preference proxy
 // settings (pushed from PrefProxyConfigTrackerImpl) as overrides to the proxy
@@ -78,7 +79,7 @@ class ChromeProxyConfigService
 // A class that tracks proxy preferences. It translates the configuration
 // to net::ProxyConfig and pushes the result over to the IO thread for
 // ChromeProxyConfigService::UpdateProxyConfig to use.
-class PrefProxyConfigTrackerImpl : public content::NotificationObserver {
+class PrefProxyConfigTrackerImpl {
  public:
   explicit PrefProxyConfigTrackerImpl(PrefService* pref_service);
   virtual ~PrefProxyConfigTrackerImpl();
@@ -117,8 +118,10 @@ class PrefProxyConfigTrackerImpl : public content::NotificationObserver {
   static bool PrefConfigToNetConfig(const ProxyConfigDictionary& proxy_dict,
                                     net::ProxyConfig* config);
 
-  // Registers the proxy preference.
-  static void RegisterPrefs(PrefService* user_prefs);
+  // Registers the proxy preferences. These are actually registered
+  // the same way in local state and in user prefs.
+  static void RegisterPrefs(PrefServiceSimple* local_state);
+  static void RegisterUserPrefs(PrefServiceSyncable* user_prefs);
 
  protected:
   // Get the proxy configuration currently defined by preferences.
@@ -132,11 +135,7 @@ class PrefProxyConfigTrackerImpl : public content::NotificationObserver {
   virtual void OnProxyConfigChanged(ProxyPrefs::ConfigState config_state,
                                     const net::ProxyConfig& config);
 
-  // content::NotificationObserver implementation:
-  virtual void Observe(int type,
-                       const content::NotificationSource& source,
-                       const content::NotificationDetails& details) OVERRIDE;
-
+  void OnProxyPrefChanged();
 
   const PrefService* prefs() const { return pref_service_; }
   bool update_pending() const { return update_pending_; }

@@ -39,7 +39,6 @@ namespace {
 #define GotoState(s) next_handshake_state_ = s
 #endif
 
-const size_t kMaxRecvBufferSize = 4096;
 const int kSessionCacheTimeoutSeconds = 60 * 60;
 const size_t kSessionCacheMaxEntires = 1024;
 
@@ -111,6 +110,7 @@ int MapOpenSSLErrorSSL() {
     case SSL_R_NO_SHARED_CIPHER:
     case SSL_R_TLSV1_ALERT_INSUFFICIENT_SECURITY:
     case SSL_R_TLSV1_ALERT_PROTOCOL_VERSION:
+    case SSL_R_UNSUPPORTED_PROTOCOL:
       return ERR_SSL_VERSION_OR_CIPHER_MISMATCH;
     case SSL_R_SSLV3_ALERT_BAD_CERTIFICATE:
     case SSL_R_SSLV3_ALERT_UNSUPPORTED_CERTIFICATE:
@@ -1043,10 +1043,25 @@ int SSLClientSocketOpenSSL::BufferRecv(void) {
   if (transport_recv_busy_)
     return ERR_IO_PENDING;
 
-  size_t max_write = BIO_ctrl_get_write_guarantee(transport_bio_);
-  if (max_write > kMaxRecvBufferSize)
-    max_write = kMaxRecvBufferSize;
+  // Determine how much was requested from |transport_bio_| that was not
+  // actually available.
+  size_t requested = BIO_ctrl_get_read_request(transport_bio_);
+  if (requested == 0) {
+    // This is not a perfect match of error codes, as no operation is
+    // actually pending. However, returning 0 would be interpreted as
+    // a possible sign of EOF, which is also an inappropriate match.
+    return ERR_IO_PENDING;
+  }
 
+  // Known Issue: While only reading |requested| data is the more correct
+  // implementation, it has the downside of resulting in frequent reads:
+  // One read for the SSL record header (~5 bytes) and one read for the SSL
+  // record body. Rather than issuing these reads to the underlying socket
+  // (and constantly allocating new IOBuffers), a single Read() request to
+  // fill |transport_bio_| is issued. As long as an SSL client socket cannot
+  // be gracefully shutdown (via SSL close alerts) and re-used for non-SSL
+  // traffic, this over-subscribed Read()ing will not cause issues.
+  size_t max_write = BIO_ctrl_get_write_guarantee(transport_bio_);
   if (!max_write)
     return ERR_IO_PENDING;
 

@@ -130,7 +130,9 @@ PrefProxyConfigTrackerImpl::PrefProxyConfigTrackerImpl(
       update_pending_(true) {
   config_state_ = ReadPrefConfig(&pref_config_);
   proxy_prefs_.Init(pref_service);
-  proxy_prefs_.Add(prefs::kProxy, this);
+  proxy_prefs_.Add(prefs::kProxy,
+                   base::Bind(&PrefProxyConfigTrackerImpl::OnProxyPrefChanged,
+                              base::Unretained(this)));
 }
 
 PrefProxyConfigTrackerImpl::~PrefProxyConfigTrackerImpl() {
@@ -194,11 +196,19 @@ net::ProxyConfigService::ConfigAvailability
 }
 
 // static
-void PrefProxyConfigTrackerImpl::RegisterPrefs(PrefService* pref_service) {
+void PrefProxyConfigTrackerImpl::RegisterPrefs(
+    PrefServiceSimple* local_state) {
+  DictionaryValue* default_settings = ProxyConfigDictionary::CreateSystem();
+  local_state->RegisterDictionaryPref(prefs::kProxy, default_settings);
+}
+
+// static
+void PrefProxyConfigTrackerImpl::RegisterUserPrefs(
+    PrefServiceSyncable* pref_service) {
   DictionaryValue* default_settings = ProxyConfigDictionary::CreateSystem();
   pref_service->RegisterDictionaryPref(prefs::kProxy,
                                        default_settings,
-                                       PrefService::UNSYNCABLE_PREF);
+                                       PrefServiceSyncable::UNSYNCABLE_PREF);
 }
 
 ProxyPrefs::ConfigState PrefProxyConfigTrackerImpl::GetProxyConfig(
@@ -287,28 +297,20 @@ bool PrefProxyConfigTrackerImpl::PrefConfigToNetConfig(
   return false;
 }
 
-void PrefProxyConfigTrackerImpl::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
+void PrefProxyConfigTrackerImpl::OnProxyPrefChanged() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  if (type == chrome::NOTIFICATION_PREF_CHANGED &&
-      content::Source<PrefService>(source).ptr() == pref_service_) {
-    net::ProxyConfig new_config;
-    ProxyPrefs::ConfigState config_state = ReadPrefConfig(&new_config);
-    if (config_state_ != config_state ||
-        (config_state_ != ProxyPrefs::CONFIG_UNSET &&
-         !pref_config_.Equals(new_config))) {
-      config_state_ = config_state;
-      if (config_state_ != ProxyPrefs::CONFIG_UNSET)
-        pref_config_ = new_config;
-      update_pending_ = true;
-    }
-    if (update_pending_)
-      OnProxyConfigChanged(config_state, new_config);
-  } else {
-    NOTREACHED() << "Unexpected notification of type " << type;
+  net::ProxyConfig new_config;
+  ProxyPrefs::ConfigState config_state = ReadPrefConfig(&new_config);
+  if (config_state_ != config_state ||
+      (config_state_ != ProxyPrefs::CONFIG_UNSET &&
+       !pref_config_.Equals(new_config))) {
+    config_state_ = config_state;
+    if (config_state_ != ProxyPrefs::CONFIG_UNSET)
+      pref_config_ = new_config;
+    update_pending_ = true;
   }
+  if (update_pending_)
+    OnProxyConfigChanged(config_state, new_config);
 }
 
 ProxyPrefs::ConfigState PrefProxyConfigTrackerImpl::ReadPrefConfig(

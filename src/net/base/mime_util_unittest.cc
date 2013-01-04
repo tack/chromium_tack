@@ -70,6 +70,11 @@ TEST(MimeUtilTest, LookupTypes) {
   EXPECT_TRUE(IsSupportedNonImageMimeType("text/banana"));
   EXPECT_FALSE(IsSupportedNonImageMimeType("text/vcard"));
   EXPECT_FALSE(IsSupportedNonImageMimeType("application/virus"));
+  EXPECT_TRUE(IsSupportedNonImageMimeType("application/x-x509-user-cert"));
+#if defined(OS_ANDROID)
+  EXPECT_TRUE(IsSupportedNonImageMimeType("application/x-x509-ca-cert"));
+  EXPECT_TRUE(IsSupportedNonImageMimeType("application/x-pkcs12"));
+#endif
 
   EXPECT_TRUE(IsSupportedMimeType("image/jpeg"));
   EXPECT_FALSE(IsSupportedMimeType("image/lolcat"));
@@ -239,7 +244,12 @@ TEST(MimeUtilTest, TestGetExtensionsForMimeType) {
     { "message/*",  1, "eml" },
     { "MeSsAge/*",  1, "eml" },
     { "image/bmp",  1, "bmp" },
-    { "video/*",    5, "mp4" },
+    { "video/*",    6, "mp4" },
+#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_IOS)
+    { "video/*",    6, "mpg" },
+#else
+    { "video/*",    6, "mpeg" },
+#endif
     { "audio/*",    6, "oga" },
     { "aUDIo/*",    6, "wav" },
   };
@@ -265,6 +275,25 @@ TEST(MimeUtilTest, TestGetExtensionsForMimeType) {
     ASSERT_TRUE(found) << "Must find at least the contained result within "
                        << tests[i].mime_type;
   }
+}
+
+TEST(MimeUtilTest, TestGetCertificateMimeTypeForMimeType) {
+  EXPECT_EQ(CERTIFICATE_MIME_TYPE_X509_USER_CERT,
+            GetCertificateMimeTypeForMimeType("application/x-x509-user-cert"));
+#if defined(OS_ANDROID)
+  // Only Android supports CA Certs and PKCS12 archives.
+  EXPECT_EQ(CERTIFICATE_MIME_TYPE_X509_CA_CERT,
+            GetCertificateMimeTypeForMimeType("application/x-x509-ca-cert"));
+  EXPECT_EQ(CERTIFICATE_MIME_TYPE_PKCS12_ARCHIVE,
+            GetCertificateMimeTypeForMimeType("application/x-pkcs12"));
+#else
+  EXPECT_EQ(CERTIFICATE_MIME_TYPE_UNKNOWN,
+            GetCertificateMimeTypeForMimeType("application/x-x509-ca-cert"));
+  EXPECT_EQ(CERTIFICATE_MIME_TYPE_UNKNOWN,
+            GetCertificateMimeTypeForMimeType("application/x-pkcs12"));
+#endif
+  EXPECT_EQ(CERTIFICATE_MIME_TYPE_UNKNOWN,
+            GetCertificateMimeTypeForMimeType("text/plain"));
 }
 
 }  // namespace net
