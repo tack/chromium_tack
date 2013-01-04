@@ -17,22 +17,22 @@ namespace {
 COMPILE_ASSERT(kMaxHSTSAgeSecs <= kuint32max, kMaxHSTSAgeSecsTooLarge);
 
 // MaxAgeToInt converts a string representation of a "whole number" of
-// seconds into a uint32.  The string may contain an arbitrarily large
-// number which we clip to kMaxHSTSAgeSecs (which is guaranteed by the
-// COMPILE_ASSERT above to fit within a 32-bit unsigned integer).  False
-// is returned on any parse error.
+// seconds into a uint32. The string may contain an arbitrarily large number,
+// which will be clipped to kMaxHSTSAgeSecs and which is guaranteed to fit
+// within a 32-bit unsigned integer. False is returned on any parse error.
 bool MaxAgeToInt(std::string::const_iterator begin,
                  std::string::const_iterator end,
                  uint32* result) {
   const std::string s(begin, end);
   int64 i = 0;
 
-  // Return false on any StringToInt64 parse errors *except* int64
-  // overflow.  We use StringToInt64 instead of StringToUint64 because
-  // StringToUint64 does not return false on negative numbers, so we
-  // have to handle this check explicitly.  For values too large to
-  // be stored in an int64, StringToInt64 returns false with i set
-  // to kint64max, so we detect this case and allow it to fall
+  // Return false on any StringToInt64 parse errors *except* for
+  // int64 overflow. StringToInt64 is used, rather than StringToUint64,
+  // in order to properly handle and reject negative numbers
+  // (StringToUint64 does not return false on negative numbers).
+  // For values too large to be stored in an int64, StringToInt64 will
+  // return false with i set to kint64max, so this case is detected
+  // by the immediately following if-statement and allowed to fall
   // through so that i gets clipped to kMaxHSTSAgeSecs.
   if (!base::StringToInt64(s, &i) && i != kint64max)
     return false;
