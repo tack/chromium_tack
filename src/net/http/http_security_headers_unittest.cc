@@ -287,7 +287,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
       now, "max-age=39408299  ;incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, (int64)GG_INT64_C(39408299)));
+      std::min(kMaxHSTSAgeSecs, static_cast<int64>(GG_INT64_C(39408299))));
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
@@ -295,7 +295,7 @@ TEST_F(HttpSecurityHeadersTest, ValidSTSHeaders) {
       now, "max-age=394082038  ; incLudesUbdOmains", &expiry,
       &include_subdomains));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, (int64)GG_INT64_C(394082038)));
+      std::min(kMaxHSTSAgeSecs, static_cast<int64>(GG_INT64_C(394082038))));
   EXPECT_EQ(expect_expiry, expiry);
   EXPECT_TRUE(include_subdomains);
 
@@ -372,7 +372,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
       "max-age=39408299  ;" + backup_pin + ";" + good_pin + ";  ",
       chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, (int64)GG_INT64_C(39408299)));
+      std::min(kMaxHSTSAgeSecs, static_cast<int64>(GG_INT64_C(39408299))));
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(
@@ -381,7 +381,7 @@ static void TestValidPinsHeaders(HashValueTag tag) {
           good_pin + ";" + backup_pin + ";   ",
       chain_hashes, &expiry, &hashes));
   expect_expiry = now + base::TimeDelta::FromSeconds(
-      std::min(kMaxHSTSAgeSecs, (int64)GG_INT64_C(394082038)));
+      std::min(kMaxHSTSAgeSecs, static_cast<int64>(GG_INT64_C(394082038))));
   EXPECT_EQ(expect_expiry, expiry);
 
   EXPECT_TRUE(ParseHPKPHeader(

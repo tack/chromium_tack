@@ -454,11 +454,14 @@ func writeCertsOutput(out *bufio.Writer, pins []pin) {
 
 	for _, pin := range pins {
 		fmt.Fprintf(out, "static const char kSPKIHash_%s[] =\n", pin.name)
-		var s string
-		for _,c := range pin.spkiHash {
-			s += fmt.Sprintf("\\x%02x", c)
+		var s1, s2 string
+		for _, c := range pin.spkiHash[ : len(pin.spkiHash)/2 ] {
+			s1 += fmt.Sprintf("\\x%02x", c)
 		}
-		fmt.Fprintf(out, "    \"%s\";\n\n", s)
+		for _, c := range pin.spkiHash[len(pin.spkiHash)/2 : ] {
+			s2 += fmt.Sprintf("\\x%02x", c)
+		}
+		fmt.Fprintf(out, "    \"%s\"\n    \"%s\";\n\n", s1, s2)
 	}
 }
 
