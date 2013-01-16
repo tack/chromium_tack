@@ -139,27 +139,31 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   EXPECT_FALSE(ParseHPKPHeader(now, "    ", chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "abc", chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "  abc", chain_hashes, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "  abc   ", chain_hashes, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age", chain_hashes, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "  abc   ", chain_hashes, &expiry,
+                               &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age", chain_hashes, &expiry,
+                               &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "  max-age", chain_hashes, &expiry,
+                               &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "  max-age  ", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=", chain_hashes, &expiry,
+                               &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=", chain_hashes, &expiry,
                                &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =", chain_hashes, &expiry,
                                &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "   max-age=   ", chain_hashes, &expiry,
                                &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     ", chain_hashes, &expiry,
-                               &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     ", chain_hashes,
+                               &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "   max-age  =     xy", chain_hashes,
                                &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "   max-age  =     3488a923",
                                chain_hashes, &expiry, &hashes));
-  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488a923  ", chain_hashes, &expiry,
-                               &hashes));
+  EXPECT_FALSE(ParseHPKPHeader(now, "max-age=3488a923  ", chain_hashes,
+                               &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now,
                                "max-ag=3488923pins=" + good_pin + "," +
                                backup_pin,

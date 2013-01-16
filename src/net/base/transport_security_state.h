@@ -84,9 +84,9 @@ class NET_EXPORT TransportSecurityState
     // items.
     bool HasPins() const;
 
-    // ShouldRedirectHTTPToHTTPS returns true iff, given the |mode| of this
+    // ShouldUpgradeToSSL returns true iff, given the |mode| of this
     // DomainState, HTTP requests should be internally redirected to HTTPS.
-    bool ShouldRedirectHTTPToHTTPS() const;
+    bool ShouldUpgradeToSSL() const;
 
     bool Equals(const DomainState& other) const;
 

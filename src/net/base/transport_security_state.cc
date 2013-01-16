@@ -785,7 +785,7 @@ bool TransportSecurityState::DomainState::IsChainOfPublicKeysPermitted(
   return false;
 }
 
-bool TransportSecurityState::DomainState::ShouldRedirectHTTPToHTTPS() const {
+bool TransportSecurityState::DomainState::ShouldUpgradeToSSL() const {
   return upgrade_mode == MODE_FORCE_HTTPS;
 }
 

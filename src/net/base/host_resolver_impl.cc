@@ -1016,17 +1016,24 @@ class HostResolverImpl::DnsTask : public base::SupportsWeakPtr<DnsTask> {
                              int net_error,
                              const DnsResponse* response) {
     DCHECK(transaction);
+    base::TimeDelta duration = base::TimeTicks::Now() - start_time;
     // Run |callback_| last since the owning Job will then delete this DnsTask.
     if (net_error != OK) {
-      DNS_HISTOGRAM("AsyncDNS.TransactionFailure",
-                    base::TimeTicks::Now() - start_time);
+      DNS_HISTOGRAM("AsyncDNS.TransactionFailure", duration);
       OnFailure(net_error, DnsResponse::DNS_PARSE_OK);
       return;
     }
 
     CHECK(response);
-    DNS_HISTOGRAM("AsyncDNS.TransactionSuccess",
-                  base::TimeTicks::Now() - start_time);
+    DNS_HISTOGRAM("AsyncDNS.TransactionSuccess", duration);
+    switch (transaction->GetType()) {
+      case dns_protocol::kTypeA:
+        DNS_HISTOGRAM("AsyncDNS.TransactionSuccess_A", duration);
+        break;
+      case dns_protocol::kTypeAAAA:
+        DNS_HISTOGRAM("AsyncDNS.TransactionSuccess_AAAA", duration);
+        break;
+    }
     AddressList addr_list;
     base::TimeDelta ttl;
     DnsResponse::Result result = response->ParseToAddressList(&addr_list, &ttl);
@@ -1470,6 +1477,18 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job {
       return;
     }
     DNS_HISTOGRAM("AsyncDNS.ResolveSuccess", duration);
+    // Log DNS lookups based on |address_family|.
+    switch(key_.address_family) {
+      case ADDRESS_FAMILY_IPV4:
+        DNS_HISTOGRAM("AsyncDNS.ResolveSuccess_FAMILY_IPV4", duration);
+        break;
+      case ADDRESS_FAMILY_IPV6:
+        DNS_HISTOGRAM("AsyncDNS.ResolveSuccess_FAMILY_IPV6", duration);
+        break;
+      case ADDRESS_FAMILY_UNSPECIFIED:
+        DNS_HISTOGRAM("AsyncDNS.ResolveSuccess_FAMILY_UNSPEC", duration);
+        break;
+    }
 
     UmaAsyncDnsResolveStatus(RESOLVE_STATUS_DNS_SUCCESS);
     RecordTTL(ttl);
@@ -1725,45 +1744,6 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   JobMap::iterator jobit = jobs_.find(key);
   Job* job;
   if (jobit == jobs_.end()) {
-    // If we couldn't find the desired address family, check to see if the
-    // other family is in the cache or another job, which indicates waste,
-    // and we should fix crbug.com/139811.
-    {
-      bool ipv4 = key.address_family == ADDRESS_FAMILY_IPV4;
-      Key other_family_key = key;
-      other_family_key.address_family = ipv4 ?
-          ADDRESS_FAMILY_UNSPECIFIED : ADDRESS_FAMILY_IPV4;
-      bool found_other_family_cache = false;
-      bool found_other_family_job = false;
-      if (default_address_family_ == ADDRESS_FAMILY_UNSPECIFIED) {
-        found_other_family_cache = cache_.get() &&
-            cache_->Lookup(other_family_key, base::TimeTicks::Now()) != NULL;
-        if (!found_other_family_cache)
-          found_other_family_job = jobs_.count(other_family_key) > 0;
-      }
-      enum {  // Used in UMA_HISTOGRAM_ENUMERATION.
-        AF_WASTE_IPV4_ONLY,
-        AF_WASTE_CACHE_IPV4,
-        AF_WASTE_CACHE_UNSPEC,
-        AF_WASTE_JOB_IPV4,
-        AF_WASTE_JOB_UNSPEC,
-        AF_WASTE_NONE_IPV4,
-        AF_WASTE_NONE_UNSPEC,
-        AF_WASTE_MAX,  // Bounding value.
-      } category = AF_WASTE_MAX;
-      if (default_address_family_ != ADDRESS_FAMILY_UNSPECIFIED) {
-        category = AF_WASTE_IPV4_ONLY;
-      } else if (found_other_family_cache) {
-        category = ipv4 ? AF_WASTE_CACHE_IPV4 : AF_WASTE_CACHE_UNSPEC;
-      } else if (found_other_family_job) {
-        category = ipv4 ? AF_WASTE_JOB_IPV4 : AF_WASTE_JOB_UNSPEC;
-      } else {
-        category = ipv4 ? AF_WASTE_NONE_IPV4 : AF_WASTE_NONE_UNSPEC;
-      }
-      UMA_HISTOGRAM_ENUMERATION("DNS.ResolveUnspecWaste", category,
-                                AF_WASTE_MAX);
-    }
-
     job = new Job(weak_ptr_factory_.GetWeakPtr(), key, info.priority(),
                   request_net_log);
     job->Schedule();

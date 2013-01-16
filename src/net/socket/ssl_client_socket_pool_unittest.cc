@@ -11,6 +11,8 @@
 #include "base/utf_string_conversions.h"
 #include "net/base/auth.h"
 #include "net/base/cert_verifier.h"
+#include "net/base/load_timing_info.h"
+#include "net/base/load_timing_info_test_util.h"
 #include "net/base/mock_host_resolver.h"
 #include "net/base/net_errors.h"
 #include "net/base/ssl_config_service_defaults.h"
@@ -38,6 +40,39 @@ namespace {
 
 const int kMaxSockets = 32;
 const int kMaxSocketsPerGroup = 6;
+
+// Make sure |handle|'s load times are set correctly.  DNS and connect start
+// times comes from mock client sockets in these tests, so primarily serves to
+// check those times were copied, and ssl times / connect end are set correctly.
+void TestLoadTimingInfo(const ClientSocketHandle& handle) {
+  LoadTimingInfo load_timing_info;
+  EXPECT_TRUE(handle.GetLoadTimingInfo(false, &load_timing_info));
+
+  EXPECT_FALSE(load_timing_info.socket_reused);
+  // None of these tests use a NetLog.
+  EXPECT_EQ(NetLog::Source::kInvalidId, load_timing_info.socket_log_id);
+
+  ExpectConnectTimingHasTimes(
+      load_timing_info.connect_timing,
+      CONNECT_TIMING_HAS_SSL_TIMES | CONNECT_TIMING_HAS_DNS_TIMES);
+  ExpectLoadTimingHasOnlyConnectionTimes(load_timing_info);
+}
+
+// Just like TestLoadTimingInfo, except DNS times are expected to be null, for
+// tests over proxies that do DNS lookups themselves.
+void TestLoadTimingInfoNoDns(const ClientSocketHandle& handle) {
+  LoadTimingInfo load_timing_info;
+  EXPECT_TRUE(handle.GetLoadTimingInfo(false, &load_timing_info));
+
+  // None of these tests use a NetLog.
+  EXPECT_EQ(NetLog::Source::kInvalidId, load_timing_info.socket_log_id);
+
+  EXPECT_FALSE(load_timing_info.socket_reused);
+
+  ExpectConnectTimingHasTimes(load_timing_info.connect_timing,
+                              CONNECT_TIMING_HAS_SSL_TIMES);
+  ExpectLoadTimingHasOnlyConnectionTimes(load_timing_info);
+}
 
 class SSLClientSocketPoolTest : public testing::Test {
  protected:
@@ -236,6 +271,7 @@ TEST_F(SSLClientSocketPoolTest, BasicDirect) {
   EXPECT_EQ(OK, rv);
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfo(handle);
 }
 
 TEST_F(SSLClientSocketPoolTest, BasicDirectAsync) {
@@ -259,6 +295,7 @@ TEST_F(SSLClientSocketPoolTest, BasicDirectAsync) {
   EXPECT_EQ(OK, callback.WaitForResult());
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfo(handle);
 }
 
 TEST_F(SSLClientSocketPoolTest, DirectCertError) {
@@ -282,6 +319,7 @@ TEST_F(SSLClientSocketPoolTest, DirectCertError) {
   EXPECT_EQ(ERR_CERT_COMMON_NAME_INVALID, callback.WaitForResult());
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfo(handle);
 }
 
 TEST_F(SSLClientSocketPoolTest, DirectSSLError) {
@@ -330,6 +368,7 @@ TEST_F(SSLClientSocketPoolTest, DirectWithNPN) {
   EXPECT_EQ(OK, callback.WaitForResult());
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfo(handle);
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
   EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
 }
@@ -381,6 +420,7 @@ TEST_F(SSLClientSocketPoolTest, DirectGotSPDY) {
   EXPECT_EQ(OK, callback.WaitForResult());
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfo(handle);
 
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
   EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
@@ -413,6 +453,7 @@ TEST_F(SSLClientSocketPoolTest, DirectGotBonusSPDY) {
   EXPECT_EQ(OK, callback.WaitForResult());
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfo(handle);
 
   SSLClientSocket* ssl_socket = static_cast<SSLClientSocket*>(handle.socket());
   EXPECT_TRUE(ssl_socket->WasNpnNegotiated());
@@ -483,6 +524,9 @@ TEST_F(SSLClientSocketPoolTest, SOCKSBasic) {
   EXPECT_EQ(OK, rv);
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  // SOCKS5 generally has no DNS times, but the mock SOCKS5 sockets used here
+  // don't go through the real logic, unlike in the HTTP proxy tests.
+  TestLoadTimingInfo(handle);
 }
 
 TEST_F(SSLClientSocketPoolTest, SOCKSBasicAsync) {
@@ -506,6 +550,9 @@ TEST_F(SSLClientSocketPoolTest, SOCKSBasicAsync) {
   EXPECT_EQ(OK, callback.WaitForResult());
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  // SOCKS5 generally has no DNS times, but the mock SOCKS5 sockets used here
+  // don't go through the real logic, unlike in the HTTP proxy tests.
+  TestLoadTimingInfo(handle);
 }
 
 TEST_F(SSLClientSocketPoolTest, HttpProxyFail) {
@@ -580,6 +627,7 @@ TEST_F(SSLClientSocketPoolTest, HttpProxyBasic) {
   EXPECT_EQ(OK, rv);
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfoNoDns(handle);
 }
 
 TEST_F(SSLClientSocketPoolTest, HttpProxyBasicAsync) {
@@ -614,6 +662,7 @@ TEST_F(SSLClientSocketPoolTest, HttpProxyBasicAsync) {
   EXPECT_EQ(OK, callback.WaitForResult());
   EXPECT_TRUE(handle.is_initialized());
   EXPECT_TRUE(handle.socket());
+  TestLoadTimingInfoNoDns(handle);
 }
 
 TEST_F(SSLClientSocketPoolTest, NeedProxyAuth) {

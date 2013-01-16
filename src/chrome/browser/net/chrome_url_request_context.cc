@@ -68,11 +68,12 @@ class FactoryForExtensions : public ChromeURLRequestContextFactory {
 // Factory that creates the ChromeURLRequestContext for a given isolated app.
 class FactoryForIsolatedApp : public ChromeURLRequestContextFactory {
  public:
-  FactoryForIsolatedApp(const ProfileIOData* profile_io_data,
-                        const StoragePartitionDescriptor& partition_descriptor,
-                        ChromeURLRequestContextGetter* main_context,
-                        scoped_ptr<net::URLRequestJobFactory::Interceptor>
-                            protocol_handler_interceptor)
+  FactoryForIsolatedApp(
+      const ProfileIOData* profile_io_data,
+      const StoragePartitionDescriptor& partition_descriptor,
+      ChromeURLRequestContextGetter* main_context,
+      scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
+          protocol_handler_interceptor)
       : profile_io_data_(profile_io_data),
         partition_descriptor_(partition_descriptor),
         main_request_context_getter_(main_context),
@@ -94,7 +95,7 @@ class FactoryForIsolatedApp : public ChromeURLRequestContextFactory {
   const StoragePartitionDescriptor partition_descriptor_;
   scoped_refptr<ChromeURLRequestContextGetter>
       main_request_context_getter_;
-  scoped_ptr<net::URLRequestJobFactory::Interceptor>
+  scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
       protocol_handler_interceptor_;
 };
 
@@ -211,7 +212,7 @@ ChromeURLRequestContextGetter::CreateOriginalForIsolatedApp(
     Profile* profile,
     const ProfileIOData* profile_io_data,
     const StoragePartitionDescriptor& partition_descriptor,
-    scoped_ptr<net::URLRequestJobFactory::Interceptor>
+    scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
         protocol_handler_interceptor) {
   DCHECK(!profile->IsOffTheRecord());
   ChromeURLRequestContextGetter* main_context =
@@ -258,7 +259,7 @@ ChromeURLRequestContextGetter::CreateOffTheRecordForIsolatedApp(
     Profile* profile,
     const ProfileIOData* profile_io_data,
     const StoragePartitionDescriptor& partition_descriptor,
-    scoped_ptr<net::URLRequestJobFactory::Interceptor>
+    scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
         protocol_handler_interceptor) {
   DCHECK(profile->IsOffTheRecord());
   ChromeURLRequestContextGetter* main_context =
@@ -276,7 +277,6 @@ ChromeURLRequestContext::ChromeURLRequestContext(
     ContextType type,
     chrome_browser_net::LoadTimeStats* load_time_stats)
     : ALLOW_THIS_IN_INITIALIZER_LIST(weak_factory_(this)),
-      chrome_url_data_manager_backend_(NULL),
       is_incognito_(false),
       load_time_stats_(load_time_stats) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
@@ -294,17 +294,5 @@ void ChromeURLRequestContext::CopyFrom(ChromeURLRequestContext* other) {
   URLRequestContext::CopyFrom(other);
 
   // Copy ChromeURLRequestContext parameters.
-  // ChromeURLDataManagerBackend is unique per context.
   set_is_incognito(other->is_incognito());
-}
-
-ChromeURLDataManagerBackend*
-ChromeURLRequestContext::chrome_url_data_manager_backend() const {
-    return chrome_url_data_manager_backend_;
-}
-
-void ChromeURLRequestContext::set_chrome_url_data_manager_backend(
-        ChromeURLDataManagerBackend* backend) {
-  DCHECK(backend);
-  chrome_url_data_manager_backend_ = backend;
 }

@@ -182,6 +182,8 @@
         'base/load_flags_list.h',
         'base/load_states.h',
         'base/load_states_list.h',
+        'base/load_timing_info.cc',
+        'base/load_timing_info.h',
         'base/mapped_host_resolver.cc',
         'base/mapped_host_resolver.h',
         'base/mime_sniffer.cc',
@@ -1169,6 +1171,8 @@
               'third_party/nss/ssl.gyp:libssl',
               'tld_cleanup',
             ],
+            # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+            'msvs_disabled_warnings': [4267, ],
           }, { # else: OS != "win"
             'sources!': [
               'base/winsock_init.cc',
@@ -1692,6 +1696,8 @@
               '../third_party/nss/nss.gyp:nss',
               'third_party/nss/ssl.gyp:libssl',
             ],
+            # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+            'msvs_disabled_warnings': [4267, ],
           },
         ],
         [ 'OS == "mac"', {
@@ -1824,6 +1830,8 @@
             'dependencies': [
               '../third_party/icu/icu.gyp:icudata',
             ],
+            # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+            'msvs_disabled_warnings': [4267, ],
           },
         ],
       ],
@@ -1847,6 +1855,8 @@
         'base/capturing_net_log.h',
         'base/cert_test_util.cc',
         'base/cert_test_util.h',
+        'base/load_timing_info_test_util.cc',
+        'base/load_timing_info_test_util.h',
         'base/mock_cert_verifier.cc',
         'base/mock_cert_verifier.h',
         'base/mock_file_stream.cc',
@@ -1955,6 +1965,8 @@
           },
         ],
       ],
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      'msvs_disabled_warnings': [4267, ],
     },
     {
       'target_name': 'net_resources',
@@ -1991,6 +2003,8 @@
         'server/web_socket.cc',
         'server/web_socket.h',
       ],
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      'msvs_disabled_warnings': [4267, ],
     },
     {
       'target_name': 'dump_cache',
@@ -2015,6 +2029,8 @@
         'tools/dump_cache/url_utilities.h',
         'tools/dump_cache/url_utilities.cc',
       ],
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      'msvs_disabled_warnings': [4267, ],
     },
   ],
   'conditions': [
@@ -2039,6 +2055,8 @@
             'proxy/proxy_service_v8.cc',
             'proxy/proxy_service_v8.h',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
       ],
     }],
@@ -2057,6 +2075,8 @@
           'sources': [
             'tools/crash_cache/crash_cache.cc',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
         {
           'target_name': 'crl_set_dump',
@@ -2068,6 +2088,8 @@
           'sources': [
             'tools/crl_set_dump/crl_set_dump.cc',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
         {
           'target_name': 'dns_fuzz_stub',
@@ -2079,6 +2101,8 @@
           'sources': [
             'tools/dns_fuzz_stub/dns_fuzz_stub.cc',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
         {
           'target_name': 'fetch_client',
@@ -2095,6 +2119,8 @@
           'sources': [
             'tools/fetch/fetch_client.cc',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
         {
           'target_name': 'fetch_server',
@@ -2118,6 +2144,8 @@
             'tools/fetch/http_session.cc',
             'tools/fetch/http_session.h',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
         {
           'target_name': 'gdig',
@@ -2143,6 +2171,8 @@
           'sources': [
             'tools/get_server_time/get_server_time.cc',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
         {
           'target_name': 'net_watcher',
@@ -2190,6 +2220,8 @@
           'sources': [
             'disk_cache/stress_cache.cc',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
         {
           'target_name': 'tld_cleanup',
@@ -2202,6 +2234,8 @@
           'sources': [
             'tools/tld_cleanup/tld_cleanup.cc',
           ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [4267, ],
         },
       ],
     }],

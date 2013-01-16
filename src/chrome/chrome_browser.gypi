@@ -110,16 +110,13 @@
         'browser/api/infobars/infobar_delegate.cc',
         'browser/api/infobars/infobar_delegate.h',
         'browser/api/infobars/infobar_service.h',
-        'browser/api/infobars/link_infobar_delegate.cc',
-        'browser/api/infobars/link_infobar_delegate.h',
-        'browser/api/infobars/one_click_signin_infobar_delegate.cc',
-        'browser/api/infobars/one_click_signin_infobar_delegate.h',
         'browser/api/infobars/simple_alert_infobar_delegate.cc',
         'browser/api/infobars/simple_alert_infobar_delegate.h',
         'browser/api/sync/profile_sync_service_base.h',
         'browser/api/sync/profile_sync_service_observer.h',
         'browser/api/webdata/autofill_web_data.h',
         'browser/api/webdata/autofill_web_data_service.h',
+        'browser/api/webdata/web_data_results.cc',
         'browser/api/webdata/web_data_results.h',
         'browser/api/webdata/web_data_service_base.h',
         'browser/api/webdata/web_data_service_consumer.h',
@@ -250,6 +247,8 @@
         'browser/autofill/wallet/cart.h',
         'browser/autofill/wallet/full_wallet.cc',
         'browser/autofill/wallet/full_wallet.h',
+        'browser/autofill/wallet/required_action.cc',
+        'browser/autofill/wallet/required_action.h',
         'browser/autofill/wallet/wallet_address.cc',
         'browser/autofill/wallet/wallet_address.h',
         'browser/autofill/wallet/wallet_client.cc',
@@ -432,14 +431,10 @@
         'browser/chrome_browser_main_x11.h',
         'browser/chrome_content_browser_client.cc',
         'browser/chrome_content_browser_client.h',
-        'browser/chrome_metrics_helper.cc',
-        'browser/chrome_metrics_helper.h',
         'browser/chrome_page_zoom.cc',
         'browser/chrome_page_zoom.h',
         'browser/chrome_page_zoom_constants.cc',
         'browser/chrome_page_zoom_constants.h',
-        'browser/chrome_plugin_service_filter.cc',
-        'browser/chrome_plugin_service_filter.h',
         'browser/chrome_quota_permission_context.cc',
         'browser/chrome_quota_permission_context.h',
         'browser/chrome_to_mobile_service.cc',
@@ -634,8 +629,6 @@
         'browser/geolocation/geolocation_confirm_infobar_delegate.h',
         'browser/geolocation/geolocation_confirm_infobar_delegate_android.cc',
         'browser/geolocation/geolocation_confirm_infobar_delegate_android.h',
-        'browser/geolocation/geolocation_confirm_infobar_delegate_factory.cc',
-        'browser/geolocation/geolocation_confirm_infobar_delegate_factory.h',
         'browser/geolocation/geolocation_infobar_queue_controller.cc',
         'browser/geolocation/geolocation_infobar_queue_controller.h',
         'browser/geolocation/geolocation_permission_request_id.cc',
@@ -677,6 +670,10 @@
         'browser/google_apis/drive_api_operations.h',
         'browser/google_apis/drive_api_parser.cc',
         'browser/google_apis/drive_api_parser.h',
+        'browser/google_apis/drive_api_service.cc',
+        'browser/google_apis/drive_api_service.h',
+        'browser/google_apis/drive_api_url_generator.cc',
+        'browser/google_apis/drive_api_url_generator.h',
         'browser/google_apis/drive_api_util.cc',
         'browser/google_apis/drive_api_util.h',
         'browser/google_apis/drive_entry_kinds.h',
@@ -915,6 +912,8 @@
         'browser/importer/toolbar_importer.h',
         'browser/importer/toolbar_importer_utils.cc',
         'browser/importer/toolbar_importer_utils.h',
+        'browser/infobars/alternate_nav_infobar_delegate.cc',
+        'browser/infobars/alternate_nav_infobar_delegate.h',
         'browser/infobars/infobar.cc',
         'browser/infobars/infobar.h',
         'browser/infobars/infobar_container.cc',
@@ -942,15 +941,12 @@
         'browser/intents/cws_intents_registry.cc',
         'browser/intents/cws_intents_registry.h',
         'browser/intents/cws_intents_registry_factory.cc',
-        'browser/intents/device_attached_intent_source.cc',
-        'browser/intents/device_attached_intent_source.h',
         'browser/intents/cws_intents_registry_factory.h',
         'browser/intents/default_web_intent_service.cc',
         'browser/intents/default_web_intent_service.h',
         'browser/intents/intent_service_host.h',
         'browser/intents/native_services.cc',
         'browser/intents/native_services.h',
-        'browser/intents/register_intent_handler_helper.cc',
         'browser/intents/register_intent_handler_infobar_delegate.cc',
         'browser/intents/register_intent_handler_infobar_delegate.h',
         'browser/intents/web_intents_registry.cc',
@@ -1078,6 +1074,8 @@
         'browser/metrics/tracking_synchronizer_observer.h',
         'browser/metrics/variations/resource_request_allowed_notifier.cc',
         'browser/metrics/variations/resource_request_allowed_notifier.h',
+        'browser/metrics/variations/variations_http_header_provider.cc',
+        'browser/metrics/variations/variations_http_header_provider.h',
         'browser/metrics/variations/variations_service.cc',
         'browser/metrics/variations/variations_service.h',
         'browser/native_window_notification_source.h',
@@ -1284,14 +1282,18 @@
         'browser/platform_util_linux.cc',
         'browser/platform_util_mac.mm',
         'browser/platform_util_win.cc',
+        'browser/plugins/chrome_plugin_service_filter.cc',
+        'browser/plugins/chrome_plugin_service_filter.h',
         'browser/plugins/plugin_data_remover_helper.cc',
         'browser/plugins/plugin_data_remover_helper.h',
         'browser/plugins/plugin_finder.cc',
         'browser/plugins/plugin_finder.h',
-        'browser/plugins/plugin_installer.cc',
-        'browser/plugins/plugin_installer.h',
+        'browser/plugins/plugin_info_message_filter.cc',
+        'browser/plugins/plugin_info_message_filter.h',
         'browser/plugins/plugin_infobar_delegates.cc',
         'browser/plugins/plugin_infobar_delegates.h',
+        'browser/plugins/plugin_installer.cc',
+        'browser/plugins/plugin_installer.h',
         'browser/plugins/plugin_installer_observer.cc',
         'browser/plugins/plugin_installer_observer.h',
         'browser/plugins/plugin_metadata.cc',
@@ -1485,13 +1487,13 @@
         'browser/prefs/pref_service.h',
         'browser/prefs/pref_service_builder.cc',
         'browser/prefs/pref_service_builder.h',
-        'browser/prefs/pref_service_observer.h',
         'browser/prefs/pref_service_simple.cc',
         'browser/prefs/pref_service_simple.h',
         'browser/prefs/pref_service_syncable.cc',
         'browser/prefs/pref_service_syncable.h',
         'browser/prefs/pref_service_syncable_builder.cc',
         'browser/prefs/pref_service_syncable_builder.h',
+        'browser/prefs/pref_service_syncable_observer.h',
         'browser/prefs/pref_value_store.cc',
         'browser/prefs/pref_value_store.h',
         'browser/prefs/proxy_config_dictionary.cc',
@@ -1672,8 +1674,6 @@
         'browser/renderer_host/pepper/pepper_flash_device_id_host.h',
         'browser/renderer_host/pepper/pepper_talk_host.cc',
         'browser/renderer_host/pepper/pepper_talk_host.h',
-        'browser/renderer_host/plugin_info_message_filter.cc',
-        'browser/renderer_host/plugin_info_message_filter.h',
         'browser/renderer_host/safe_browsing_resource_throttle.cc',
         'browser/renderer_host/safe_browsing_resource_throttle.h',
         'browser/renderer_host/safe_browsing_resource_throttle_factory.cc',
@@ -2166,12 +2166,11 @@
         'browser/value_store/value_store.h',
         'browser/view_type_utils.cc',
         'browser/view_type_utils.h',
+        'browser/visitedlink/visitedlink_delegate.h',
         'browser/visitedlink/visitedlink_event_listener.cc',
         'browser/visitedlink/visitedlink_event_listener.h',
         'browser/visitedlink/visitedlink_master.cc',
         'browser/visitedlink/visitedlink_master.h',
-        'browser/visitedlink/visitedlink_master_factory.cc',
-        'browser/visitedlink/visitedlink_master_factory.h',
         'browser/web_applications/web_app.cc',
         'browser/web_applications/web_app.h',
         'browser/web_applications/web_app_android.cc',
@@ -2210,6 +2209,8 @@
         'browser/webdata/token_service_table.h',
         'browser/webdata/web_apps_table.cc',
         'browser/webdata/web_apps_table.h',
+        'browser/webdata/web_data_request_manager.cc',
+        'browser/webdata/web_data_request_manager.h',
         'browser/webdata/web_data_service.cc',
         'browser/webdata/web_data_service.h',
         'browser/webdata/web_data_service_factory.cc',
@@ -2235,6 +2236,7 @@
         '<(grit_out_dir)/grit/devtools_discovery_page_resources_map.cc',
         '<(grit_out_dir)/grit/shared_resources_map.cc',
         '<(grit_out_dir)/grit/theme_resources_map.cc',
+        '<(SHARED_INTERMEDIATE_DIR)/ui/ui_resources/grit/ui_resources_map.cc',
 
         # This file is generated by the autofill_regexes action.
         '<(SHARED_INTERMEDIATE_DIR)/autofill_regex_constants.cc',
@@ -2300,12 +2302,6 @@
             # CoreImage is iOS 5+, but iOS 4.3 is still supported.
             'xcode_settings': {'OTHER_LDFLAGS': ['-weak_framework CoreImage']},
           },
-        }],
-        ['enable_one_click_signin==0', {
-          'sources!': [
-            'browser/api/infobars/one_click_signin_infobar_delegate.cc',
-            'browser/api/infobars/one_click_signin_infobar_delegate.h',
-          ],
         }],
         ['enable_extensions==1', {
           'sources': [
@@ -2398,12 +2394,6 @@
             ['exclude', '^browser/plugins/'],
             ['exclude', '^browser/renderer_host/pepper/'],
           ],
-          'sources!': [
-            'browser/chrome_plugin_service_filter.cc',
-            'browser/chrome_plugin_service_filter.h',
-            'browser/renderer_host/plugin_info_message_filter.cc',
-            'browser/renderer_host/plugin_info_message_filter.h',
-          ],
         }],
         ['safe_browsing==1', {
           'defines': [
@@ -2464,15 +2454,10 @@
         }],
         ['OS=="linux"', {
           'dependencies': [
-            'mtp_file_entry_proto',
-            'mtp_storage_info_proto',
             '../build/linux/system.gyp:udev',
-          ],
-          'sources': [
-            'browser/media_transfer_protocol/media_transfer_protocol_daemon_client.cc',
-            'browser/media_transfer_protocol/media_transfer_protocol_daemon_client.h',
-            'browser/media_transfer_protocol/media_transfer_protocol_manager.cc',
-            'browser/media_transfer_protocol/media_transfer_protocol_manager.h',
+            '../device/device.gyp:mtp_file_entry_proto',
+            '../device/device.gyp:mtp_storage_info_proto',
+            '../device/device.gyp:device_media_transfer_protocol',
           ],
         }],
         ['OS=="linux" and chromeos==0', {
@@ -2484,8 +2469,6 @@
           'sources!': [
             'browser/extensions/api/input_ime/input_ime_api.cc',
             'browser/extensions/api/input_ime/input_ime_api.h',
-            'browser/extensions/api/input_ime/input_ime_api_factory.cc',
-            'browser/extensions/api/input_ime/input_ime_api_factory.h',
             'browser/extensions/api/terminal/terminal_extension_helper.cc',
             'browser/extensions/api/terminal/terminal_extension_helper.h',
             'browser/extensions/api/terminal/terminal_private_api.cc',
@@ -2757,7 +2740,7 @@
         }],
         ['OS=="android"', {
           'dependencies': [
-            '../content/content.gyp:web_contents_delegate_android',
+            '../components/components.gyp:web_contents_delegate_android',
             'chrome_browser_jni_headers',
           ],
           'dependencies!': [
@@ -2896,6 +2879,15 @@
             '../ui/views/views.gyp:views',
             '../win8/win8.gyp:win8_util',
           ],
+          'direct_dependent_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'DelayLoadDLLs': [
+                  'propsys.dll',
+                ],
+              },
+            },
+          },
           'export_dependent_settings': [
             '../ui/views/controls/webview/webview.gyp:webview',
             '../ui/views/views.gyp:views',
@@ -2989,6 +2981,16 @@
           'dependencies': [
             '../ui/app_list/app_list.gyp:app_list',
           ]
+        }],
+        ['enable_message_center==1', {
+          'dependencies': [
+            '../ui/message_center/message_center.gyp:message_center',
+          ],
+        }, {  # enable_message_center==0
+          'sources!': [
+            'browser/notifications/message_center_notification_manager.cc',
+            'browser/notifications/message_center_notification_manager.h',
+          ],
         }],
       ],
       'target_conditions': [
@@ -3118,6 +3120,7 @@
             'android/java/src/org/chromium/chrome/browser/DevToolsServer.java',
             'android/java/src/org/chromium/chrome/browser/IntentHelper.java',
             'android/java/src/org/chromium/chrome/browser/JavascriptAppModalDialog.java',
+            'android/java/src/org/chromium/chrome/browser/NavigationPopup.java',
             'android/java/src/org/chromium/chrome/browser/ProcessUtils.java',
             'android/java/src/org/chromium/chrome/browser/TabBase.java',
             'android/java/src/org/chromium/chrome/browser/database/SQLiteCursor.java',
@@ -3126,39 +3129,6 @@
             'jni_gen_dir': 'chrome',
           },
           'includes': [ '../build/jni_generator.gypi' ],
-        },
-      ],
-     },
-    ],
-    ['OS=="linux"', {
-      'targets': [
-        {
-          # Protobuf compiler / generator for the MtpFileEntry and
-          # MtpFileEntries protocol buffers.
-          'target_name': 'mtp_file_entry_proto',
-          'type': 'static_library',
-          'sources': [
-            '../third_party/cros_system_api/dbus/mtp_file_entry.proto',
-          ],
-          'variables': {
-            'proto_in_dir': '../third_party/cros_system_api/dbus',
-            'proto_out_dir': 'chrome/browser/media_transfer_protocol',
-          },
-          'includes': ['../build/protoc.gypi'],
-        },
-        {
-          # Protobuf compiler / generator for the MtpStorageInfo protocol
-          # buffer.
-          'target_name': 'mtp_storage_info_proto',
-          'type': 'static_library',
-          'sources': [
-            '../third_party/cros_system_api/dbus/mtp_storage_info.proto',
-          ],
-          'variables': {
-            'proto_in_dir': '../third_party/cros_system_api/dbus',
-            'proto_out_dir': 'chrome/browser/media_transfer_protocol',
-          },
-          'includes': ['../build/protoc.gypi'],
         },
       ],
      },

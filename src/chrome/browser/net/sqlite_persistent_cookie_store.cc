@@ -108,7 +108,7 @@ class SQLitePersistentCookieStore::Backend
 
   class KillDatabaseErrorDelegate : public sql::ErrorDelegate {
    public:
-    KillDatabaseErrorDelegate(Backend* backend);
+    explicit KillDatabaseErrorDelegate(Backend* backend);
 
     virtual ~KillDatabaseErrorDelegate() {}
 
@@ -118,12 +118,6 @@ class SQLitePersistentCookieStore::Backend
                         sql::Statement* stmt) OVERRIDE;
 
    private:
-
-    class HistogramUniquifier {
-     public:
-      static const char* name() { return "Sqlite.Cookie.Error"; }
-    };
-
     // Do not increment the count on Backend, as that would create a circular
     // reference (Backend -> Connection -> ErrorDelegate -> Backend).
     Backend* backend_;
@@ -291,8 +285,6 @@ KillDatabaseErrorDelegate(Backend* backend)
 
 int SQLitePersistentCookieStore::Backend::KillDatabaseErrorDelegate::OnError(
     int error, sql::Connection* connection, sql::Statement* stmt) {
-  sql::LogAndRecordErrorInHistogram<HistogramUniquifier>(error, connection);
-
   // Do not attempt to kill database more than once. If the first time failed,
   // it is unlikely that a second time will be successful.
   if (!attempted_to_kill_database_ && sql::IsErrorCatastrophic(error)) {
@@ -549,6 +541,7 @@ bool SQLitePersistentCookieStore::Backend::InitializeDatabase() {
     UMA_HISTOGRAM_COUNTS("Cookie.DBSizeInKB", db_size / 1024 );
 
   db_.reset(new sql::Connection);
+  db_->set_error_histogram_name("Sqlite.Cookie.Error");
   db_->set_error_delegate(new KillDatabaseErrorDelegate(this));
 
   if (!db_->Open(path_)) {
@@ -1089,38 +1082,28 @@ void SQLitePersistentCookieStore::LoadCookiesForKey(
 }
 
 void SQLitePersistentCookieStore::AddCookie(const net::CanonicalCookie& cc) {
-  if (backend_.get())
-    backend_->AddCookie(cc);
+  backend_->AddCookie(cc);
 }
 
 void SQLitePersistentCookieStore::UpdateCookieAccessTime(
     const net::CanonicalCookie& cc) {
-  if (backend_.get())
-    backend_->UpdateCookieAccessTime(cc);
+  backend_->UpdateCookieAccessTime(cc);
 }
 
 void SQLitePersistentCookieStore::DeleteCookie(const net::CanonicalCookie& cc) {
-  if (backend_.get())
-    backend_->DeleteCookie(cc);
+  backend_->DeleteCookie(cc);
 }
 
 void SQLitePersistentCookieStore::SetForceKeepSessionState() {
-  if (backend_.get())
-    backend_->SetForceKeepSessionState();
+  backend_->SetForceKeepSessionState();
 }
 
 void SQLitePersistentCookieStore::Flush(const base::Closure& callback) {
-  if (backend_.get())
-    backend_->Flush(callback);
-  else if (!callback.is_null())
-    MessageLoop::current()->PostTask(FROM_HERE, callback);
+  backend_->Flush(callback);
 }
 
 SQLitePersistentCookieStore::~SQLitePersistentCookieStore() {
-  if (backend_.get()) {
-    backend_->Close();
-    // Release our reference, it will probably still have a reference if the
-    // background thread has not run Close() yet.
-    backend_ = NULL;
-  }
+  backend_->Close();
+  // We release our reference to the Backend, though it will probably still have
+  // a reference if the background thread has not run Close() yet.
 }
