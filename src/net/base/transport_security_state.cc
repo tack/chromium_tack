@@ -543,7 +543,8 @@ struct HSTSPreload {
   SecondLevelDomainName second_level_domain_name;
 };
 
-static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
+bool TransportSecurityState::HasPreload(const struct HSTSPreload* entries, 
+                       size_t num_entries,
                        const std::string& canonicalized_host, size_t i,
                        TransportSecurityState::DomainState* out, bool* ret) {
   for (size_t j = 0; j < num_entries; j++) {
@@ -753,11 +754,11 @@ TransportSecurityState::DomainState::~DomainState() {
 bool TransportSecurityState::DomainState::CheckPublicKeyPins(
     const HashValueVector& hashes) const {
 
-  // Pins are not checked if the build is too old.
+  // Pin-checking is skipped if the build is too old
   if (!TransportSecurityState::IsBuildTimely())
     return true;
 
-  // Pins are not checked if none exist
+  // Pin-checking is skipped if no pins exist
   if ((dynamic_spki_hashes.empty() && static_spki_hashes.empty()) &&
       bad_static_spki_hashes.empty())
     return true;
@@ -773,8 +774,8 @@ bool TransportSecurityState::DomainState::CheckPublicKeyPins(
     return false;
   }
 
-  // Accept any chain if there are no good hashes, or there is 
-  // an intersection
+  // Accept any chain if there are no good hashes, or the good hashes 
+  // intersect the chain hashes
   if ((dynamic_spki_hashes.empty() && static_spki_hashes.empty()) || 
       HashesIntersect(dynamic_spki_hashes, hashes) ||
       HashesIntersect(static_spki_hashes, hashes)) {
@@ -783,6 +784,7 @@ bool TransportSecurityState::DomainState::CheckPublicKeyPins(
   }
 
   // Reject the chain if there are good hashes but no intersection
+  // with the chain hashes
   LOG(ERROR) << "Rejecting public key chain for domain " << domain
              << ". Validated chain: " << HashesToBase64String(hashes)
              << ", expected: " << HashesToBase64String(dynamic_spki_hashes)

@@ -52,11 +52,6 @@ class NET_EXPORT TransportSecurityState
   // to HTTPS, and/or any public key pins).
   class NET_EXPORT DomainState {
    public:
-    enum UpgradeMode {
-      // These numbers must match those in hsts_view.js, function modeToString.
-      MODE_FORCE_HTTPS = 0,
-      MODE_DEFAULT = 1,
-    };
 
     DomainState();
     ~DomainState();
@@ -85,6 +80,12 @@ class NET_EXPORT TransportSecurityState
     bool ShouldUpgradeToSSL() const;
 
     bool ShouldSSLErrorsBeFatal() const;
+
+    enum UpgradeMode {
+      // These numbers must match those in hsts_view.js, function modeToString.
+      MODE_FORCE_HTTPS = 0,
+      MODE_DEFAULT = 1,
+    };
 
     UpgradeMode upgrade_mode;
 
@@ -267,6 +268,12 @@ class NET_EXPORT TransportSecurityState
   static bool IsBuildTimely();
 
  private:
+
+  bool HasPreload(const struct HSTSPreload* entries, 
+                  size_t num_entries,
+                  const std::string& canonicalized_host, size_t i,
+                  TransportSecurityState::DomainState* out, bool* ret);
+
   // If a Delegate is present, notify it that the internal state has
   // changed.
   void DirtyNotify();
