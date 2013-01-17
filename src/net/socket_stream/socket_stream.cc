@@ -1260,12 +1260,14 @@ int SocketStream::HandleCertificateError(int result) {
 
   TransportSecurityState::DomainState domain_state;
   DCHECK(context_);
-  const bool fatal =
-      context_->transport_security_state() &&
+  bool fatal = false;
+
+  if (context_->transport_security_state() &&
       context_->transport_security_state()->GetDomainState(
           url_.host(),
           SSLConfigService::IsSNIAvailable(context_->ssl_config_service()),
-          &domain_state);
+          &domain_state))
+      fatal = domain_state.ShouldSSLErrorsBeFatal();
 
   delegate_->OnSSLCertificateError(this, ssl_info, fatal);
   return ERR_IO_PENDING;

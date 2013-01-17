@@ -77,18 +77,14 @@ class NET_EXPORT TransportSecurityState
     //
     // |bad_static_spki_hashes| contains public keys that we don't want to
     // trust.
-    bool IsChainOfPublicKeysPermitted(const HashValueVector& hashes) const;
 
-    // Returns true if any of the HashValueVectors |static_spki_hashes|,
-    // |bad_static_spki_hashes|, or |dynamic_spki_hashes| contains any
-    // items.
-    bool HasPins() const;
+    bool CheckPublicKeyPins(const HashValueVector& hashes) const;
 
     // ShouldUpgradeToSSL returns true iff, given the |mode| of this
     // DomainState, HTTP requests should be internally redirected to HTTPS.
     bool ShouldUpgradeToSSL() const;
 
-    bool Equals(const DomainState& other) const;
+    bool ShouldSSLErrorsBeFatal() const;
 
     UpgradeMode upgrade_mode;
 

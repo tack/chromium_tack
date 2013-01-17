@@ -3425,18 +3425,10 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
     TransportSecurityState::DomainState domain_state;
     if (transport_security_state_->GetDomainState(host, sni_available,
-                                                  &domain_state) &&
-        domain_state.HasPins()) {
-      if (!domain_state.IsChainOfPublicKeysPermitted(
-               server_cert_verify_result_.public_key_hashes)) {
-        // Pins are not enforced if the build is too old.
-        if (TransportSecurityState::IsBuildTimely()) {
-          result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
-          UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
-          TransportSecurityState::ReportUMAOnPinFailure(host);
-        }
-      } else {
-        UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);
+                                                  &domain_state)) {
+      if (!domain_state.CheckPublicKeyPins(
+            server_cert_verify_result_.public_key_hashes)) {
+        result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
       }
     }
   }
