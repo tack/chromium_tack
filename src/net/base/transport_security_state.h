@@ -52,6 +52,11 @@ class NET_EXPORT TransportSecurityState
   // to HTTPS, and/or any public key pins).
   class NET_EXPORT DomainState {
    public:
+    enum UpgradeMode {
+      // These numbers must match those in hsts_view.js, function modeToString.
+      MODE_FORCE_HTTPS = 0,
+      MODE_DEFAULT = 1,
+    };
 
     DomainState();
     ~DomainState();
@@ -72,20 +77,21 @@ class NET_EXPORT TransportSecurityState
     //
     // |bad_static_spki_hashes| contains public keys that we don't want to
     // trust.
-
     bool CheckPublicKeyPins(const HashValueVector& hashes) const;
 
+    // Returns true if any of the HashValueVectors |static_spki_hashes|,
+    // |bad_static_spki_hashes|, or |dynamic_spki_hashes| contains any
+    // items.
+    bool HasPublicKeyPins() const;
+
     // ShouldUpgradeToSSL returns true iff, given the |mode| of this
-    // DomainState, HTTP requests should be internally redirected to HTTPS.
+    // DomainState, HTTP requests should be internally redirected to HTTPS
+    // (also if the "ws" WebSocket request should be upgraded to "wss")
     bool ShouldUpgradeToSSL() const;
 
+    // ShouldSSLErrorsBeFatal returns true iff HTTPS errors should cause
+    // hard-fail behavior (e.g. if HSTS is set for the domain)
     bool ShouldSSLErrorsBeFatal() const;
-
-    enum UpgradeMode {
-      // These numbers must match those in hsts_view.js, function modeToString.
-      MODE_FORCE_HTTPS = 0,
-      MODE_DEFAULT = 1,
-    };
 
     UpgradeMode upgrade_mode;
 
@@ -268,12 +274,6 @@ class NET_EXPORT TransportSecurityState
   static bool IsBuildTimely();
 
  private:
-
-  bool HasPreload(const struct HSTSPreload* entries, 
-                  size_t num_entries,
-                  const std::string& canonicalized_host, size_t i,
-                  TransportSecurityState::DomainState* out, bool* ret);
-
   // If a Delegate is present, notify it that the internal state has
   // changed.
   void DirtyNotify();

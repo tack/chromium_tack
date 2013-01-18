@@ -543,8 +543,7 @@ struct HSTSPreload {
   SecondLevelDomainName second_level_domain_name;
 };
 
-bool TransportSecurityState::HasPreload(const struct HSTSPreload* entries, 
-                       size_t num_entries,
+static bool HasPreload(const struct HSTSPreload* entries, size_t num_entries,
                        const std::string& canonicalized_host, size_t i,
                        TransportSecurityState::DomainState* out, bool* ret) {
   for (size_t j = 0; j < num_entries; j++) {
@@ -753,44 +752,36 @@ TransportSecurityState::DomainState::~DomainState() {
 
 bool TransportSecurityState::DomainState::CheckPublicKeyPins(
     const HashValueVector& hashes) const {
+  // Validate that hashes is not empty. By the time this code is called (in
+  // production), that should never happen, but it's good to be defensive.
+  // And, hashes *can* be empty in some test scenarios.
+  if (hashes.empty()) {
+    LOG(ERROR) << "Rejecting empty public key chain for public-key-pinned "
+                  "domain " << domain;
+    return false;
+  }
 
-  // Pin-checking is skipped if the build is too old
-  if (!TransportSecurityState::IsBuildTimely())
-    return true;
-
-  // Pin-checking is skipped if no pins exist
-  if ((dynamic_spki_hashes.empty() && static_spki_hashes.empty()) &&
-      bad_static_spki_hashes.empty())
-    return true;
-
-  // Reject any chain that intersects with bad hashes
   if (HashesIntersect(bad_static_spki_hashes, hashes)) {
     LOG(ERROR) << "Rejecting public key chain for domain " << domain
                << ". Validated chain: " << HashesToBase64String(hashes)
                << ", matches one or more bad hashes: "
                << HashesToBase64String(bad_static_spki_hashes);
-    UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
-    TransportSecurityState::ReportUMAOnPinFailure(domain);
     return false;
   }
 
-  // Accept any chain if there are no good hashes, or the good hashes 
-  // intersect the chain hashes
-  if ((dynamic_spki_hashes.empty() && static_spki_hashes.empty()) || 
-      HashesIntersect(dynamic_spki_hashes, hashes) ||
+  // If there are no pins, then any valid chain is acceptable.
+  if (dynamic_spki_hashes.empty() && static_spki_hashes.empty())
+    return true;
+
+  if (HashesIntersect(dynamic_spki_hashes, hashes) ||
       HashesIntersect(static_spki_hashes, hashes)) {
-    UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);
     return true;
   }
 
-  // Reject the chain if there are good hashes but no intersection
-  // with the chain hashes
   LOG(ERROR) << "Rejecting public key chain for domain " << domain
              << ". Validated chain: " << HashesToBase64String(hashes)
              << ", expected: " << HashesToBase64String(dynamic_spki_hashes)
              << " or: " << HashesToBase64String(static_spki_hashes);
-  UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
-  TransportSecurityState::ReportUMAOnPinFailure(domain);
   return false;
 }
 
@@ -800,6 +791,12 @@ bool TransportSecurityState::DomainState::ShouldUpgradeToSSL() const {
 
 bool TransportSecurityState::DomainState::ShouldSSLErrorsBeFatal() const {
   return true;
+}
+
+bool TransportSecurityState::DomainState::HasPublicKeyPins() const {
+  return static_spki_hashes.size() > 0 ||
+         bad_static_spki_hashes.size() > 0 ||
+         dynamic_spki_hashes.size() > 0;
 }
 
 }  // namespace
