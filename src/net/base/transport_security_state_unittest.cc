@@ -53,8 +53,7 @@ TEST_F(TransportSecurityStateTest, SimpleMatches) {
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
 
   EXPECT_FALSE(state.GetDomainState("yahoo.com", true, &domain_state));
-  domain_state.upgrade_expiry = expiry;
-  state.EnableHost("yahoo.com", domain_state);
+  state.AddHSTS("yahoo.com", expiry, false);
   EXPECT_TRUE(state.GetDomainState("yahoo.com", true, &domain_state));
 }
 
@@ -65,8 +64,7 @@ TEST_F(TransportSecurityStateTest, MatchesCase1) {
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
 
   EXPECT_FALSE(state.GetDomainState("yahoo.com", true, &domain_state));
-  domain_state.upgrade_expiry = expiry;
-  state.EnableHost("YAhoo.coM", domain_state);
+  state.AddHSTS("YAhoo.coM", expiry, false);
   EXPECT_TRUE(state.GetDomainState("yahoo.com", true, &domain_state));
 }
 
@@ -77,8 +75,7 @@ TEST_F(TransportSecurityStateTest, MatchesCase2) {
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
 
   EXPECT_FALSE(state.GetDomainState("YAhoo.coM", true, &domain_state));
-  domain_state.upgrade_expiry = expiry;
-  state.EnableHost("yahoo.com", domain_state);
+  state.AddHSTS("yahoo.com", expiry, false);
   EXPECT_TRUE(state.GetDomainState("YAhoo.coM", true, &domain_state));
 }
 
@@ -89,9 +86,7 @@ TEST_F(TransportSecurityStateTest, SubdomainMatches) {
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
 
   EXPECT_FALSE(state.GetDomainState("yahoo.com", true, &domain_state));
-  domain_state.upgrade_expiry = expiry;
-  domain_state.include_subdomains = true;
-  state.EnableHost("yahoo.com", domain_state);
+  state.AddHSTS("yahoo.com", expiry, true);
   EXPECT_TRUE(state.GetDomainState("yahoo.com", true, &domain_state));
   EXPECT_TRUE(state.GetDomainState("foo.yahoo.com", true, &domain_state));
   EXPECT_TRUE(state.GetDomainState("foo.bar.yahoo.com", true, &domain_state));
@@ -100,7 +95,7 @@ TEST_F(TransportSecurityStateTest, SubdomainMatches) {
   EXPECT_FALSE(state.GetDomainState("com", true, &domain_state));
 }
 
-TEST_F(TransportSecurityStateTest, DeleteSince) {
+TEST_F(TransportSecurityStateTest, DeleteAllDynamicDataSince) {
   TransportSecurityState state;
   TransportSecurityState::DomainState domain_state;
   const base::Time current_time(base::Time::Now());
@@ -108,30 +103,24 @@ TEST_F(TransportSecurityStateTest, DeleteSince) {
   const base::Time older = current_time - base::TimeDelta::FromSeconds(1000);
 
   EXPECT_FALSE(state.GetDomainState("yahoo.com", true, &domain_state));
-  domain_state.upgrade_mode =
-      TransportSecurityState::DomainState::MODE_FORCE_HTTPS;
-  domain_state.upgrade_expiry = expiry;
-  state.EnableHost("yahoo.com", domain_state);
+  state.AddHSTS("yahoo.com", expiry, false);
 
-  state.DeleteSince(expiry);
+  state.DeleteAllDynamicDataSince(expiry);
   EXPECT_TRUE(state.GetDomainState("yahoo.com", true, &domain_state));
-  state.DeleteSince(older);
+  state.DeleteAllDynamicDataSince(older);
   EXPECT_FALSE(state.GetDomainState("yahoo.com", true, &domain_state));
 }
 
-TEST_F(TransportSecurityStateTest, DeleteHost) {
+TEST_F(TransportSecurityStateTest, DeleteDynamicDataForHost) {
   TransportSecurityState state;
   TransportSecurityState::DomainState domain_state;
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
-  domain_state.upgrade_mode =
-      TransportSecurityState::DomainState::MODE_FORCE_HTTPS;
-  domain_state.upgrade_expiry = expiry;
-  state.EnableHost("yahoo.com", domain_state);
+  state.AddHSTS("yahoo.com", expiry, false);
 
   EXPECT_TRUE(state.GetDomainState("yahoo.com", true, &domain_state));
   EXPECT_FALSE(state.GetDomainState("example.com", true, &domain_state));
-  EXPECT_TRUE(state.DeleteHost("yahoo.com"));
+  EXPECT_TRUE(state.DeleteDynamicDataForHost("yahoo.com"));
   EXPECT_FALSE(state.GetDomainState("yahoo.com", true, &domain_state));
 }
 
