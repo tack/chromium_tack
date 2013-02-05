@@ -196,7 +196,7 @@ bool TransportSecurityState::GetDomainState(const std::string& host,
   return false;
 }
 
-void TransportSecurityState::DeleteAllDynamicData() {
+void TransportSecurityState::ClearDynamicData() {
   enabled_hosts_.clear();
 }
 

@@ -157,21 +157,48 @@ class NET_EXPORT TransportSecurityState
     std::map<std::string, DomainState>::const_iterator end_;
   };
 
+  // The following functions are all used only for serializing /
+  // deserializing TransportSecurityState: SetDelegate, ClearDynamicData,
+  // AddOrUpdatedEnabledHosts, AddOrUpdateForcedHosts
+
   // Assign a |Delegate| for persisting the transport security state. If
   // |NULL|, state will not be persisted. Caller owns |delegate|.
   void SetDelegate(Delegate* delegate);
 
-  // Deletes all dynamic data.
-  void DeleteAllDynamicData();
+  // Clears all dynamic data (e.g. HSTS or HPKP data).
+  //
+  // Does NOT persist changes using the Delegate, as this function is only
+  // used to clear any dynamic data prior to re-loading it from a file.
+  void ClearDynamicData();
 
-  // Deletes all dynamic data created since a given time.
+  // Inserts |state| into |enabled_hosts_| under the key |hashed_host|.
+  // |hashed_host| is already in the internal representation
+  // HashHost(CanonicalizeHost(host)); thus, most callers will use
+  // |EnableHost|.
+  void AddOrUpdateEnabledHosts(const std::string& hashed_host,
+                               const DomainState& state);
+
+  // Inserts |state| into |forced_hosts_| under the key |hashed_host|.
+  // |hashed_host| is already in the internal representation
+  // HashHost(CanonicalizeHost(host)); thus, most callers will use
+  // |EnableHost|.
+  void AddOrUpdateForcedHosts(const std::string& hashed_host,
+                              const DomainState& state);
+
+  // Deletes all dynamic data (e.g. HSTS or HPKP data) created since a given 
+  // time.
+  //
+  // If any entries are deleted, the new state will be persisted through 
+  // the Delegate (if any). 
   void DeleteAllDynamicDataSince(const base::Time& time);
 
-  // Deletes any dynamic data stored for |host|. If |host| doesn't have an
-  // exact entry then no action is taken. Does not delete static entries.
-  // Returns true iff an entry was deleted.
+  // Deletes any dynamic data stored for |host| (e.g. HSTS or HPKP data). 
+  // If |host| doesn't have an exact entry then no action is taken. Does 
+  // not delete static (i.e. preloaded) data.  Returns true iff an entry 
+  // was deleted.
   //
-  // The new state for |host| is persisted using the Delegate (if any).
+  // If an entry is deleted, the new state will be persisted through 
+  // the Delegate (if any). 
   bool DeleteDynamicDataForHost(const std::string& host);
 
   // Returns true and updates |*result| iff there is a DomainState for
@@ -188,20 +215,6 @@ class NET_EXPORT TransportSecurityState
   bool GetDomainState(const std::string& host,
                       bool sni_enabled,
                       DomainState* result);
-
-  // Inserts |state| into |enabled_hosts_| under the key |hashed_host|.
-  // |hashed_host| is already in the internal representation
-  // HashHost(CanonicalizeHost(host)); thus, most callers will use
-  // |EnableHost|.
-  void AddOrUpdateEnabledHosts(const std::string& hashed_host,
-                               const DomainState& state);
-
-  // Inserts |state| into |forced_hosts_| under the key |hashed_host|.
-  // |hashed_host| is already in the internal representation
-  // HashHost(CanonicalizeHost(host)); thus, most callers will use
-  // |EnableHost|.
-  void AddOrUpdateForcedHosts(const std::string& hashed_host,
-                              const DomainState& state);
 
   // Processes an HSTS header value from the host, adding entries to
   // dynamic state if necessary.
