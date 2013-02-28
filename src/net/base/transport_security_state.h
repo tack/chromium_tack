@@ -157,48 +157,51 @@ class NET_EXPORT TransportSecurityState
     std::map<std::string, DomainState>::const_iterator end_;
   };
 
-  // The following functions are all used only for serializing /
-  // deserializing TransportSecurityState: SetDelegate, ClearDynamicData,
-  // AddOrUpdatedEnabledHosts, AddOrUpdateForcedHosts
-
   // Assign a |Delegate| for persisting the transport security state. If
-  // |NULL|, state will not be persisted. Caller owns |delegate|.
+  // |NULL|, state will not be persisted. The caller retains
+  // ownership of |delegate|.
+  // Note: This is only used for serializing/deserializing the
+  // TransportSecurityState.
   void SetDelegate(Delegate* delegate);
 
-  // Clears all dynamic data (e.g. HSTS or HPKP data).
+  // Clears all dynamic data (e.g. HSTS and HPKP data).
   //
   // Does NOT persist changes using the Delegate, as this function is only
   // used to clear any dynamic data prior to re-loading it from a file.
+  // Note: This is only used for serializing/deserializing the
+  // TransportSecurityState.
   void ClearDynamicData();
 
   // Inserts |state| into |enabled_hosts_| under the key |hashed_host|.
   // |hashed_host| is already in the internal representation
-  // HashHost(CanonicalizeHost(host)); thus, most callers will use
-  // |EnableHost|.
+  // HashHost(CanonicalizeHost(host)).
+  // Note: This is only used for serializing/deserializing the
+  // TransportSecurityState.
   void AddOrUpdateEnabledHosts(const std::string& hashed_host,
                                const DomainState& state);
 
   // Inserts |state| into |forced_hosts_| under the key |hashed_host|.
   // |hashed_host| is already in the internal representation
-  // HashHost(CanonicalizeHost(host)); thus, most callers will use
-  // |EnableHost|.
+  // HashHost(CanonicalizeHost(host)).
+  // Note: This is only used for serializing/deserializing the
+  // TransportSecurityState.
   void AddOrUpdateForcedHosts(const std::string& hashed_host,
                               const DomainState& state);
 
-  // Deletes all dynamic data (e.g. HSTS or HPKP data) created since a given 
+  // Deletes all dynamic data (e.g. HSTS or HPKP data) created since a given
   // time.
   //
-  // If any entries are deleted, the new state will be persisted through 
-  // the Delegate (if any). 
+  // If any entries are deleted, the new state will be persisted through
+  // the Delegate (if any).
   void DeleteAllDynamicDataSince(const base::Time& time);
 
-  // Deletes any dynamic data stored for |host| (e.g. HSTS or HPKP data). 
-  // If |host| doesn't have an exact entry then no action is taken. Does 
-  // not delete static (i.e. preloaded) data.  Returns true iff an entry 
+  // Deletes any dynamic data stored for |host| (e.g. HSTS or HPKP data).
+  // If |host| doesn't have an exact entry then no action is taken. Does
+  // not delete static (i.e. preloaded) data.  Returns true iff an entry
   // was deleted.
   //
-  // If an entry is deleted, the new state will be persisted through 
-  // the Delegate (if any). 
+  // If an entry is deleted, the new state will be persisted through
+  // the Delegate (if any).
   bool DeleteDynamicDataForHost(const std::string& host);
 
   // Returns true and updates |*result| iff there is a DomainState for
@@ -268,16 +271,8 @@ class NET_EXPORT TransportSecurityState
 
  private:
   friend class TransportSecurityStateTest;
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest, SimpleMatches);
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest, MatchesCase1);
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest, MatchesCase2);
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest, SubdomainMatches);
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest,
-                           DeleteAllDynamicDataSince);
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest,
-                           DeleteDynamicDataForHost);
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest, IsPreloaded);
-  FRIEND_TEST_ALL_PREFIXES(TransportSecurityStateTest, OverrideBuiltins);
+
+  typedef std::map<std::string, DomainState> DomainStateMap;
 
   // If a Delegate is present, notify it that the internal state has
   // changed.
@@ -314,11 +309,11 @@ class NET_EXPORT TransportSecurityState
                             DomainState* result);
 
   // The set of hosts that have enabled TransportSecurity.
-  std::map<std::string, DomainState> enabled_hosts_;
+  DomainStateMap enabled_hosts_;
 
   // Extra entries, provided by the user at run-time, to treat as if they
   // were static.
-  std::map<std::string, DomainState> forced_hosts_;
+  DomainStateMap forced_hosts_;
 
   Delegate* delegate_;
 

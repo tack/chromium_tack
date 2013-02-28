@@ -133,7 +133,7 @@ bool TransportSecurityState::DeleteDynamicDataForHost(const std::string& host) {
   if (canonicalized_host.empty())
     return false;
 
-  std::map<std::string, DomainState>::iterator i = enabled_hosts_.find(
+  DomainStateMap::iterator i = enabled_hosts_.find(
       HashHost(canonicalized_host));
   if (i != enabled_hosts_.end()) {
     enabled_hosts_.erase(i);
@@ -168,7 +168,7 @@ bool TransportSecurityState::GetDomainState(const std::string& host,
       return true;
     }
 
-    std::map<std::string, DomainState>::iterator j =
+    DomainStateMap::iterator j =
         enabled_hosts_.find(HashHost(host_sub_chunk));
     if (j == enabled_hosts_.end())
       continue;
@@ -205,7 +205,7 @@ void TransportSecurityState::DeleteAllDynamicDataSince(const base::Time& time) {
 
   bool dirtied = false;
 
-  std::map<std::string, DomainState>::iterator i = enabled_hosts_.begin();
+  DomainStateMap::iterator i = enabled_hosts_.begin();
   while (i != enabled_hosts_.end()) {
     if (i->second.created >= time) {
       dirtied = true;
@@ -652,11 +652,10 @@ bool TransportSecurityState::AddHSTS(const std::string& host,
   TransportSecurityState::DomainState domain_state;
   const std::string canonicalized_host = CanonicalizeHost(host);
   const std::string hashed_host = HashHost(canonicalized_host);
-  std::map<std::string, DomainState>::iterator i = enabled_hosts_.find(
+  DomainStateMap::const_iterator i = enabled_hosts_.find(
       hashed_host);
-  if (i != enabled_hosts_.end()) {
+  if (i != enabled_hosts_.end())
     domain_state = i->second;
-  }
 
   domain_state.created = base::Time::Now();
   domain_state.include_subdomains = include_subdomains;
@@ -674,11 +673,10 @@ bool TransportSecurityState::AddHPKP(const std::string& host,
   TransportSecurityState::DomainState domain_state;
   const std::string canonicalized_host = CanonicalizeHost(host);
   const std::string hashed_host = HashHost(canonicalized_host);
-  std::map<std::string, DomainState>::iterator i = enabled_hosts_.find(
+  DomainStateMap::const_iterator i = enabled_hosts_.find(
       hashed_host);
-  if (i != enabled_hosts_.end()) {
+  if (i != enabled_hosts_.end())
     domain_state = i->second;
-  }
 
   domain_state.created = base::Time::Now();
   domain_state.include_subdomains = include_subdomains;

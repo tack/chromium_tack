@@ -69,7 +69,8 @@ TEST_F(TransportSecurityPersisterTest, SerializeData2) {
 
   EXPECT_FALSE(state_.GetDomainState(kYahooDomain, true, &domain_state));
 
-  state_.AddHSTS(kYahooDomain, expiry, true);
+  bool include_subdomains = true;
+  state_.AddHSTS(kYahooDomain, expiry, include_subdomains);
 
   std::string output;
   bool dirty;
@@ -103,8 +104,10 @@ TEST_F(TransportSecurityPersisterTest, SerializeData3) {
   net::HashValueVector dynamic_spki_hashes;
   dynamic_spki_hashes.push_back(fp1);
   dynamic_spki_hashes.push_back(fp2);
-  state_.AddHSTS("www.example.com", expiry, false);
-  state_.AddHPKP("www.example.com", expiry, false, dynamic_spki_hashes);
+  bool include_subdomains = false;
+  state_.AddHSTS("www.example.com", expiry, include_subdomains);
+  state_.AddHPKP("www.example.com", expiry, include_subdomains,
+                 dynamic_spki_hashes);
 
   // Add another entry.
   memset(fp1.data(), 2, fp1.size());
@@ -113,8 +116,9 @@ TEST_F(TransportSecurityPersisterTest, SerializeData3) {
       base::Time::Now() + base::TimeDelta::FromSeconds(3000);
   dynamic_spki_hashes.push_back(fp1);
   dynamic_spki_hashes.push_back(fp2);
-  state_.AddHSTS("www.example.net", expiry, false);
-  state_.AddHPKP("www.example.net", expiry, false, dynamic_spki_hashes);
+  state_.AddHSTS("www.example.net", expiry, include_subdomains);
+  state_.AddHPKP("www.example.net", expiry, include_subdomains,
+                 dynamic_spki_hashes);
 
   // Save a copy of everything.
   std::map<std::string, TransportSecurityState::DomainState> saved;
@@ -192,8 +196,10 @@ TEST_F(TransportSecurityPersisterTest, PublicKeyHashes) {
 
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
-  state_.AddHSTS(kTestDomain, expiry, false);
-  state_.AddHPKP(kTestDomain, expiry, false, domain_state.dynamic_spki_hashes);
+  bool include_subdomains = false;
+  state_.AddHSTS(kTestDomain, expiry, include_subdomains);
+  state_.AddHPKP(kTestDomain, expiry, include_subdomains,
+                 domain_state.dynamic_spki_hashes);
   std::string ser;
   EXPECT_TRUE(persister_->SerializeData(&ser));
   bool dirty;
