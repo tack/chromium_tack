@@ -45,7 +45,7 @@ class TransportSecurityStateTest : public testing::Test {
 #endif
   }
 
-protected:
+ protected:
   std::string CanonicalizeHost(const std::string& host) {
     return TransportSecurityState::CanonicalizeHost(host);
   }
