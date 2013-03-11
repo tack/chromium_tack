@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/file_path.h"
 #include "base/file_util.h"
+#include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/message_loop.h"
 #include "content/public/test/test_browser_thread.h"
@@ -26,7 +26,7 @@ class TransportSecurityPersisterTest : public testing::Test {
         test_io_thread_(content::BrowserThread::IO, &message_loop_) {
   }
 
-  ~TransportSecurityPersisterTest() {
+  virtual ~TransportSecurityPersisterTest() {
     message_loop_.RunUntilIdle();
   }
 
@@ -135,7 +135,7 @@ TEST_F(TransportSecurityPersisterTest, SerializeData3) {
   // just do it directly rather than call persister_->StateIsDirty. (That uses
   // ImportantFileWriter, which has an asynchronous commit interval rather
   // than block.) Use a different basename just for cleanliness.
-  FilePath path =
+  base::FilePath path =
       temp_dir_.path().AppendASCII("TransportSecurityPersisterTest");
   EXPECT_TRUE(file_util::WriteFile(path, serialized.c_str(),
                                    serialized.size()));

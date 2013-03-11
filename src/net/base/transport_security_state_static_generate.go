@@ -486,27 +486,6 @@ func writeListOfPins(w io.Writer, name string, pinNames []string) {
 	fmt.Fprintf(w, "  NULL,\n};\n")
 }
 
-// toDNS returns a string converts the domain name |s| into C-escaped,
-// length-prefixed form and also returns the length of the interpreted string.
-// i.e. for an input "example.com" it will return "\\007example\\003com", 13.
-func toDNS(s string) (string, int) {
-	labels := strings.Split(s, ".")
-
-	var name string
-	var l int
-	for _, label := range labels {
-		if len(label) > 63 {
-			panic("DNS label too long")
-		}
-		name += fmt.Sprintf("\\%03o", len(label))
-		name += label
-		l += len(label) + 1
-	}
-	l += 1 // For the length of the root label.
-
-	return name, l
-}
-
 // domainConstant converts the domain name |s| into a string of the form
 // "DOMAIN_" + uppercase last two labels.
 func domainConstant(s string) string {
@@ -518,7 +497,8 @@ func domainConstant(s string) string {
 }
 
 func writeHSTSEntry(out *bufio.Writer, entry hsts) {
-	dnsName, dnsLen := toDNS(entry.Name)
+	dnsName := entry.Name
+  dnsLen := len(dnsName)
 	domain := "DOMAIN_NOT_PINNED"
 	pinsetName := "kNoPins"
 	if len(entry.Pins) > 0 {
@@ -561,7 +541,7 @@ static const char* const kNoRejectedPublicKeys[] = {
   NULL, NULL, \
 }
 
-static const struct HSTSPreload kPreloadedSTS[] = {
+static const struct PreloadEntry kPreloadedEntries[] = {
 `)
 
 	for _, entry := range hsts.Entries {
@@ -572,9 +552,9 @@ static const struct HSTSPreload kPreloadedSTS[] = {
 	}
 
 	out.WriteString(`};
-static const size_t kNumPreloadedSTS = ARRAYSIZE_UNSAFE(kPreloadedSTS);
+static const size_t kNumPreloaded = ARRAYSIZE_UNSAFE(kPreloadedEntries);
 
-static const struct HSTSPreload kPreloadedSNISTS[] = {
+static const struct PreloadEntry kPreloadedEntriesSNI[] = {
 `)
 
 	for _, entry := range hsts.Entries {
@@ -585,7 +565,7 @@ static const struct HSTSPreload kPreloadedSNISTS[] = {
 	}
 
 	out.WriteString(`};
-static const size_t kNumPreloadedSNISTS = ARRAYSIZE_UNSAFE(kPreloadedSNISTS);
+static const size_t kNumPreloadedSNI = ARRAYSIZE_UNSAFE(kPreloadedEntriesSNI);
 
 `)
 

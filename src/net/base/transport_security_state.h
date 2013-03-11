@@ -35,22 +35,37 @@ class SSLInfo;
 class NET_EXPORT TransportSecurityState
     : NON_EXPORTED_BASE(public base::NonThreadSafe) {
  public:
-  class Delegate {
-   public:
-    // This function may not block and may be called with internal locks held.
-    // Thus it must not reenter the TransportSecurityState object.
-    virtual void StateIsDirty(TransportSecurityState* state) = 0;
 
-   protected:
-    virtual ~Delegate() {}
+  struct DomainEntryTag {
+    bool present;
+    bool include_subdomains;
+    base::Time created;
+    base::Time expiry;
   };
 
-  TransportSecurityState();
-  ~TransportSecurityState();
+  enum DomainEntryTagIndex {UPGRADE_TAG, PUBLIC_KEY_PINS_TAG, NUM_TAGS};
+
+  struct DomainEntry {
+
+    DomainEntry();
+
+    // True if all tags have "present" = false
+    bool IsEmpty();
+
+    // Merge any data with a more recent "created" time
+    void Merge(const DomainEntry& other);
+
+    DomainEntryTag tags[NUM_TAGS];
+    HashValueVector good_public_key_pin_hashes;  // PUBLIC KEY PINS
+    HashValueVector bad_public_key_pin_hashes;   // PUBLIC KEY PINS
+  };
+
+typedef std::map<std::string, DomainEntry> DomainEntryMap;
+typedef std::map<std::string, DomainEntry>::iterator DomainEntryIterator;
 
   // A DomainState describes the transport security state (required upgrade
   // to HTTPS, and/or any public key pins).
-  class NET_EXPORT DomainState {
+  class NET_EXPORT DomainState : public DomainEntry {
    public:
     enum UpgradeMode {
       // These numbers must match those in hsts_view.js, function modeToString.
@@ -92,70 +107,19 @@ class NET_EXPORT TransportSecurityState
     // ShouldSSLErrorsBeFatal returns true iff HTTPS errors should cause
     // hard-fail behavior (e.g. if HSTS is set for the domain)
     bool ShouldSSLErrorsBeFatal() const;
-
-    bool Equals(const DomainState& other) const;
-
-    UpgradeMode upgrade_mode;
-
-    // The absolute time (UTC) when this DomainState was first created.
-    //
-    // Static entries do not have a created time.
-    base::Time created;
-
-    // The absolute time (UTC) when the |upgrade_mode|, if set to
-    // UPGRADE_ALWAYS, downgrades to UPGRADE_NEVER.
-    base::Time upgrade_expiry;
-
-    // Are subdomains subject to this DomainState?
-    //
-    // TODO(palmer): Decide if we should have separate |pin_subdomains| and
-    // |upgrade_subdomains|. Alternately, and perhaps better, is to separate
-    // DomainState into UpgradeState and PinState (requiring also changing the
-    // serialization format?).
-    bool include_subdomains;
-
-    // Optional; hashes of static pinned SubjectPublicKeyInfos. Unless both
-    // are empty, at least one of |static_spki_hashes| and
-    // |dynamic_spki_hashes| MUST intersect with the set of SPKIs in the TLS
-    // server's certificate chain.
-    //
-    // |dynamic_spki_hashes| take precedence over |static_spki_hashes|.
-    // That is, |IsChainOfPublicKeysPermitted| first checks dynamic pins and
-    // then checks static pins.
-    HashValueVector static_spki_hashes;
-
-    // Optional; hashes of dynamically pinned SubjectPublicKeyInfos.
-    HashValueVector dynamic_spki_hashes;
-
-    // The absolute time (UTC) when the |dynamic_spki_hashes| expire.
-    base::Time dynamic_spki_hashes_expiry;
-
-    // Optional; hashes of static known-bad SubjectPublicKeyInfos which
-    // MUST NOT intersect with the set of SPKIs in the TLS server's
-    // certificate chain.
-    HashValueVector bad_static_spki_hashes;
-
-    // The following members are not valid when stored in |enabled_hosts_|:
-
-    // The domain which matched during a search for this DomainState entry.
-    // Updated by |GetDomainState| and |GetStaticDomainState|.
-    std::string domain;
   };
 
-  class NET_EXPORT Iterator {
+  class Delegate {
    public:
-    explicit Iterator(const TransportSecurityState& state);
-    ~Iterator();
+    // This function may not block and may be called with internal locks held.
+    // Thus it must not reenter the TransportSecurityState object.
+    virtual void StateIsDirty(TransportSecurityState* state) = 0;
 
-    bool HasNext() const { return iterator_ != end_; }
-    void Advance() { ++iterator_; }
-    const std::string& hostname() const { return iterator_->first; }
-    const DomainState& domain_state() const { return iterator_->second; }
-
-   private:
-    std::map<std::string, DomainState>::const_iterator iterator_;
-    std::map<std::string, DomainState>::const_iterator end_;
+   protected:
+    virtual ~Delegate() {}
   };
+
+  TransportSecurityState();
 
   // Assign a |Delegate| for persisting the transport security state. If
   // |NULL|, state will not be persisted. The caller retains
@@ -172,21 +136,21 @@ class NET_EXPORT TransportSecurityState
   // TransportSecurityState.
   void ClearDynamicData();
 
-  // Inserts |state| into |enabled_hosts_| under the key |hashed_host|.
+  // Inserts |state| into |dynamic_entries_| under the key |hashed_host|.
   // |hashed_host| is already in the internal representation
-  // HashHost(CanonicalizeHost(host)).
+  // HashHost(host).
   // Note: This is only used for serializing/deserializing the
   // TransportSecurityState.
-  void AddOrUpdateEnabledHosts(const std::string& hashed_host,
-                               const DomainState& state);
+  void AddDynamicEntry(const std::string& hashed_host,
+                       const DomainEntry& entry);
 
-  // Inserts |state| into |forced_hosts_| under the key |hashed_host|.
+  // Inserts |state| into |forced_entries_| under the key |hashed_host|.
   // |hashed_host| is already in the internal representation
-  // HashHost(CanonicalizeHost(host)).
+  // HashHost(host).
   // Note: This is only used for serializing/deserializing the
   // TransportSecurityState.
-  void AddOrUpdateForcedHosts(const std::string& hashed_host,
-                              const DomainState& state);
+  void AddForcedEntry(const std::string& hashed_host,
+                      const DomainEntry& entry);
 
   // Deletes all dynamic data (e.g. HSTS or HPKP data) created since a given
   // time.
@@ -278,17 +242,6 @@ class NET_EXPORT TransportSecurityState
   // changed.
   void DirtyNotify();
 
-  // Enable TransportSecurity for |host|. |state| supercedes any previous
-  // state for the |host|, including static entries.
-  //
-  // The new state for |host| is persisted using the Delegate (if any).
-  void EnableHost(const std::string& host, const DomainState& state);
-
-  // Converts |hostname| from dotted form ("www.google.com") to the form
-  // used in DNS: "\x03www\x06google\x03com", lowercases that, and returns
-  // the result.
-  static std::string CanonicalizeHost(const std::string& hostname);
-
   // Returns true and updates |*result| iff there is a static DomainState for
   // |host|.
   //
@@ -313,7 +266,9 @@ class NET_EXPORT TransportSecurityState
 
   // Extra entries, provided by the user at run-time, to treat as if they
   // were static.
-  DomainStateMap forced_hosts_;
+  DomainStateMap forced_entries_;
+
+  DomainEntryMap dynamic_entries_;
 
   Delegate* delegate_;
 
