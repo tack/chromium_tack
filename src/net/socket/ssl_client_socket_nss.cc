@@ -3446,6 +3446,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
   completed_handshake_ = true;
 
+#define OFFICIAL_BUILD
 #if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID) && !defined(OS_IOS)
   // Take care of any mandates for public key pinning.
   //
@@ -3476,7 +3477,7 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
         if (TransportSecurityState::IsBuildTimely()) {
           result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
           UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", false);
-          TransportSecurityState::ReportUMAOnPinFailure(host);
+          domain_state.ReportUMAOnPinFailure();
         }
       } else {
         UMA_HISTOGRAM_BOOLEAN("Net.PublicKeyPinSuccess", true);

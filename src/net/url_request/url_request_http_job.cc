@@ -752,11 +752,17 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
       context->fraudulent_certificate_reporter();
     if (reporter != NULL) {
       const SSLInfo& ssl_info = transaction_->GetResponseInfo()->ssl_info;
-      bool sni_available = SSLConfigService::IsSNIAvailable(
-          context->ssl_config_service());
       const std::string& host = request_->url().host();
 
-      reporter->SendReport(host, ssl_info, sni_available);
+      TransportSecurityState::DomainState domain_state;
+      const URLRequestContext* context = request_->context();
+      const bool report_to_google = context->transport_security_state() &&
+        context->transport_security_state()->GetDomainState(
+          request_info_.url.host(),
+          SSLConfigService::IsSNIAvailable(context->ssl_config_service()),
+          &domain_state) && domain_state.IsGooglePinnedProperty();
+      if (report_to_google)
+        reporter->SendReport(host, ssl_info);
     }
   }
 

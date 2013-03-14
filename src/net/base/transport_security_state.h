@@ -36,43 +36,10 @@ class NET_EXPORT TransportSecurityState
     : NON_EXPORTED_BASE(public base::NonThreadSafe) {
  public:
 
-  struct DomainEntryTag {
-    bool present;
-    bool include_subdomains;
-    base::Time created;
-    base::Time expiry;
-  };
-
-  enum DomainEntryTagIndex {UPGRADE_TAG, PUBLIC_KEY_PINS_TAG, NUM_TAGS};
-
-  struct DomainEntry {
-
-    DomainEntry();
-
-    // True if all tags have "present" = false
-    bool IsEmpty();
-
-    // Merge any data with a more recent "created" time
-    void Merge(const DomainEntry& other);
-
-    DomainEntryTag tags[NUM_TAGS];
-    HashValueVector good_public_key_pin_hashes;  // PUBLIC KEY PINS
-    HashValueVector bad_public_key_pin_hashes;   // PUBLIC KEY PINS
-  };
-
-typedef std::map<std::string, DomainEntry> DomainEntryMap;
-typedef std::map<std::string, DomainEntry>::iterator DomainEntryIterator;
-
   // A DomainState describes the transport security state (required upgrade
   // to HTTPS, and/or any public key pins).
-  class NET_EXPORT DomainState : public DomainEntry {
+  class NET_EXPORT DomainState {
    public:
-    enum UpgradeMode {
-      // These numbers must match those in hsts_view.js, function modeToString.
-      MODE_FORCE_HTTPS = 0,
-      MODE_DEFAULT = 1,
-    };
-
     DomainState();
     ~DomainState();
 
@@ -107,6 +74,28 @@ typedef std::map<std::string, DomainEntry>::iterator DomainEntryIterator;
     // ShouldSSLErrorsBeFatal returns true iff HTTPS errors should cause
     // hard-fail behavior (e.g. if HSTS is set for the domain)
     bool ShouldSSLErrorsBeFatal() const;
+
+    // Returns true iff we have any static public key pins for the |host| and
+    // iff its set of required pins is the set we expect for Google
+    // properties.
+    bool IsGooglePinnedProperty() const;
+
+    // Send an UMA report on pin validation failure, if the host is in a
+    // statically-defined list of domains.
+    void ReportUMAOnPinFailure() const; 
+
+   private:
+    friend TransportSecurityState;
+
+    bool public_key_pins_;
+    bool should_upgrade_;
+    bool is_google_pinned_property_;
+    bool report_uma_on_pin_failure_;
+
+    HashValueVector public_key_pins_good_hashes_; // public_key_pins
+    HashValueVector public_key_pins_bad_hashes_;  // public_key_pins
+
+    size_t second_level_domain_name_; // report_uma_on_pin_failure
   };
 
   class Delegate {
@@ -120,6 +109,7 @@ typedef std::map<std::string, DomainEntry>::iterator DomainEntryIterator;
   };
 
   TransportSecurityState();
+  ~TransportSecurityState();
 
   // Assign a |Delegate| for persisting the transport security state. If
   // |NULL|, state will not be persisted. The caller retains
@@ -135,22 +125,6 @@ typedef std::map<std::string, DomainEntry>::iterator DomainEntryIterator;
   // Note: This is only used for serializing/deserializing the
   // TransportSecurityState.
   void ClearDynamicData();
-
-  // Inserts |state| into |dynamic_entries_| under the key |hashed_host|.
-  // |hashed_host| is already in the internal representation
-  // HashHost(host).
-  // Note: This is only used for serializing/deserializing the
-  // TransportSecurityState.
-  void AddDynamicEntry(const std::string& hashed_host,
-                       const DomainEntry& entry);
-
-  // Inserts |state| into |forced_entries_| under the key |hashed_host|.
-  // |hashed_host| is already in the internal representation
-  // HashHost(host).
-  // Note: This is only used for serializing/deserializing the
-  // TransportSecurityState.
-  void AddForcedEntry(const std::string& hashed_host,
-                      const DomainEntry& entry);
 
   // Deletes all dynamic data (e.g. HSTS or HPKP data) created since a given
   // time.
@@ -195,80 +169,62 @@ typedef std::map<std::string, DomainEntry>::iterator DomainEntryIterator;
 
   // Adds explicitly-specified data as if it was processed from an
   // HSTS header (used for net-internals and unit tests).
-  bool AddHSTS(const std::string& host, const base::Time& expiry,
-               bool include_subdomains);
+  bool AddHSTS(const std::string& host, const base::Time& created, 
+               const base::Time& expiry, bool include_subdomains);
 
   // Adds explicitly-specified data as if it was processed from an
   // HPKP header (used for net-internals and unit tests).
-  bool AddHPKP(const std::string& host, const base::Time& expiry,
-               bool include_subdomains, const HashValueVector& hashes);
+  bool AddHPKP(const std::string& host, const base::Time& created,
+               const base::Time& expiry, bool include_subdomains, 
+               const HashValueVector& hashes);
 
-  // Returns true iff we have any static public key pins for the |host| and
-  // iff its set of required pins is the set we expect for Google
-  // properties.
-  //
-  // If |sni_enabled| is true, searches the static pins defined for
-  // SNI-using hosts as well as the rest of the pins.
-  //
-  // If |host| matches both an exact entry and is a subdomain of another
-  // entry, the exact match determines the return value.
-  static bool IsGooglePinnedProperty(const std::string& host,
-                                     bool sni_enabled);
+  bool AddHSTSHashedHost(const std::string& hashed_host, 
+                         const base::Time& created, const base::Time& expiry,
+                         bool include_subdomains);
+  bool AddHPKPHashedHost(const std::string& hashed_host, 
+                         const base::Time& created, const base::Time& expiry,
+                         bool include_subdomains, const HashValueVector& hashes);
 
-  // The maximum number of seconds for which we'll cache an HSTS request.
-  static const long int kMaxHSTSAgeSecs;
-
-  // Send an UMA report on pin validation failure, if the host is in a
-  // statically-defined list of domains.
-  //
-  // TODO(palmer): This doesn't really belong here, and should be moved into
-  // the exactly one call site. This requires unifying |struct HSTSPreload|
-  // (an implementation detail of this class) with a more generic
-  // representation of first-class DomainStates, and exposing the preloads
-  // to the caller with |GetStaticDomainState|.
-  static void ReportUMAOnPinFailure(const std::string& host);
+  bool DeleteHSTS(const std::string& host);
+  bool DeleteHPKP(const std::string& host);
 
   // IsBuildTimely returns true if the current build is new enough ensure that
   // built in security information (i.e. HSTS preloading and pinning
   // information) is timely.
   static bool IsBuildTimely();
 
- private:
-  friend class TransportSecurityStateTest;
+  // The maximum number of seconds for which we'll cache an HSTS request.
+  static const long int kMaxHSTSAgeSecs;
 
-  typedef std::map<std::string, DomainState> DomainStateMap;
+// private:
+  friend class TransportSecurityStateTest;
 
   // If a Delegate is present, notify it that the internal state has
   // changed.
   void DirtyNotify();
 
-  // Returns true and updates |*result| iff there is a static DomainState for
-  // |host|.
-  //
-  // |GetStaticDomainState| is identical to |GetDomainState| except that it
-  // searches only the statically-defined transport security state, ignoring
-  // all dynamically-added DomainStates.
-  //
-  // If |sni_enabled| is true, searches the static pins defined for
-  // SNI-using hosts as well as the rest of the pins.
-  //
-  // If |host| matches both an exact entry and is a subdomain of another
-  // entry, the exact match determines the return value.
-  //
-  // Note that this method is not const because it opportunistically removes
-  // entries that have expired.
-  bool GetStaticDomainState(const std::string& host,
-                            bool sni_enabled,
-                            DomainState* result);
+  struct DynamicEntry {
+    DynamicEntry();
+    DynamicEntry(bool include_subdomains, base::Time created, base::Time expiry);
+    
+    bool include_subdomains_;
+    base::Time created_;
+    base::Time expiry_;
+  };
 
-  // The set of hosts that have enabled TransportSecurity.
-  DomainStateMap enabled_hosts_;
+typedef std::map<std::string, DynamicEntry> DynamicEntryMap;
+typedef std::map<std::string, DynamicEntry>::iterator DynamicEntryIterator;
 
-  // Extra entries, provided by the user at run-time, to treat as if they
-  // were static.
-  DomainStateMap forced_entries_;
+  DynamicEntryMap dynamic_upgrade_;
+  DynamicEntryMap dynamic_public_key_pins_;  
+  std::map<std::string, HashValueVector> dynamic_pins_good_hashes_;
 
-  DomainEntryMap dynamic_entries_;
+  bool GetPreloadDomainState(bool sni_only, base::Time now,
+                             const std::string& host,
+                             DomainState* result);
+
+  bool GetDynamicDomainState(base::Time now, const std::string& host,
+                             DomainState* result);
 
   Delegate* delegate_;
 

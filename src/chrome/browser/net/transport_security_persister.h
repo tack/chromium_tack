@@ -85,11 +85,6 @@ class TransportSecurityPersister
   // serialized state on disk.
   virtual bool SerializeData(std::string* data) OVERRIDE;
 
-  // Parses an array of JSON-encoded TransportSecurityState::DomainState
-  // entries. For use in loading entries defined on the command line
-  // (switches::kHstsHosts).
-  bool DeserializeFromCommandLine(const std::string& serialized);
-
   // Clears any existing non-static entries, and then re-populates
   // |transport_security_state_|.
   //

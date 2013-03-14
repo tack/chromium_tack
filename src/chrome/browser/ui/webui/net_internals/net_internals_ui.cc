@@ -1233,6 +1233,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
 
       result->SetBoolean("result", found);
       if (found) {
+        /* TREV TODO!!!
         result->SetInteger("mode", static_cast<int>(state.upgrade_mode));
         result->SetBoolean("subdomains", state.include_subdomains);
         result->SetString("domain", state.domain);
@@ -1243,7 +1244,8 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
         result->SetString("static_spki_hashes",
                           HashesToBase64String(state.static_spki_hashes));
         result->SetString("dynamic_spki_hashes",
-                          HashesToBase64String(state.dynamic_spki_hashes));
+                          HashesToBase64String(state.dynamic_addspki_hashes));
+        */
       }
     }
   }
@@ -1271,15 +1273,16 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   if (!transport_security_state)
     return;
 
-  base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
+  base::Time now = base::Time::Now();
+  base::Time expiry = now + base::TimeDelta::FromDays(1000);
   net::HashValueVector hashes;
   if (!hashes_str.empty()) {
     if (!Base64StringToHashes(hashes_str, &hashes))
       return;
   }
 
-  transport_security_state->AddHSTS(domain, expiry, include_subdomains);
-  transport_security_state->AddHPKP(domain, expiry, include_subdomains,
+  transport_security_state->AddHSTS(domain, now, expiry, include_subdomains);
+  transport_security_state->AddHPKP(domain, now, expiry, include_subdomains,
                                     hashes);
 }
 

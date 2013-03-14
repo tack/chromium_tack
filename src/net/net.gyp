@@ -303,6 +303,7 @@
         'base/test_root_certs_win.cc',
         'base/transport_security_state.cc',
         'base/transport_security_state.h',
+        'base/transport_security_state_preload.h',
         'base/transport_security_state_static.h',
         'base/unix_domain_socket_posix.cc',
         'base/unix_domain_socket_posix.h',

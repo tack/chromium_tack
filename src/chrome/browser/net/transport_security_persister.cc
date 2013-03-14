@@ -159,57 +159,25 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
   DictionaryValue toplevel;
-  base::Time now = base::Time::Now();
-  TransportSecurityState::Iterator state(*transport_security_state_);
-  for (; state.HasNext(); state.Advance()) {
-    const std::string& hostname = state.hostname();
-    const TransportSecurityState::DomainState& domain_state =
-        state.domain_state();
+  TransportSecurityState::DynamicEntryIterator iter = \
+    transport_security_state_->dynamic_upgrade_.begin();
+  for (; iter != transport_security_state_->dynamic_upgrade_.end(); iter++) {
+    const std::string& hashed_host = iter->first;
+    TransportSecurityState::DynamicEntry& entry = iter->second;
 
     DictionaryValue* serialized = new DictionaryValue;
     serialized->SetBoolean(kIncludeSubdomains,
-                           domain_state.include_subdomains);
-    serialized->SetDouble(kCreated, domain_state.created.ToDoubleT());
-    serialized->SetDouble(kExpiry, domain_state.upgrade_expiry.ToDoubleT());
-    serialized->SetDouble(kDynamicSPKIHashesExpiry,
-                          domain_state.dynamic_spki_hashes_expiry.ToDoubleT());
-
-    switch (domain_state.upgrade_mode) {
-      case TransportSecurityState::DomainState::MODE_FORCE_HTTPS:
-        serialized->SetString(kMode, kForceHTTPS);
-        break;
-      case TransportSecurityState::DomainState::MODE_DEFAULT:
-        serialized->SetString(kMode, kDefault);
-        break;
-      default:
-        NOTREACHED() << "DomainState with unknown mode";
-        delete serialized;
-        continue;
-    }
-
-    serialized->Set(kStaticSPKIHashes,
-                    SPKIHashesToListValue(domain_state.static_spki_hashes));
-
-    if (now < domain_state.dynamic_spki_hashes_expiry) {
-      serialized->Set(kDynamicSPKIHashes,
-                      SPKIHashesToListValue(domain_state.dynamic_spki_hashes));
-    }
-
-    toplevel.Set(HashedDomainToExternalString(hostname), serialized);
+                           entry.include_subdomains_);
+    serialized->SetDouble(kCreated, entry.created_.ToDoubleT());
+    serialized->SetDouble(kExpiry, entry.expiry_.ToDoubleT());
+    serialized->SetString(kMode, kForceHTTPS);
+    toplevel.Set(HashedDomainToExternalString(hashed_host), serialized);
   }
 
   base::JSONWriter::WriteWithOptions(&toplevel,
                                      base::JSONWriter::OPTIONS_PRETTY_PRINT,
                                      output);
   return true;
-}
-
-bool TransportSecurityPersister::DeserializeFromCommandLine(
-    const std::string& serialized) {
-  // Purposefully ignore |dirty| because we do not want to persist entries
-  // deserialized in this way.
-  bool dirty;
-  return Deserialize(serialized, true, &dirty, transport_security_state_);
 }
 
 bool TransportSecurityPersister::LoadEntries(const std::string& serialized,
@@ -241,77 +209,37 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
       continue;
     }
 
+    bool include_subdomains = false;
+    double created_double=0, expiry_double=0;
+    base::Time created, expiry;
     std::string mode_string;
-    double created;
-    double expiry;
-    double dynamic_spki_hashes_expiry = 0.0;
-    TransportSecurityState::DomainState domain_state;
 
     if (!parsed->GetBoolean(kIncludeSubdomains,
-                            &domain_state.include_subdomains) ||
+                            &include_subdomains) ||
         !parsed->GetString(kMode, &mode_string) ||
-        !parsed->GetDouble(kExpiry, &expiry)) {
+        !parsed->GetDouble(kExpiry, &expiry_double)) {
       LOG(WARNING) << "Could not parse some elements of entry " << *i
                    << "; skipping entry";
       continue;
     }
 
-    // Don't fail if this key is not present.
-    parsed->GetDouble(kDynamicSPKIHashesExpiry,
-                      &dynamic_spki_hashes_expiry);
-
-    ListValue* pins_list = NULL;
-    // preloaded_spki_hashes is a legacy synonym for static_spki_hashes.
-    if (parsed->GetList(kStaticSPKIHashes, &pins_list))
-      SPKIHashesFromListValue(*pins_list, &domain_state.static_spki_hashes);
-    else if (parsed->GetList(kPreloadedSPKIHashes, &pins_list))
-      SPKIHashesFromListValue(*pins_list, &domain_state.static_spki_hashes);
-
-    if (parsed->GetList(kDynamicSPKIHashes, &pins_list))
-      SPKIHashesFromListValue(*pins_list, &domain_state.dynamic_spki_hashes);
-
-    if (mode_string == kForceHTTPS || mode_string == kStrict) {
-      domain_state.upgrade_mode =
-          TransportSecurityState::DomainState::MODE_FORCE_HTTPS;
-    } else if (mode_string == kDefault || mode_string == kPinningOnly) {
-      domain_state.upgrade_mode =
-          TransportSecurityState::DomainState::MODE_DEFAULT;
-    } else {
-      LOG(WARNING) << "Unknown TransportSecurityState mode string "
-                   << mode_string << " found for entry " << *i
-                   << "; skipping entry";
-      continue;
-    }
-
-    domain_state.upgrade_expiry = base::Time::FromDoubleT(expiry);
-    domain_state.dynamic_spki_hashes_expiry =
-        base::Time::FromDoubleT(dynamic_spki_hashes_expiry);
-    if (parsed->GetDouble(kCreated, &created)) {
-      domain_state.created = base::Time::FromDoubleT(created);
+    if (parsed->GetDouble(kCreated, &created_double)) {
+      created = base::Time::FromDoubleT(created_double);
     } else {
       // We're migrating an old entry with no creation date. Make sure we
       // write the new date back in a reasonable time frame.
       dirtied = true;
-      domain_state.created = base::Time::Now();
+      created = base::Time::Now();
     }
 
-    if (domain_state.upgrade_expiry <= current_time &&
-        domain_state.dynamic_spki_hashes_expiry <= current_time) {
-      // Make sure we dirty the state if we drop an entry.
-      dirtied = true;
-      continue;
+    if (mode_string == kForceHTTPS || mode_string == kStrict) {
+      std::string hashed_host = ExternalStringToHashedDomain(*i);
+      base::Time expiry = base::Time::FromDoubleT(expiry_double);
+      if (expiry > current_time)
+        state->AddHSTS(hashed_host, created, expiry, include_subdomains);
+      else
+        dirtied = true;
     }
-
-    std::string hashed = ExternalStringToHashedDomain(*i);
-    if (hashed.empty()) {
-      dirtied = true;
-      continue;
-    }
-
-    if (forced)
-      state->AddOrUpdateForcedHosts(hashed, domain_state);
-    else
-      state->AddOrUpdateEnabledHosts(hashed, domain_state);
   }
 
   *dirty = dirtied;
