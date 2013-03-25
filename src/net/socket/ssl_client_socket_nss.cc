@@ -3446,7 +3446,6 @@ int SSLClientSocketNSS::DoVerifyCertComplete(int result) {
 
   completed_handshake_ = true;
 
-#define OFFICIAL_BUILD
 #if defined(OFFICIAL_BUILD) && !defined(OS_ANDROID) && !defined(OS_IOS)
   // Take care of any mandates for public key pinning.
   //

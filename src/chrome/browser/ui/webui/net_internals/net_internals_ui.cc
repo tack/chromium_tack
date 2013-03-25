@@ -1233,19 +1233,21 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
 
       result->SetBoolean("result", found);
       if (found) {
-        /* TREV TODO!!!
-        result->SetInteger("mode", static_cast<int>(state.upgrade_mode));
-        result->SetBoolean("subdomains", state.include_subdomains);
-        result->SetString("domain", state.domain);
-        result->SetDouble("expiry", state.upgrade_expiry.ToDoubleT());
-        result->SetDouble("dynamic_spki_hashes_expiry",
-                          state.dynamic_spki_hashes_expiry.ToDoubleT());
-
-        result->SetString("static_spki_hashes",
-                          HashesToBase64String(state.static_spki_hashes));
-        result->SetString("dynamic_spki_hashes",
-                          HashesToBase64String(state.dynamic_addspki_hashes));
-        */
+        result->SetBoolean("HSTS", state.ShouldUpgradeToSSL());
+        if (state.HasPublicKeyPins()) {
+          const net::HashValueVector& good_hashes =
+            state.GetPublicKeyPinsGoodHashes();
+          const net::HashValueVector& bad_hashes =
+            state.GetPublicKeyPinsBadHashes();
+          if (!good_hashes.empty())
+            result->SetString("Public_Key_Pins_Good",
+                              HashesToBase64String(
+                                state.GetPublicKeyPinsGoodHashes()));
+          if (!bad_hashes.empty())
+            result->SetString("Public_Key_Pins_Bad",
+                              HashesToBase64String(
+                                state.GetPublicKeyPinsBadHashes()));
+        }
       }
     }
   }

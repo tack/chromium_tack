@@ -159,11 +159,11 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
   DictionaryValue toplevel;
-  TransportSecurityState::DynamicEntryIterator iter = \
-    transport_security_state_->dynamic_upgrade_.begin();
-  for (; iter != transport_security_state_->dynamic_upgrade_.end(); iter++) {
+  std::map<std::string, TransportSecurityState::DynamicEntry>::const_iterator
+    iter = transport_security_state_->GetHSTSEntries().begin();
+  for (; iter != transport_security_state_->GetHSTSEntries().end(); iter++) {
     const std::string& hashed_host = iter->first;
-    TransportSecurityState::DynamicEntry& entry = iter->second;
+    const TransportSecurityState::DynamicEntry& entry = iter->second;
 
     DictionaryValue* serialized = new DictionaryValue;
     serialized->SetBoolean(kIncludeSubdomains,
@@ -210,7 +210,7 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
     }
 
     bool include_subdomains = false;
-    double created_double=0, expiry_double=0;
+    double created_double = 0, expiry_double = 0;
     base::Time created, expiry;
     std::string mode_string;
 
@@ -236,7 +236,8 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
       std::string hashed_host = ExternalStringToHashedDomain(*i);
       base::Time expiry = base::Time::FromDoubleT(expiry_double);
       if (expiry > current_time)
-        state->AddHSTS(hashed_host, created, expiry, include_subdomains);
+        state->AddHSTSHashedHost(hashed_host, created, expiry,
+                                 include_subdomains);
       else
         dirtied = true;
     }
