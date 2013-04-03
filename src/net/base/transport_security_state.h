@@ -45,16 +45,15 @@ class NET_EXPORT TransportSecurityState
     DomainState();
     ~DomainState();
 
-    // ShouldUpgradeToSSL returns true iff HTTP requests should be internally
-    // redirected to HTTPS (also if the "ws" WebSocket request should be
-    // upgraded to "wss").
+    // Returns true iff HTTP requests should be internally redirected to
+    // HTTPS (also if the "ws" WebSocket request should be upgraded to "wss").
     bool ShouldUpgradeToSSL() const;
 
-    // ShouldSSLErrorsBeFatal returns true iff HTTPS errors should cause
-    // hard-fail behavior (e.g. if HSTS is set for the domain)
+    // Returns true iff HTTPS errors should cause hard-fail behavior
+    // (e.g. if HSTS is set for the domain).
     bool ShouldSSLErrorsBeFatal() const;
 
-    // Returns true if CheckPublicKeyPins() should be called to verify
+    // Returns true iff CheckPublicKeyPins() should be called to verify
     // SSL/TLS connections.
     bool HasPublicKeyPins() const;
 
@@ -85,7 +84,7 @@ class NET_EXPORT TransportSecurityState
     // statically-defined list of domains.
     void ReportUMAOnPinFailure() const;
 
-    // Provide direct read-only access for net-internals
+    // Provides direct read-only access for chrome://net-internals.
     const HashValueVector& GetPublicKeyPinsGoodHashes() const;
     const HashValueVector& GetPublicKeyPinsBadHashes() const;
 
@@ -97,6 +96,8 @@ class NET_EXPORT TransportSecurityState
     bool is_google_pinned_property_;
     bool report_uma_on_pin_failure_;
 
+    // The following values are only relevant if one of the above
+    // booleans is true:
     HashValueVector public_key_pins_good_hashes_;  // if has_public_key_pins_
     HashValueVector public_key_pins_bad_hashes_;   // if has_public_key_pins_
 
@@ -166,7 +167,7 @@ class NET_EXPORT TransportSecurityState
   void AddHSTSHeader(const std::string& host, const std::string& value);
 
   // Processes an HPKP header value from the host, adds/deletes entries
-  // in dynamic state if necessary.  ssl_info is used to check that
+  // in dynamic state if necessary.  |ssl_info| is used to check that
   // the specified pins overlap with the certificate chain.
   void AddHPKPHeader(const std::string& host, const std::string& value,
                      const SSLInfo& ssl_info);
@@ -219,7 +220,11 @@ class NET_EXPORT TransportSecurityState
   const std::map<std::string, DynamicEntry>& GetHSTSEntries() const;
   const std::map<std::string, HPKPEntry>& GetHPKPEntries() const;
 
-  // IsBuildTimely returns true if the current build is new enough ensure that
+  // Only used by template functions within the .cc to signal that
+  // the dynamic entry maps were changed
+  void StateIsDirty();
+
+  // Returns true if the current build is new enough ensure that
   // built in security information (i.e. HSTS preloading and pinning
   // information) is timely.
   static bool IsBuildTimely();
@@ -230,42 +235,17 @@ class NET_EXPORT TransportSecurityState
  private:
   friend class TransportSecurityStateTest;
 
-  // If a Delegate is present and any of the dynamic entry maps have become
-  // dirty, notify the Delegate.
-  void CheckDirty();
-
   // Returns true iff there is any DomainState data in preload entries
   bool GetPreloadDomainState(bool sni_enabled, const base::Time& now,
-                         const std::string& host, DomainState* result) const;
+                             const std::string& host, DomainState* result)
+                             const;
 
   // Returns true iff there is any DomainState data in dynamic entries
   bool GetDynamicDomainState(const base::Time& now, const std::string& host,
                              DomainState* result) const;
 
-  template<typename T>
-  class DynamicEntryMap : public std::map<std::string, T> {
-   public:
-    DynamicEntryMap<T>();
-
-    // True if an entry is returned
-    bool GetEntry(const base::Time& now, const std::string& hashed_host,
-                  bool is_full_hostname, T* result_entry) const;
-
-    // True if an entry is successfully added
-    bool AddEntry(const std::string& hashed_host,
-                  const T& new_entry);
-
-    // True if any entries are deleted
-    bool DeleteEntry(const std::string& hashed_host);
-
-    void DeleteEntriesSince(const base::Time& time);
-
-    // Set by any of the non-const member functions when map is changed
-    bool dirty;
-  };
-
-  DynamicEntryMap<DynamicEntry> hsts_entries_;
-  DynamicEntryMap<HPKPEntry> hpkp_entries_;
+  std::map<std::string, DynamicEntry> hsts_entries_;
+  std::map<std::string, HPKPEntry> hpkp_entries_;
 
   Delegate* delegate_;
 

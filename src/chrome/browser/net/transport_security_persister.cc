@@ -160,8 +160,8 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
 
   DictionaryValue toplevel;
   std::map<std::string, TransportSecurityState::DynamicEntry>::const_iterator
-    iter = transport_security_state_->GetHSTSEntries().begin();
-  for (; iter != transport_security_state_->GetHSTSEntries().end(); iter++) {
+      iter = transport_security_state_->GetHSTSEntries().begin();
+  for (; iter != transport_security_state_->GetHSTSEntries().end(); ++iter) {
     const std::string& hashed_host = iter->first;
     const TransportSecurityState::DynamicEntry& entry = iter->second;
 

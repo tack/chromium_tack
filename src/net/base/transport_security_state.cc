@@ -84,14 +84,14 @@ struct DomainNameIterator {
   }
 
   bool AtEnd() {
-    return name_[index_] == 0;
+    return index_ == name_.length();
   }
 
   // Advance to NUL char, or after the next '.'
   void Advance() {
     if (AtEnd())
       return;
-    for (index_++; name_[index_] != '.' && name_[index_] != 0; index_++);
+    for (index_++; name_[index_] != '.' && name_[index_] != 0; ++index_);
     if (name_[index_] == '.')
       index_++;
   }
@@ -108,9 +108,7 @@ struct DomainNameIterator {
   size_t index_;      // Index into name_
 };
 
-}  // namespace
-
-// DynamicEntryMap template functions
+// Template functions for maps of DynamicEntries (or subclasses)
 
 #define DynamicEntryMapConstIter \
   typename std::map<std::string, T>::const_iterator
@@ -118,20 +116,16 @@ struct DomainNameIterator {
   typename std::map<std::string, T>::iterator
 
 template <typename T>
-TransportSecurityState::DynamicEntryMap<T>::DynamicEntryMap():dirty(false) {
-}
-
-template <typename T>
-bool TransportSecurityState::DynamicEntryMap<T>::GetEntry(
-  const base::Time& now, const std::string& hashed_host,
-  bool is_full_hostname, T* result_entry) const {
+bool GetDynamicEntry(const std::map<std::string, T>& entries,
+                     const base::Time& now, const std::string& hashed_host,
+                     bool is_full_hostname, T* result_entry) {
   // Find the entry, and return if relevant and nonexpired
-  DynamicEntryMapConstIter find_iter = this->find(hashed_host);
-  if (find_iter != this->end()) {
-    const T& find_entry = find_iter->second;
-    if ((is_full_hostname || find_entry.include_subdomains_) &&
-        find_entry.expiry_ > now) {
-      *result_entry = find_entry;
+  DynamicEntryMapConstIter find_iter = entries.find(hashed_host);
+  if (find_iter != entries.end()) {
+    const T& found_entry = find_iter->second;
+    if ((is_full_hostname || found_entry.include_subdomains_) &&
+        found_entry.expiry_ > now) {
+      *result_entry = found_entry;
       return true;
     }
   }
@@ -139,54 +133,59 @@ bool TransportSecurityState::DynamicEntryMap<T>::GetEntry(
 }
 
 template<typename T>
-bool TransportSecurityState::DynamicEntryMap<T>::AddEntry(
-  const std::string& hashed_host, const T& new_entry) {
-  // Don't add entries with invalid/expired time values
-  const base::Time now = base::Time::Now();
-  if (new_entry.created_ > now)
-    return false;
-  if (new_entry.expiry_ < now)
-    return false;
-
-  DynamicEntryMapIter find_iter = this->find(hashed_host);
-  if (find_iter != this->end()) {
+bool AddDynamicEntry(std::map<std::string, T>& entries,
+                     const std::string& hashed_host, const T& new_entry,
+                     TransportSecurityState* state) {
+  bool dirty = false;
+  DynamicEntryMapIter find_iter = entries.find(hashed_host);
+  if (find_iter != entries.end()) {
     // Leave 'created' unchanged
-    T& find_entry = find_iter->second;
-    find_entry.expiry_ = new_entry.expiry_;
-    find_entry.include_subdomains_ = new_entry.include_subdomains_;
+    T& found_entry = find_iter->second;
+    found_entry.expiry_ = new_entry.expiry_;
+    found_entry.include_subdomains_ = new_entry.include_subdomains_;
     dirty = true;
   } else {
-    this->operator[](hashed_host) = new_entry;
+    entries[hashed_host] = new_entry;
     dirty = true;
   }
+  if (dirty)
+    state->StateIsDirty();
   return true;
 }
 
 template<typename T>
-bool TransportSecurityState::DynamicEntryMap<T>::DeleteEntry(
-  const std::string& hashed_host) {
-  DynamicEntryMapIter find_iter = this->find(hashed_host);
-  if (find_iter != this->end()) {
-    this->erase(find_iter);
-    dirty = true;
+bool DeleteDynamicEntry(std::map<std::string, T>& entries,
+                        const std::string& hashed_host,
+                        TransportSecurityState* state) {
+  DynamicEntryMapIter find_iter = entries.find(hashed_host);
+  if (find_iter != entries.end()) {
+    entries.erase(find_iter);
+    state->StateIsDirty();
     return true;
   }
   return false;
 }
 
 template<typename T>
-void TransportSecurityState::DynamicEntryMap<T>::DeleteEntriesSince(
-  const base::Time& time) {
-  DynamicEntryMapIter iter = this->begin();
-  while (iter != this->end()) {
+void DeleteDynamicEntriesSince(std::map<std::string, T>& entries,
+                               const base::Time& time,
+                               TransportSecurityState* state) {
+  bool dirty = false;
+  DynamicEntryMapIter iter = entries.begin();
+  while (iter != entries.end()) {
     if (iter->second.created_ >= time) {
-      this->erase(iter++);
+      entries.erase(iter++);
       dirty = true;
     } else {
       iter++;
     }
   }
+  if (dirty)
+    state->StateIsDirty();
 }
+
+}  // namespace
+
 
 TransportSecurityState::TransportSecurityState()
   : delegate_(NULL) {
@@ -206,16 +205,14 @@ void TransportSecurityState::ClearDynamicData() {
 
 void TransportSecurityState::DeleteAllDynamicDataSince(const base::Time& time) {
   DCHECK(CalledOnValidThread());
-  hsts_entries_.DeleteEntriesSince(time);
-  hpkp_entries_.DeleteEntriesSince(time);
-  CheckDirty();
+  DeleteDynamicEntriesSince(hsts_entries_, time, this);
+  DeleteDynamicEntriesSince(hpkp_entries_, time, this);
 }
 
 bool TransportSecurityState::DeleteDynamicDataForHost(const std::string& host) {
   DCHECK(CalledOnValidThread());
   bool deleted_hsts = DeleteHSTS(host);
   bool deleted_hpkp = DeleteHPKP(host);
-  CheckDirty();
   return deleted_hsts || deleted_hpkp;
 }
 
@@ -256,15 +253,15 @@ bool TransportSecurityState::GetDynamicDomainState(const base::Time& now,
 
     // Get HSTS data from map
     if (!result->should_upgrade_ &&
-        hsts_entries_.GetEntry(now, hashed_host, is_full_hostname,
-                               &hsts_entry)) {
+        GetDynamicEntry(hsts_entries_, now, hashed_host, is_full_hostname,
+                        &hsts_entry)) {
       result->should_upgrade_ = true;
     }
 
     // Get HPKP data from map
     if (!result->has_public_key_pins_ &&
-        hpkp_entries_.GetEntry(now, hashed_host, is_full_hostname,
-                               &hpkp_entry)) {
+        GetDynamicEntry(hpkp_entries_, now, hashed_host, is_full_hostname,
+                        &hpkp_entry)) {
       result->has_public_key_pins_ = true;
       result->public_key_pins_good_hashes_ = hpkp_entry.good_hashes_;
     }
@@ -400,9 +397,7 @@ bool TransportSecurityState::AddHSTSHashedHost(const std::string& hashed_host,
                                                bool include_subdomains) {
 
   DynamicEntry entry(include_subdomains, created, expiry);
-  bool result = hsts_entries_.AddEntry(hashed_host, entry);
-  CheckDirty();
-  return result;
+  return AddDynamicEntry(hsts_entries_, hashed_host, entry, this);
 }
 
 bool TransportSecurityState::AddHPKPHashedHost(const std::string& hashed_host,
@@ -413,21 +408,15 @@ bool TransportSecurityState::AddHPKPHashedHost(const std::string& hashed_host,
   if (hashes.empty())
     return false;
   HPKPEntry entry(include_subdomains, created, expiry, hashes);
-  bool result = hpkp_entries_.AddEntry(hashed_host, entry);
-  CheckDirty();
-  return result;
+  return AddDynamicEntry(hpkp_entries_, hashed_host, entry, this);
 }
 
 bool TransportSecurityState::DeleteHSTS(const std::string& host) {
-  bool result = hsts_entries_.DeleteEntry(HashHost(host));
-  CheckDirty();
-  return result;
+  return DeleteDynamicEntry(hsts_entries_, HashHost(host), this);
 }
 
 bool TransportSecurityState::DeleteHPKP(const std::string& host) {
-  bool result = hpkp_entries_.DeleteEntry(HashHost(host));
-  CheckDirty();
-  return result;
+  return DeleteDynamicEntry(hpkp_entries_, HashHost(host), this);
 }
 
 const std::map<std::string, TransportSecurityState::DynamicEntry>&
@@ -440,18 +429,15 @@ TransportSecurityState::GetHPKPEntries() const {
   return hpkp_entries_;
 }
 
+void TransportSecurityState::StateIsDirty() {
+  if (delegate_)
+    delegate_->StateIsDirty(this);
+}
+
 bool TransportSecurityState::IsBuildTimely() {
   const base::Time build_time = base::GetBuildTime();
   // We consider built-in information to be timely for 10 weeks.
   return (base::Time::Now() - build_time).InDays() < 70 /* 10 weeks */;
-}
-
-void TransportSecurityState::CheckDirty() {
-  DCHECK(CalledOnValidThread());
-  if (delegate_ && (hsts_entries_.dirty || hpkp_entries_.dirty))
-    delegate_->StateIsDirty(this);
-  hsts_entries_.dirty = false;
-  hpkp_entries_.dirty = false;
 }
 
 // DynamicEntry and subclasses (e.g. HPKPEntry)

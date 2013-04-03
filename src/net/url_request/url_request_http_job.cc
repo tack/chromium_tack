@@ -757,8 +757,7 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
       TransportSecurityState::DomainState domain_state;
       const URLRequestContext* context = request_->context();
       const bool report_to_google = context->transport_security_state() &&
-          context->transport_security_state()->GetDomainState(
-              request_info_.url.host(),
+          context->transport_security_state()->GetDomainState(host,
               SSLConfigService::IsSNIAvailable(context->ssl_config_service()),
               &domain_state) && domain_state.IsGooglePinnedProperty();
       if (report_to_google)
