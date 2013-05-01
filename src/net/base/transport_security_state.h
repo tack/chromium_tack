@@ -104,12 +104,12 @@ class NET_EXPORT TransportSecurityState
     size_t second_level_domain_name_;  // if report_uma_on_pin_failure_
   };
 
-  // DynamicEntry stores the HSTS data for a single domain.
-  struct DynamicEntry {
-    DynamicEntry();
-    ~DynamicEntry();
-    DynamicEntry(bool include_subdomains, const base::Time& created,
-                 const base::Time& expiry);
+  // HSTSEntry stores the HSTS data for a single domain.
+  struct HSTSEntry {
+    HSTSEntry();
+    ~HSTSEntry();
+    HSTSEntry(bool include_subdomains, const base::Time& created,
+              const base::Time& expiry);
 
     bool include_subdomains_;
     base::Time created_;
@@ -117,12 +117,16 @@ class NET_EXPORT TransportSecurityState
   };
 
   // HPKPEntry stores the HPKP data for a single domain.
-  struct HPKPEntry : public DynamicEntry {
+  struct HPKPEntry {
     HPKPEntry();
     ~HPKPEntry();
     HPKPEntry(bool include_subdomains, const base::Time& created,
               const base::Time& expiry,
               const HashValueVector& good_hashes);
+
+    bool include_subdomains_;
+    base::Time created_;
+    base::Time expiry_;
     HashValueVector good_hashes_;
   };
 
@@ -217,7 +221,7 @@ class NET_EXPORT TransportSecurityState
 
   // Direct (read-only) access to HSTS and HPKP entries.  Used for
   // serializing.
-  const std::map<std::string, DynamicEntry>& GetHSTSEntries() const;
+  const std::map<std::string, HSTSEntry>& GetHSTSEntries() const;
   const std::map<std::string, HPKPEntry>& GetHPKPEntries() const;
 
   // Only used by template functions within the .cc to signal that
@@ -244,7 +248,7 @@ class NET_EXPORT TransportSecurityState
   bool GetDynamicDomainState(const base::Time& now, const std::string& host,
                              DomainState* result) const;
 
-  std::map<std::string, DynamicEntry> hsts_entries_;
+  std::map<std::string, HSTSEntry> hsts_entries_;
   std::map<std::string, HPKPEntry> hpkp_entries_;
 
   Delegate* delegate_;

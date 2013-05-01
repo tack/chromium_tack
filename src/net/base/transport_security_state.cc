@@ -51,6 +51,20 @@ std::string HashesToBase64String(const HashValueVector& hashes) {
   return str;
 }
 
+std::string HashHost(const std::string& host) {
+  std::string lowercase = StringToLowerASCII(host);
+  std::string old_style_canonicalized_name;
+  if (!DNSDomainFromDot(lowercase, &old_style_canonicalized_name)) {
+    old_style_canonicalized_name.clear();
+    LOG(WARNING) << "Bad DNS name passed to TransportSecurityState";
+  }
+
+  char hashed[crypto::kSHA256Length];
+  crypto::SHA256HashString(old_style_canonicalized_name, hashed,
+                           sizeof(hashed));
+  return std::string(hashed, sizeof(hashed));
+}
+
 // Returns true if the intersection of |a| and |b| is not empty. If either
 // |a| or |b| is empty, returns false.
 bool HashesIntersect(const HashValueVector& a,
@@ -62,18 +76,6 @@ bool HashesIntersect(const HashValueVector& a,
       return true;
   }
   return false;
-}
-
-std::string HashHost(const std::string& host) {
-  std::string lowercase = StringToLowerASCII(host);
-  std::string old_style_canonicalized_name;
-  if (!DNSDomainFromDot(lowercase, &old_style_canonicalized_name))
-    return std::string();
-
-  char hashed[crypto::kSHA256Length];
-  crypto::SHA256HashString(old_style_canonicalized_name, hashed,
-                           sizeof(hashed));
-  return std::string(hashed, sizeof(hashed));
 }
 
 // Iterate over ("www.example.com", "example.com", "com")
@@ -109,55 +111,49 @@ struct DomainNameIterator {
 };
 
 // Template functions for maps of DynamicEntries (or subclasses)
-
-#define DynamicEntryMapConstIter \
-  typename std::map<std::string, T>::const_iterator
-#define DynamicEntryMapIter \
-  typename std::map<std::string, T>::iterator
-
-template <typename T>
+template <typename T, typename MapType = std::map<std::string, T> >
 bool GetDynamicEntry(const std::map<std::string, T>& entries,
-                     const base::Time& now, const std::string& hashed_host,
-                     bool is_full_hostname, T* result_entry) {
+                     const base::Time& now,
+                     const std::string& hashed_host,
+                     bool is_full_hostname,
+                     T* result_entry) {
   // Find the entry, and return if relevant and nonexpired
-  DynamicEntryMapConstIter find_iter = entries.find(hashed_host);
-  if (find_iter != entries.end()) {
-    const T& found_entry = find_iter->second;
-    if ((is_full_hostname || found_entry.include_subdomains_) &&
-        found_entry.expiry_ > now) {
-      *result_entry = found_entry;
-      return true;
-    }
+  typename MapType::const_iterator find_iter = entries.find(hashed_host);
+  if (find_iter == entries.end())
+    return false;
+
+  const T& found_entry = find_iter->second;
+  if ((is_full_hostname || found_entry.include_subdomains_) &&
+      found_entry.expiry_ > now) {
+    *result_entry = found_entry;
+    return true;
   }
   return false;
 }
 
-template<typename T>
+template<typename T, typename MapType = std::map<std::string, T> >
 bool AddDynamicEntry(std::map<std::string, T>& entries,
-                     const std::string& hashed_host, const T& new_entry,
+                     const std::string& hashed_host,
+                     const T& new_entry,
                      TransportSecurityState* state) {
-  bool dirty = false;
-  DynamicEntryMapIter find_iter = entries.find(hashed_host);
+  typename MapType::iterator find_iter = entries.find(hashed_host);
   if (find_iter != entries.end()) {
     // Leave 'created' unchanged
     T& found_entry = find_iter->second;
     found_entry.expiry_ = new_entry.expiry_;
     found_entry.include_subdomains_ = new_entry.include_subdomains_;
-    dirty = true;
   } else {
     entries[hashed_host] = new_entry;
-    dirty = true;
   }
-  if (dirty)
-    state->StateIsDirty();
+  state->StateIsDirty();
   return true;
 }
 
-template<typename T>
+template<typename T, typename MapType = std::map<std::string, T> >
 bool DeleteDynamicEntry(std::map<std::string, T>& entries,
                         const std::string& hashed_host,
                         TransportSecurityState* state) {
-  DynamicEntryMapIter find_iter = entries.find(hashed_host);
+  typename MapType::iterator find_iter = entries.find(hashed_host);
   if (find_iter != entries.end()) {
     entries.erase(find_iter);
     state->StateIsDirty();
@@ -166,12 +162,12 @@ bool DeleteDynamicEntry(std::map<std::string, T>& entries,
   return false;
 }
 
-template<typename T>
+template<typename T, typename MapType = std::map<std::string, T> >
 void DeleteDynamicEntriesSince(std::map<std::string, T>& entries,
                                const base::Time& time,
                                TransportSecurityState* state) {
   bool dirty = false;
-  DynamicEntryMapIter iter = entries.begin();
+  typename MapType::iterator iter = entries.begin();
   while (iter != entries.end()) {
     if (iter->second.created_ >= time) {
       entries.erase(iter++);
@@ -244,7 +240,7 @@ bool TransportSecurityState::GetDomainState(const std::string& host,
 bool TransportSecurityState::GetDynamicDomainState(const base::Time& now,
                                                    const std::string& host,
                                                    DomainState* result) const {
-  DynamicEntry hsts_entry;
+  HSTSEntry hsts_entry;
   HPKPEntry hpkp_entry;
   // Iterate over 'www.example.com", 'example.com", "com"
   for (DomainNameIterator iter(host); !iter.AtEnd(); iter.Advance()) {
@@ -301,8 +297,8 @@ bool TransportSecurityState::GetPreloadDomainState(bool sni_enabled,
         // If we find a relevant preload entry, populate the
         // entire DomainState from it and return
         if (entry.length == name.size() &&
-            memcmp(entry.dns_name, name.data(), entry.length) == 0 &&
-            (iter.IsFullHostname() || entry.include_subdomains)) {
+            (iter.IsFullHostname() || entry.include_subdomains) &&
+            memcmp(entry.dns_name, name.data(), entry.length) == 0) {
           if (entry.https_required)
             result->should_upgrade_ = true;
 
@@ -366,8 +362,7 @@ void TransportSecurityState::AddHPKPHeader(const std::string& host,
                       &public_key_pin_hashes)) {
     if (max_age.InSeconds() == 0) {
       DeleteHPKP(host);
-    }
-    else {
+    } else {
       AddHPKP(host, now, now + max_age, include_subdomains,
               public_key_pin_hashes);
     }
@@ -396,7 +391,7 @@ bool TransportSecurityState::AddHSTSHashedHost(const std::string& hashed_host,
                                                const base::Time& expiry,
                                                bool include_subdomains) {
 
-  DynamicEntry entry(include_subdomains, created, expiry);
+  HSTSEntry entry(include_subdomains, created, expiry);
   return AddDynamicEntry(hsts_entries_, hashed_host, entry, this);
 }
 
@@ -419,7 +414,7 @@ bool TransportSecurityState::DeleteHPKP(const std::string& host) {
   return DeleteDynamicEntry(hpkp_entries_, HashHost(host), this);
 }
 
-const std::map<std::string, TransportSecurityState::DynamicEntry>&
+const std::map<std::string, TransportSecurityState::HSTSEntry>&
 TransportSecurityState::GetHSTSEntries() const {
   return hsts_entries_;
 }
@@ -442,25 +437,28 @@ bool TransportSecurityState::IsBuildTimely() {
 
 // DynamicEntry and subclasses (e.g. HPKPEntry)
 
-TransportSecurityState::DynamicEntry::DynamicEntry()
+TransportSecurityState::HSTSEntry::HSTSEntry()
   : include_subdomains_(false),
     created_(),
     expiry_() {
 }
 
-TransportSecurityState::DynamicEntry::~DynamicEntry() {
+TransportSecurityState::HSTSEntry::~HSTSEntry() {
 }
 
-TransportSecurityState::DynamicEntry::DynamicEntry(bool include_subdomains,
-                                                   const base::Time& created,
-                                                   const base::Time& expiry)
+TransportSecurityState::HSTSEntry::HSTSEntry(bool include_subdomains,
+                                             const base::Time& created,
+                                             const base::Time& expiry)
   : include_subdomains_(include_subdomains),
     created_(created),
     expiry_(expiry) {
 }
 
 TransportSecurityState::HPKPEntry::HPKPEntry()
-  : DynamicEntry(), good_hashes_() {
+  : include_subdomains_(false),
+    created_(),
+    expiry_(),
+    good_hashes_() {
 }
 
 TransportSecurityState::HPKPEntry::~HPKPEntry() {
@@ -470,9 +468,11 @@ TransportSecurityState::HPKPEntry::HPKPEntry(
   bool include_subdomains,
   const base::Time& created,
   const base::Time& expiry,
-  const HashValueVector& good_hashes):
-  DynamicEntry(include_subdomains, created, expiry),
-  good_hashes_(good_hashes) {
+  const HashValueVector& good_hashes)
+  : include_subdomains_(include_subdomains),
+    created_(created),
+    expiry_(expiry),
+    good_hashes_(good_hashes) {
 }
 
 // DomainState
@@ -489,7 +489,6 @@ TransportSecurityState::DomainState::DomainState()
 
 TransportSecurityState::DomainState::~DomainState() {
 }
-
 bool TransportSecurityState::DomainState::HasPublicKeyPins() const {
   return has_public_key_pins_;
 }

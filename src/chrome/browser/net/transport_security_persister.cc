@@ -159,11 +159,11 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
   DictionaryValue toplevel;
-  std::map<std::string, TransportSecurityState::DynamicEntry>::const_iterator
+  std::map<std::string, TransportSecurityState::HSTSEntry>::const_iterator
       iter = transport_security_state_->GetHSTSEntries().begin();
   for (; iter != transport_security_state_->GetHSTSEntries().end(); ++iter) {
     const std::string& hashed_host = iter->first;
-    const TransportSecurityState::DynamicEntry& entry = iter->second;
+    const TransportSecurityState::HSTSEntry& entry = iter->second;
 
     DictionaryValue* serialized = new DictionaryValue;
     serialized->SetBoolean(kIncludeSubdomains,
@@ -199,6 +199,10 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
     return false;
 
   const base::Time current_time(base::Time::Now());
+
+  // dirtied is set to false only if every JSON entry is succesfully loaded
+  // and has a creation date.  Otherwise, dirtied is set to true, so that
+  // the JSON will be re-serialized in canonical form.
   bool dirtied = false;
 
   for (DictionaryValue::key_iterator i = dict_value->begin_keys();
@@ -206,11 +210,12 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
     DictionaryValue* parsed;
     if (!dict_value->GetDictionaryWithoutPathExpansion(*i, &parsed)) {
       LOG(WARNING) << "Could not parse entry " << *i << "; skipping entry";
+      dirtied = true;
       continue;
     }
 
-    bool include_subdomains = false;
-    double created_double = 0, expiry_double = 0;
+    bool include_subdomains;
+    double created_double, expiry_double;
     base::Time created, expiry;
     std::string mode_string;
 
@@ -220,6 +225,7 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
         !parsed->GetDouble(kExpiry, &expiry_double)) {
       LOG(WARNING) << "Could not parse some elements of entry " << *i
                    << "; skipping entry";
+      dirtied = true;
       continue;
     }
 
@@ -235,11 +241,12 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
     if (mode_string == kForceHTTPS || mode_string == kStrict) {
       std::string hashed_host = ExternalStringToHashedDomain(*i);
       base::Time expiry = base::Time::FromDoubleT(expiry_double);
-      if (expiry > current_time)
+      if (expiry > current_time) {
         state->AddHSTSHashedHost(hashed_host, created, expiry,
                                  include_subdomains);
-      else
+      } else {
         dirtied = true;
+      }
     }
   }
 
