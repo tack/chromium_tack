@@ -27,23 +27,23 @@
 #include "crypto/nss_util.h"
 #include "crypto/rsa_private_key.h"
 #include "net/base/address_list.h"
-#include "net/base/cert_status_flags.h"
-#include "net/base/cert_test_util.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
-#include "net/base/mock_cert_verifier.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_log.h"
-#include "net/base/ssl_config_service.h"
-#include "net/base/ssl_info.h"
 #include "net/base/test_data_directory.h"
-#include "net/base/x509_certificate.h"
+#include "net/cert/cert_status_flags.h"
+#include "net/cert/mock_cert_verifier.h"
+#include "net/cert/x509_certificate.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/stream_socket.h"
+#include "net/ssl/ssl_config_service.h"
+#include "net/ssl/ssl_info.h"
+#include "net/test/cert_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -55,7 +55,7 @@ class FakeDataChannel {
  public:
   FakeDataChannel()
       : read_buf_len_(0),
-        ALLOW_THIS_IN_INITIALIZER_LIST(weak_factory_(this)),
+        weak_factory_(this),
         closed_(false),
         write_called_after_close_(false) {
   }
@@ -229,13 +229,6 @@ class FakeSocket : public StreamSocket {
     return false;
   }
 
-  virtual int64 NumBytesRead() const OVERRIDE {
-    return -1;
-  }
-
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE {
-    return base::TimeDelta::FromMicroseconds(-1);
-  }
 
   virtual bool WasNpnNegotiated() const OVERRIDE {
     return false;

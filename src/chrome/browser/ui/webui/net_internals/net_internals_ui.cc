@@ -19,11 +19,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop.h"
 #include "base/platform_file.h"
-#include "base/prefs/public/pref_member.h"
+#include "base/prefs/pref_member.h"
 #include "base/sequenced_task_runner_helpers.h"
-#include "base/string_piece.h"
 #include "base/string_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/threading/worker_pool.h"
 #include "base/utf_string_conversions.h"
@@ -32,6 +32,8 @@
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/download/download_util.h"
+#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_system.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
@@ -44,6 +46,7 @@
 #include "chrome/common/chrome_notification_types.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_version_info.h"
+#include "chrome/common/extensions/extension_set.h"
 #include "chrome/common/logging_chrome.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -56,17 +59,17 @@
 #include "content/public/browser/web_ui_message_handler.h"
 #include "grit/generated_resources.h"
 #include "grit/net_internals_resources.h"
-#include "net/base/host_cache.h"
-#include "net/base/host_resolver.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
-#include "net/base/transport_security_state.h"
 #include "net/disk_cache/disk_cache.h"
+#include "net/dns/host_cache.h"
+#include "net/dns/host_resolver.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_layer.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_stream_factory.h"
+#include "net/http/transport_security_state.h"
 #include "net/proxy/proxy_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -78,7 +81,9 @@
 #include "chrome/browser/chromeos/system/syslogs_provider.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
+#include "chromeos/network/certificate_handler.h"
 #include "chromeos/network/onc/onc_constants.h"
+#include "chromeos/network/onc/onc_utils.h"
 #endif
 #if defined(OS_WIN)
 #include "chrome/browser/net/service_providers_win.h"
@@ -171,6 +176,26 @@ Value* RequestStateToValue(const net::URLRequest* request,
   dict->SetString("method", request->method());
   dict->SetBoolean("has_upload", request->has_upload());
   dict->SetBoolean("is_pending", request->is_pending());
+
+  // Add the status of the request.  The status should always be IO_PENDING, and
+  // the error should always be OK, unless something is holding onto a request
+  // that has finished or a request was leaked.  Neither of these should happen.
+  switch (request->status().status()) {
+    case net::URLRequestStatus::SUCCESS:
+      dict->SetString("status", "SUCCESS");
+      break;
+    case net::URLRequestStatus::IO_PENDING:
+      dict->SetString("status", "IO_PENDING");
+      break;
+    case net::URLRequestStatus::CANCELED:
+      dict->SetString("status", "CANCELED");
+      break;
+    case net::URLRequestStatus::FAILED:
+      dict->SetString("status", "FAILED");
+      break;
+  }
+  if (request->status().error() != net::OK)
+    dict->SetInteger("net_error", request->status().error());
   return dict;
 }
 
@@ -222,8 +247,6 @@ content::WebUIDataSource* CreateNetInternalsHTMLSource() {
       content::WebUIDataSource::Create(chrome::kChromeUINetInternalsHost);
 
   source->SetDefaultResource(IDR_NET_INTERNALS_INDEX_HTML);
-  source->AddResourcePath("help.html", IDR_NET_INTERNALS_HELP_HTML);
-  source->AddResourcePath("help.js", IDR_NET_INTERNALS_HELP_JS);
   source->AddResourcePath("index.js", IDR_NET_INTERNALS_INDEX_JS);
   source->SetJsonPath("strings.js");
   return source;
@@ -399,6 +422,7 @@ class NetInternalsMessageHandler
   void OnClearBrowserCache(const ListValue* list);
   void OnGetPrerenderInfo(const ListValue* list);
   void OnGetHistoricNetworkStats(const ListValue* list);
+  void OnGetExtensionInfo(const ListValue* list);
 #if defined(OS_CHROMEOS)
   void OnRefreshSystemLogs(const ListValue* list);
   void OnGetSystemLog(const ListValue* list);
@@ -790,6 +814,10 @@ void NetInternalsMessageHandler::RegisterMessages() {
       "getHistoricNetworkStats",
       base::Bind(&NetInternalsMessageHandler::OnGetHistoricNetworkStats,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getExtensionInfo",
+      base::Bind(&NetInternalsMessageHandler::OnGetExtensionInfo,
+                 base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "refreshSystemLogs",
@@ -863,6 +891,29 @@ void NetInternalsMessageHandler::OnGetHistoricNetworkStats(
   Value* historic_network_info =
       ChromeNetworkDelegate::HistoricNetworkStatsInfoToValue();
   SendJavascriptCommand("receivedHistoricNetworkStats", historic_network_info);
+}
+
+void NetInternalsMessageHandler::OnGetExtensionInfo(const ListValue* list) {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  ListValue* extension_list = new ListValue();
+  Profile* profile = Profile::FromWebUI(web_ui());
+  extensions::ExtensionSystem* extension_system =
+      extensions::ExtensionSystem::Get(profile);
+  if (extension_system) {
+    ExtensionService* extension_service = extension_system->extension_service();
+    if (extension_service) {
+      scoped_ptr<const ExtensionSet> extensions(
+          extension_service->GenerateInstalledExtensionsSet());
+      for (ExtensionSet::const_iterator it = extensions->begin();
+           it != extensions->end(); ++it) {
+        DictionaryValue* extension_info = new DictionaryValue();
+        bool enabled = extension_service->IsExtensionEnabled((*it)->id());
+        (*it)->GetBasicInfo(enabled, extension_info);
+        extension_list->Append(extension_info);
+      }
+    }
+  }
+  SendJavascriptCommand("receivedExtensionInfo", extension_list);
 }
 
 #if defined(OS_CHROMEOS)
@@ -1146,8 +1197,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnGetHostResolverInfo(
       // Append all of the resolved addresses.
       ListValue* address_list = new ListValue();
       for (size_t i = 0; i < entry.addrlist.size(); ++i) {
-        address_list->Append(
-            Value::CreateStringValue(entry.addrlist[i].ToStringWithoutPort()));
+        address_list->AppendString(entry.addrlist[i].ToStringWithoutPort());
       }
       entry_dict->Set("addresses", address_list);
     }
@@ -1233,21 +1283,17 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSQuery(
 
       result->SetBoolean("result", found);
       if (found) {
-        result->SetBoolean("HSTS", state.ShouldUpgradeToSSL());
-        if (state.HasPublicKeyPins()) {
-          const net::HashValueVector& good_hashes =
-            state.GetPublicKeyPinsGoodHashes();
-          const net::HashValueVector& bad_hashes =
-            state.GetPublicKeyPinsBadHashes();
-          if (!good_hashes.empty())
-            result->SetString("Public_Key_Pins_Good",
-                              HashesToBase64String(
-                                state.GetPublicKeyPinsGoodHashes()));
-          if (!bad_hashes.empty())
-            result->SetString("Public_Key_Pins_Bad",
-                              HashesToBase64String(
-                                state.GetPublicKeyPinsBadHashes()));
-        }
+        result->SetInteger("mode", static_cast<int>(state.upgrade_mode));
+        result->SetBoolean("subdomains", state.include_subdomains);
+        result->SetString("domain", state.domain);
+        result->SetDouble("expiry", state.upgrade_expiry.ToDoubleT());
+        result->SetDouble("dynamic_spki_hashes_expiry",
+                          state.dynamic_spki_hashes_expiry.ToDoubleT());
+
+        result->SetString("static_spki_hashes",
+                          HashesToBase64String(state.static_spki_hashes));
+        result->SetString("dynamic_spki_hashes",
+                          HashesToBase64String(state.dynamic_spki_hashes));
       }
     }
   }
@@ -1275,16 +1321,15 @@ void NetInternalsMessageHandler::IOThreadImpl::OnHSTSAdd(
   if (!transport_security_state)
     return;
 
-  base::Time now = base::Time::Now();
-  base::Time expiry = now + base::TimeDelta::FromDays(1000);
+  base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
   net::HashValueVector hashes;
   if (!hashes_str.empty()) {
     if (!Base64StringToHashes(hashes_str, &hashes))
       return;
   }
 
-  transport_security_state->AddHSTS(domain, now, expiry, include_subdomains);
-  transport_security_state->AddHPKP(domain, now, expiry, include_subdomains,
+  transport_security_state->AddHSTS(domain, expiry, include_subdomains);
+  transport_security_state->AddHPKP(domain, expiry, include_subdomains,
                                     hashes);
 }
 
@@ -1318,8 +1363,8 @@ void NetInternalsMessageHandler::IOThreadImpl::OnGetHttpCacheInfo(
     std::vector<std::pair<std::string, std::string> > stats;
     disk_cache->GetStats(&stats);
     for (size_t i = 0; i < stats.size(); ++i) {
-      stats_dict->Set(stats[i].first,
-                      Value::CreateStringValue(stats[i].second));
+      stats_dict->SetStringWithoutPathExpansion(
+          stats[i].first, stats[i].second);
     }
   }
 
@@ -1409,14 +1454,11 @@ void NetInternalsMessageHandler::IOThreadImpl::OnGetSpdyStatus(
                        net::HttpStreamFactory::force_spdy_always()));
 
   // The next_protos may not be specified for certain configurations of SPDY.
-  Value* next_protos_value;
+  std::string next_protos_string;
   if (net::HttpStreamFactory::has_next_protos()) {
-    next_protos_value = Value::CreateStringValue(
-        JoinString(net::HttpStreamFactory::next_protos(), ','));
-  } else {
-    next_protos_value = Value::CreateStringValue("");
+    next_protos_string = JoinString(net::HttpStreamFactory::next_protos(), ',');
   }
-  status_dict->Set("next_protos", next_protos_value);
+  status_dict->SetString("next_protos", next_protos_string);
 
   SendJavascriptCommand("receivedSpdyStatus", status_dict);
 }
@@ -1519,19 +1561,29 @@ void NetInternalsMessageHandler::OnImportONCFile(const ListValue* list) {
     NOTREACHED();
   }
 
+  chromeos::onc::ONCSource onc_source = chromeos::onc::ONC_SOURCE_USER_IMPORT;
+
+  base::ListValue network_configs;
+  base::ListValue certificates;
   std::string error;
-  chromeos::NetworkLibrary* cros_network =
-      chromeos::CrosLibrary::Get()->GetNetworkLibrary();
-  if (!cros_network->LoadOncNetworks(onc_blob, passcode,
-                                     chromeos::onc::ONC_SOURCE_USER_IMPORT,
-                                     false)) {  // allow web trust from policy
-    error = "Errors occurred during the ONC import.";
+  if (!chromeos::onc::ParseAndValidateOncForImport(
+          onc_blob, onc_source, passcode, &network_configs, &certificates)) {
+    error = "Errors occurred during the ONC parsing.";
     LOG(ERROR) << error;
   }
 
+  chromeos::NetworkLibrary* network_library =
+      chromeos::CrosLibrary::Get()->GetNetworkLibrary();
+  network_library->LoadOncNetworks(network_configs, onc_source);
   // Now that we've added the networks, we need to rescan them so they'll be
   // available from the menu more immediately.
-  cros_network->RequestNetworkScan();
+  network_library->RequestNetworkScan();
+
+  chromeos::CertificateHandler certificate_handler;
+  if (!certificate_handler.ImportCertificates(certificates, onc_source, NULL)) {
+    error += "Some certificates couldn't be imported.";
+    LOG(ERROR) << error;
+  }
 
   SendJavascriptCommand("receivedONCFileParse",
                         Value::CreateStringValue(error));

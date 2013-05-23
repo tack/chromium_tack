@@ -18,16 +18,16 @@
 #include "base/threading/platform_thread.h"
 #include "base/time.h"
 #include "base/timer.h"
-#include "net/base/cert_verify_result.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_export.h"
 #include "net/base/net_log.h"
 #include "net/base/nss_memio.h"
-#include "net/base/server_bound_cert_service.h"
-#include "net/base/ssl_config_service.h"
-#include "net/base/x509_certificate.h"
+#include "net/cert/cert_verify_result.h"
+#include "net/cert/x509_certificate.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/ssl/server_bound_cert_service.h"
+#include "net/ssl/ssl_config_service.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -91,8 +91,6 @@ class SSLClientSocketNSS : public SSLClientSocket {
   virtual void SetOmniboxSpeculation() OVERRIDE;
   virtual bool WasEverUsed() const OVERRIDE;
   virtual bool UsingTCPFastOpen() const OVERRIDE;
-  virtual int64 NumBytesRead() const OVERRIDE;
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
   virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
 
   // Socket implementation.

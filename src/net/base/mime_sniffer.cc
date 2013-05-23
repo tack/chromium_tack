@@ -114,14 +114,28 @@ struct MagicNumber {
   const char* magic;
   size_t magic_len;
   bool is_string;
+  const char* mask;  // if set, must have same length as |magic|
 };
 
 #define MAGIC_NUMBER(mime_type, magic) \
-  { (mime_type), (magic), sizeof(magic)-1, false },
+  { (mime_type), (magic), sizeof(magic)-1, false, NULL },
+
+template <int MagicSize, int MaskSize>
+class VerifySizes {
+  COMPILE_ASSERT(MagicSize == MaskSize, sizes_must_be_equal);
+ public:
+  enum { SIZES = MagicSize };
+};
+
+#define verified_sizeof(magic, mask) \
+VerifySizes<sizeof(magic), sizeof(mask)>::SIZES
+
+#define MAGIC_MASK(mime_type, magic, mask) \
+  { (mime_type), (magic), verified_sizeof(magic, mask)-1, false, (mask) },
 
 // Magic strings are case insensitive and must not include '\0' characters
 #define MAGIC_STRING(mime_type, magic) \
-  { (mime_type), (magic), sizeof(magic)-1, true },
+  { (mime_type), (magic), sizeof(magic)-1, true, NULL },
 
 static const MagicNumber kMagicNumbers[] = {
   // Source: HTML 5 specification
@@ -174,6 +188,58 @@ static const MagicNumber kMagicNumbers[] = {
   //     vulnerability if the site allows users to upload content.
   //
   // On balance, we do not include these patterns.
+};
+
+// The number of content bytes we need to use all our Microsoft Office magic
+// numbers.
+static const size_t kBytesRequiredForOfficeMagic = 8;
+
+static const MagicNumber kOfficeMagicNumbers[] = {
+  MAGIC_NUMBER("CFB", "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1")
+  MAGIC_NUMBER("OOXML", "PK\x03\x04")
+};
+
+enum OfficeDocType {
+  DOC_TYPE_WORD,
+  DOC_TYPE_EXCEL,
+  DOC_TYPE_POWERPOINT,
+  DOC_TYPE_NONE
+};
+
+struct OfficeExtensionType {
+  OfficeDocType doc_type;
+  const char* extension;
+  size_t extension_len;
+};
+
+#define OFFICE_EXTENSION(type, extension) \
+  { (type), (extension), sizeof(extension) - 1 },
+
+static const OfficeExtensionType kOfficeExtensionTypes[] = {
+  OFFICE_EXTENSION(DOC_TYPE_WORD, ".doc")
+  OFFICE_EXTENSION(DOC_TYPE_EXCEL, ".xls")
+  OFFICE_EXTENSION(DOC_TYPE_POWERPOINT, ".ppt")
+  OFFICE_EXTENSION(DOC_TYPE_WORD, ".docx")
+  OFFICE_EXTENSION(DOC_TYPE_EXCEL, ".xlsx")
+  OFFICE_EXTENSION(DOC_TYPE_POWERPOINT, ".pptx")
+};
+
+static const MagicNumber kExtraMagicNumbers[] = {
+  MAGIC_NUMBER("image/x-xbitmap", "#define")
+  MAGIC_NUMBER("image/x-icon", "\x00\x00\x01\x00")
+  MAGIC_NUMBER("image/svg+xml", "<?xml_version=")
+  MAGIC_NUMBER("audio/wav", "RIFF....WAVEfmt ")
+  MAGIC_NUMBER("video/avi", "RIFF....AVI LIST")
+  MAGIC_NUMBER("audio/ogg", "OggS")
+  MAGIC_MASK("video/mpeg", "\x00\x00\x01\xB0", "\xFF\xFF\xFF\xF0")
+  MAGIC_MASK("audio/mpeg", "\xFF\xE0", "\xFF\xE0")
+  MAGIC_NUMBER("video/3gpp", "....ftyp3g")
+  MAGIC_NUMBER("video/3gpp", "....ftypavcl")
+  MAGIC_NUMBER("video/mp4", "....ftyp")
+  MAGIC_NUMBER("video/quicktime", "MOVI")
+  MAGIC_NUMBER("application/x-shockwave-flash", "CWS")
+  MAGIC_NUMBER("application/x-shockwave-flash", "FWS")
+  MAGIC_NUMBER("video/x-flv", "FLV")
 };
 
 // Our HTML sniffer differs slightly from Mozilla.  For example, Mozilla will
@@ -230,7 +296,25 @@ static bool MagicCmp(const char* magic_entry, const char* content, size_t len) {
   return true;
 }
 
-static bool MatchMagicNumber(const char* content, size_t size,
+// Like MagicCmp() except that it ANDs each byte with a mask before
+// the comparison, because there are some bits we don't care about.
+static bool MagicMaskCmp(const char* magic_entry,
+                         const char* content,
+                         size_t len,
+                         const char* mask) {
+  while (len) {
+    if ((*magic_entry != '.') && (*magic_entry != (*mask & *content)))
+      return false;
+    ++magic_entry;
+    ++content;
+    ++mask;
+    --len;
+  }
+  return true;
+}
+
+static bool MatchMagicNumber(const char* content,
+                             size_t size,
                              const MagicNumber* magic_entry,
                              std::string* result) {
   const size_t len = magic_entry->magic_len;
@@ -253,8 +337,14 @@ static bool MatchMagicNumber(const char* content, size_t size,
       match = (base::strncasecmp(magic_entry->magic, content, len) == 0);
     }
   } else {
-    if (size >= len)
-      match = MagicCmp(magic_entry->magic, content, len);
+    if (size >= len) {
+      if (!magic_entry->mask) {
+        match = MagicCmp(magic_entry->magic, content, len);
+      } else {
+        match = MagicMaskCmp(magic_entry->magic, content, len,
+                             magic_entry->mask);
+      }
+    }
   }
 
   if (match) {
@@ -334,6 +424,83 @@ static bool SniffForMagicNumbers(const char* content,
   return CheckForMagicNumbers(content, size,
                               kMagicNumbers, arraysize(kMagicNumbers),
                               counter, result);
+}
+
+// Returns true and sets result if the content matches any of
+// kOfficeMagicNumbers, and the URL has the proper extension.
+// Clears |have_enough_content| if more data could possibly change the result.
+static bool SniffForOfficeDocs(const char* content,
+                               size_t size,
+                               const GURL& url,
+                               bool* have_enough_content,
+                               std::string* result) {
+  *have_enough_content &= TruncateSize(kBytesRequiredForOfficeMagic, &size);
+
+  // Check our table of magic numbers for Office file types.
+  std::string office_version;
+  if (!CheckForMagicNumbers(content, size,
+                            kOfficeMagicNumbers, arraysize(kOfficeMagicNumbers),
+                            NULL, &office_version))
+    return false;
+
+  OfficeDocType type = DOC_TYPE_NONE;
+  for (size_t i = 0; i < arraysize(kOfficeExtensionTypes); ++i) {
+    std::string url_path = url.path();
+
+    if (url_path.length() < kOfficeExtensionTypes[i].extension_len)
+      continue;
+
+    const char* extension =
+        &url_path[url_path.length() -
+                  kOfficeExtensionTypes[i].extension_len];
+
+    if (0 == base::strncasecmp(extension, kOfficeExtensionTypes[i].extension,
+                               kOfficeExtensionTypes[i].extension_len)) {
+      type = kOfficeExtensionTypes[i].doc_type;
+      break;
+    }
+  }
+
+  if (type == DOC_TYPE_NONE)
+    return false;
+
+  if (office_version == "CFB") {
+    switch (type) {
+      case DOC_TYPE_WORD:
+        *result = "application/msword";
+        return true;
+      case DOC_TYPE_EXCEL:
+        *result = "application/vnd.ms-excel";
+        return true;
+      case DOC_TYPE_POWERPOINT:
+        *result = "application/vnd.ms-powerpoint";
+        return true;
+      case DOC_TYPE_NONE:
+        NOTREACHED();
+        return false;
+    }
+  } else if (office_version == "OOXML") {
+    switch (type) {
+      case DOC_TYPE_WORD:
+        *result = "application/vnd.openxmlformats-officedocument."
+                  "wordprocessingml.document";
+        return true;
+      case DOC_TYPE_EXCEL:
+        *result = "application/vnd.openxmlformats-officedocument."
+                  "spreadsheetml.sheet";
+        return true;
+      case DOC_TYPE_POWERPOINT:
+        *result = "application/vnd.openxmlformats-officedocument."
+                  "presentationml.presentation";
+        return true;
+      case DOC_TYPE_NONE:
+        NOTREACHED();
+        return false;
+    }
+  }
+
+  NOTREACHED();
+  return false;
 }
 
 // Byte order marks
@@ -515,7 +682,7 @@ static bool IsUnknownMimeType(const std::string& mime_type) {
   return false;
 }
 
-// Returns true and sets result if the content appears to be a crx (chrome
+// Returns true and sets result if the content appears to be a crx (Chrome
 // extension) file.
 // Clears have_enough_content if more data could possibly change the result.
 static bool SniffCRX(const char* content,
@@ -612,8 +779,10 @@ bool ShouldSniffMimeType(const GURL& url, const std::string& mime_type) {
   return false;
 }
 
-bool SniffMimeType(const char* content, size_t content_size,
-                   const GURL& url, const std::string& type_hint,
+bool SniffMimeType(const char* content,
+                   size_t content_size,
+                   const GURL& url,
+                   const std::string& type_hint,
                    std::string* result) {
   DCHECK_LT(content_size, 1000000U);  // sanity check
   DCHECK(content);
@@ -666,11 +835,18 @@ bool SniffMimeType(const char* content, size_t content_size,
     return have_enough_content;
   }
 
-  // CRX files (chrome extensions) have a special sniffing algorithm. It is
+  // CRX files (Chrome extensions) have a special sniffing algorithm. It is
   // tighter than the others because we don't have to match legacy behavior.
   if (SniffCRX(content, content_size, url, type_hint,
                &have_enough_content, result))
     return true;
+
+  // Check the file extension and magic numbers to see if this is an Office
+  // document.  This needs to be checked before the general magic numbers
+  // because zip files and Office documents (OOXML) have the same magic number.
+  if (SniffForOfficeDocs(content, content_size, url,
+                         &have_enough_content, result))
+    return true;  // We've matched a magic number.  No more content needed.
 
   // We're not interested in sniffing for magic numbers when the type_hint
   // is application/octet-stream.  Time to bail out.
@@ -684,6 +860,18 @@ bool SniffMimeType(const char* content, size_t content_size,
     return true;  // We've matched a magic number.  No more content needed.
 
   return have_enough_content;
+}
+
+bool SniffMimeTypeFromLocalData(const char* content,
+                                size_t size,
+                                std::string* result) {
+  // First check the extra table.
+  if (CheckForMagicNumbers(content, size, kExtraMagicNumbers,
+                           arraysize(kExtraMagicNumbers), NULL, result))
+    return true;
+  // Finally check the original table.
+  return CheckForMagicNumbers(content, size, kMagicNumbers,
+                              arraysize(kMagicNumbers), NULL, result);
 }
 
 }  // namespace net

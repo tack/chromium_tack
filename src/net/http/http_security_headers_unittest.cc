@@ -4,7 +4,7 @@
 
 #include "base/base64.h"
 #include "base/sha1.h"
-#include "base/string_piece.h"
+#include "base/strings/string_piece.h"
 #include "crypto/sha2.h"
 #include "net/base/net_log.h"
 #include "net/base/test_completion_callback.h"
@@ -51,7 +51,8 @@ TEST_F(HttpSecurityHeadersTest, BogusHeaders) {
   base::Time expiry = now;
   bool include_subdomains = false;
 
-  EXPECT_FALSE(ParseHSTSHeader(now, "", &expiry, &include_subdomains));
+  EXPECT_FALSE(
+      ParseHSTSHeader(now, std::string(), &expiry, &include_subdomains));
   EXPECT_FALSE(ParseHSTSHeader(now, "    ", &expiry, &include_subdomains));
   EXPECT_FALSE(ParseHSTSHeader(now, "abc", &expiry, &include_subdomains));
   EXPECT_FALSE(ParseHSTSHeader(now, "  abc", &expiry, &include_subdomains));
@@ -135,7 +136,8 @@ static void TestBogusPinsHeaders(HashValueTag tag) {
   std::string good_pin = GetTestPin(2, tag);
   std::string backup_pin = GetTestPin(4, tag);
 
-  EXPECT_FALSE(ParseHPKPHeader(now, "", chain_hashes, &expiry, &hashes));
+  EXPECT_FALSE(
+      ParseHPKPHeader(now, std::string(), chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "    ", chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "abc", chain_hashes, &expiry, &hashes));
   EXPECT_FALSE(ParseHPKPHeader(now, "  abc", chain_hashes, &expiry, &hashes));
@@ -420,5 +422,5 @@ TEST_F(HttpSecurityHeadersTest, ValidPinsHeadersSHA1) {
 TEST_F(HttpSecurityHeadersTest, ValidPinsHeadersSHA256) {
   TestValidPinsHeaders(HASH_VALUE_SHA256);
 }
-};
 
+};    // namespace net

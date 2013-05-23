@@ -21,15 +21,19 @@ namespace {
 
 const int kFilesPerEvent = 8;
 
+bool IsDotDot(const base::FilePath& path) {
+  return FILE_PATH_LITERAL("..") == path.BaseName().value();
+}
+
 // Comparator for sorting lister results. This uses the locale aware filename
 // comparison function on the filenames for sorting in the user's locale.
 // Static.
 bool CompareAlphaDirsFirst(const DirectoryLister::DirectoryListerData& a,
                            const DirectoryLister::DirectoryListerData& b) {
   // Parent directory before all else.
-  if (file_util::IsDotDot(file_util::FileEnumerator::GetFilename(a.info)))
+  if (IsDotDot(file_util::FileEnumerator::GetFilename(a.info)))
     return true;
-  if (file_util::IsDotDot(file_util::FileEnumerator::GetFilename(b.info)))
+  if (IsDotDot(file_util::FileEnumerator::GetFilename(b.info)))
     return false;
 
   // Directories before regular files.
@@ -46,9 +50,9 @@ bool CompareAlphaDirsFirst(const DirectoryLister::DirectoryListerData& a,
 bool CompareDate(const DirectoryLister::DirectoryListerData& a,
                  const DirectoryLister::DirectoryListerData& b) {
   // Parent directory before all else.
-  if (file_util::IsDotDot(file_util::FileEnumerator::GetFilename(a.info)))
+  if (IsDotDot(file_util::FileEnumerator::GetFilename(a.info)))
     return true;
-  if (file_util::IsDotDot(file_util::FileEnumerator::GetFilename(b.info)))
+  if (IsDotDot(file_util::FileEnumerator::GetFilename(b.info)))
     return false;
 
   // Directories before regular files.
@@ -96,8 +100,7 @@ void SortData(std::vector<DirectoryLister::DirectoryListerData>* data,
 
 DirectoryLister::DirectoryLister(const base::FilePath& dir,
                                  DirectoryListerDelegate* delegate)
-    : ALLOW_THIS_IN_INITIALIZER_LIST(
-        core_(new Core(dir, false, ALPHA_DIRS_FIRST, this))),
+    : core_(new Core(dir, false, ALPHA_DIRS_FIRST, this)),
       delegate_(delegate) {
   DCHECK(delegate_);
   DCHECK(!dir.value().empty());
@@ -107,8 +110,7 @@ DirectoryLister::DirectoryLister(const base::FilePath& dir,
                                  bool recursive,
                                  SortType sort,
                                  DirectoryListerDelegate* delegate)
-    : ALLOW_THIS_IN_INITIALIZER_LIST(
-        core_(new Core(dir, recursive, sort, this))),
+    : core_(new Core(dir, recursive, sort, this)),
       delegate_(delegate) {
   DCHECK(delegate_);
   DCHECK(!dir.value().empty());

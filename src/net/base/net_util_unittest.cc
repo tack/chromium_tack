@@ -13,8 +13,8 @@
 #include "base/string_number_conversions.h"
 #include "base/string_util.h"
 #include "base/stringprintf.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/sys_byteorder.h"
-#include "base/sys_string_conversions.h"
 #include "base/test/test_file_util.h"
 #include "base/time.h"
 #include "base/utf_string_conversions.h"
@@ -25,7 +25,7 @@ namespace net {
 
 namespace {
 
-static const size_t kNpos = string16::npos;
+static const size_t kNpos = base::string16::npos;
 
 struct FileCase {
   const wchar_t* file;
@@ -385,6 +385,7 @@ struct CompliantHostCase {
 };
 
 struct GenerateFilenameCase {
+  int lineno;
   const char* url;
   const char* content_disp_header;
   const char* referrer_charset;
@@ -430,9 +431,9 @@ void MakeIPv6Address(const uint8* bytes, int port, SockaddrStorage* storage) {
 // Append "::<language list>" to |expected| and |actual| to make it
 // easy to tell which sub-case fails without debugging.
 void AppendLanguagesToOutputs(const char* languages,
-                              string16* expected,
-                              string16* actual) {
-  string16 to_append = ASCIIToUTF16("::") + ASCIIToUTF16(languages);
+                              base::string16* expected,
+                              base::string16* actual) {
+  base::string16 to_append = ASCIIToUTF16("::") + ASCIIToUTF16(languages);
   expected->append(to_append);
   actual->append(to_append);
 }
@@ -442,7 +443,7 @@ void VerboseExpect(size_t expected,
                    size_t actual,
                    const std::string& original_url,
                    size_t position,
-                   const string16& formatted_url) {
+                   const base::string16& formatted_url) {
   EXPECT_EQ(expected, actual) << "Original URL: " << original_url
       << " (at char " << position << ")\nFormatted URL: " << formatted_url;
 }
@@ -457,7 +458,7 @@ void CheckAdjustedOffsets(const std::string& url_string,
   GURL url(url_string);
   for (size_t i = 0; i < num_cases; ++i) {
     size_t offset = cases[i].input_offset;
-    string16 formatted_url = FormatUrl(url, languages, format_types,
+    base::string16 formatted_url = FormatUrl(url, languages, format_types,
                                        unescape_rules, NULL, NULL, &offset);
     VerboseExpect(cases[i].output_offset, offset, url_string, i, formatted_url);
   }
@@ -466,8 +467,8 @@ void CheckAdjustedOffsets(const std::string& url_string,
   std::vector<size_t> offsets;
   for (size_t i = 0; i < url_size + 1; ++i)
     offsets.push_back(i);
-  string16 formatted_url = FormatUrlWithOffsets(url, languages, format_types,
-      unescape_rules, NULL, NULL, &offsets);
+  base::string16 formatted_url = FormatUrlWithOffsets(url, languages,
+      format_types, unescape_rules, NULL, NULL, &offsets);
   for (size_t i = 0; i < url_size; ++i)
     VerboseExpect(all_offsets[i], offsets[i], url_string, i, formatted_url);
   VerboseExpect(kNpos, offsets[url_size], url_string, url_size, formatted_url);
@@ -484,9 +485,7 @@ std::string DumpIPNumber(const IPAddressNumber& v) {
   return out;
 }
 
-void RunGenerateFileNameTestCase(const GenerateFilenameCase* test_case,
-                                 size_t iteration,
-                                 const char* suite) {
+void RunGenerateFileNameTestCase(const GenerateFilenameCase* test_case) {
   std::string default_filename(WideToUTF8(test_case->default_filename));
   base::FilePath file_path = GenerateFileName(
       GURL(test_case->url), test_case->content_disp_header,
@@ -494,7 +493,7 @@ void RunGenerateFileNameTestCase(const GenerateFilenameCase* test_case,
       test_case->mime_type, default_filename);
   EXPECT_EQ(test_case->expected_filename,
             file_util::FilePathAsWString(file_path))
-      << "Iteration " << iteration << " of " << suite << ": " << test_case->url;
+      << "test case at line number: " << test_case->lineno;
 }
 
 }  // anonymous namespace
@@ -652,7 +651,7 @@ TEST(NetUtilTest, GetIdentityFromURL) {
                                     tests[i].input_url));
     GURL url(tests[i].input_url);
 
-    string16 username, password;
+    base::string16 username, password;
     GetIdentityFromURL(url, &username, &password);
 
     EXPECT_EQ(ASCIIToUTF16(tests[i].expected_username), username);
@@ -668,7 +667,7 @@ TEST(NetUtilTest, GetIdentityFromURL_UTF8) {
   EXPECT_EQ("%E4%BD%A0%E5%A5%BD", url.password());
 
   // Extract the unescaped identity.
-  string16 username, password;
+  base::string16 username, password;
   GetIdentityFromURL(url, &username, &password);
 
   // Verify that it was decoded as UTF8.
@@ -728,8 +727,8 @@ TEST(NetUtilTest, IDNToUnicodeFast) {
       // ja || zh-TW,en || ko,ja -> IDNToUnicodeSlow
       if (j == 3 || j == 17 || j == 18)
         continue;
-      string16 output(IDNToUnicode(idn_cases[i].input, kLanguages[j]));
-      string16 expected(idn_cases[i].unicode_allowed[j] ?
+      base::string16 output(IDNToUnicode(idn_cases[i].input, kLanguages[j]));
+      base::string16 expected(idn_cases[i].unicode_allowed[j] ?
           WideToUTF16(idn_cases[i].unicode_output) :
           ASCIIToUTF16(idn_cases[i].input));
       AppendLanguagesToOutputs(kLanguages[j], &expected, &output);
@@ -744,8 +743,8 @@ TEST(NetUtilTest, IDNToUnicodeSlow) {
       // !(ja || zh-TW,en || ko,ja) -> IDNToUnicodeFast
       if (!(j == 3 || j == 17 || j == 18))
         continue;
-      string16 output(IDNToUnicode(idn_cases[i].input, kLanguages[j]));
-      string16 expected(idn_cases[i].unicode_allowed[j] ?
+      base::string16 output(IDNToUnicode(idn_cases[i].input, kLanguages[j]));
+      base::string16 expected(idn_cases[i].unicode_allowed[j] ?
           WideToUTF16(idn_cases[i].unicode_output) :
           ASCIIToUTF16(idn_cases[i].input));
       AppendLanguagesToOutputs(kLanguages[j], &expected, &output);
@@ -792,8 +791,8 @@ TEST(NetUtilTest, CompliantHost) {
 }
 
 TEST(NetUtilTest, StripWWW) {
-  EXPECT_EQ(string16(), StripWWW(string16()));
-  EXPECT_EQ(string16(), StripWWW(ASCIIToUTF16("www.")));
+  EXPECT_EQ(base::string16(), StripWWW(base::string16()));
+  EXPECT_EQ(base::string16(), StripWWW(ASCIIToUTF16("www.")));
   EXPECT_EQ(ASCIIToUTF16("blah"), StripWWW(ASCIIToUTF16("www.blah")));
   EXPECT_EQ(ASCIIToUTF16("blah"), StripWWW(ASCIIToUTF16("blah")));
 }
@@ -801,19 +800,15 @@ TEST(NetUtilTest, StripWWW) {
 #if defined(OS_WIN)
 #define JPEG_EXT L".jpg"
 #define HTML_EXT L".htm"
-#define TXT_EXT L".txt"
-#define TAR_EXT L".tar"
 #elif defined(OS_MACOSX)
 #define JPEG_EXT L".jpeg"
 #define HTML_EXT L".html"
-#define TXT_EXT L".txt"
-#define TAR_EXT L".tar"
 #else
 #define JPEG_EXT L".jpg"
 #define HTML_EXT L".html"
+#endif
 #define TXT_EXT L".txt"
 #define TAR_EXT L".tar"
-#endif
 
 TEST(NetUtilTest, GenerateSafeFileName) {
   const struct {
@@ -989,6 +984,7 @@ TEST(NetUtilTest, GenerateFileName) {
   // handled including failovers when the header is malformed.
   const GenerateFilenameCase selection_tests[] = {
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=test.html",
       "",
@@ -998,6 +994,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=\"test.html\"",
       "",
@@ -1007,6 +1004,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename= \"test.html\"",
       "",
@@ -1016,6 +1014,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename   =   \"test.html\"",
       "",
@@ -1025,6 +1024,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     { // filename is whitespace.  Should failover to URL host
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=  ",
       "",
@@ -1034,6 +1034,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"www.google.com"
     },
     { // No filename.
+      __LINE__,
       "http://www.google.com/path/test.html",
       "attachment",
       "",
@@ -1043,6 +1044,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     { // Ditto
+      __LINE__,
       "http://www.google.com/path/test.html",
       "attachment;",
       "",
@@ -1052,6 +1054,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     { // No C-D
+      __LINE__,
       "http://www.google.com/",
       "",
       "",
@@ -1061,6 +1064,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"www.google.com"
     },
     {
+      __LINE__,
       "http://www.google.com/test.html",
       "",
       "",
@@ -1072,6 +1076,7 @@ TEST(NetUtilTest, GenerateFileName) {
     { // Now that we use googleurl's ExtractFileName, this case falls back to
       // the hostname. If this behavior is not desirable, we'd better change
       // ExtractFileName (in url_parse).
+      __LINE__,
       "http://www.google.com/path/",
       "",
       "",
@@ -1081,6 +1086,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"www.google.com"
     },
     {
+      __LINE__,
       "http://www.google.com/path",
       "",
       "",
@@ -1090,6 +1096,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"path"
     },
     {
+      __LINE__,
       "file:///",
       "",
       "",
@@ -1099,6 +1106,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "file:///path/testfile",
       "",
       "",
@@ -1108,6 +1116,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"testfile"
     },
     {
+      __LINE__,
       "non-standard-scheme:",
       "",
       "",
@@ -1117,6 +1126,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     { // C-D should override default
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename =\"test.html\"",
       "",
@@ -1126,6 +1136,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     { // But the URL shouldn't
+      __LINE__,
       "http://www.google.com/",
       "",
       "",
@@ -1135,15 +1146,17 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=\"../test.html\"",
       "",
       "",
       "",
       L"",
-      L"_test.html"
+      L"-test.html"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=\"..\\test.html\"",
       "",
@@ -1153,15 +1166,17 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=\"..\\\\test.html\"",
       "",
       "",
       "",
       L"",
-      L"_test.html"
+      L"-test.html"
     },
     { // Filename disappears after leading and trailing periods are removed.
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=\"..\"",
       "",
@@ -1171,6 +1186,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"default"
     },
     { // C-D specified filename disappears.  Failover to final filename.
+      __LINE__,
       "http://www.google.com/test.html",
       "attachment; filename=\"..\"",
       "",
@@ -1181,6 +1197,7 @@ TEST(NetUtilTest, GenerateFileName) {
     },
     // Below is a small subset of cases taken from HttpContentDisposition tests.
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=\"%EC%98%88%EC%88%A0%20"
       "%EC%98%88%EC%88%A0.jpg\"",
@@ -1191,6 +1208,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\uc608\uc220 \uc608\uc220.jpg"
     },
     {
+      __LINE__,
       "http://www.google.com/%EC%98%88%EC%88%A0%20%EC%98%88%EC%88%A0.jpg",
       "",
       "",
@@ -1200,6 +1218,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\uc608\uc220 \uc608\uc220.jpg"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment;",
       "",
@@ -1209,6 +1228,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\uB2E4\uC6B4\uB85C\uB4DC"
     },
     {
+      __LINE__,
       "http://www.google.com/",
       "attachment; filename=\"=?EUC-JP?Q?=B7=DD=BD="
       "D13=2Epng?=\"",
@@ -1219,6 +1239,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\u82b8\u88533.png"
     },
     {
+      __LINE__,
       "http://www.example.com/images?id=3",
       "attachment; filename=caf\xc3\xa9.png",
       "iso-8859-1",
@@ -1228,6 +1249,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"caf\u00e9.png"
     },
     {
+      __LINE__,
       "http://www.example.com/images?id=3",
       "attachment; filename=caf\xe5.png",
       "windows-1253",
@@ -1237,6 +1259,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"caf\u03b5.png"
     },
     {
+      __LINE__,
       "http://www.example.com/file?id=3",
       "attachment; name=\xcf\xc2\xd4\xd8.zip",
       "GBK",
@@ -1246,6 +1269,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\u4e0b\u8f7d.zip"
     },
     { // Invalid C-D header. Extracts filename from url.
+      __LINE__,
       "http://www.google.com/test.html",
       "attachment; filename==?iiso88591?Q?caf=EG?=",
       "",
@@ -1256,6 +1280,7 @@ TEST(NetUtilTest, GenerateFileName) {
     },
     // about: and data: URLs
     {
+      __LINE__,
       "about:chrome",
       "",
       "",
@@ -1265,6 +1290,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "data:,looks/like/a.path",
       "",
       "",
@@ -1274,6 +1300,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "data:text/plain;base64,VG8gYmUgb3Igbm90IHRvIGJlLg=",
       "",
       "",
@@ -1283,6 +1310,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "data:,looks/like/a.path",
       "",
       "",
@@ -1292,6 +1320,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"default_filename_is_given"
     },
     {
+      __LINE__,
       "data:,looks/like/a.path",
       "",
       "",
@@ -1301,6 +1330,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\u65e5\u672c\u8a9e"
     },
     { // The filename encoding is specified by the referrer charset.
+      __LINE__,
       "http://example.com/V%FDvojov%E1%20psychologie.doc",
       "",
       "iso-8859-1",
@@ -1310,6 +1340,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"V\u00fdvojov\u00e1 psychologie.doc"
     },
     { // Suggested filename takes precedence over URL
+      __LINE__,
       "http://www.google.com/test",
       "",
       "",
@@ -1319,6 +1350,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"suggested"
     },
     { // The content-disposition has higher precedence over the suggested name.
+      __LINE__,
       "http://www.google.com/test",
       "attachment; filename=test.html",
       "",
@@ -1331,6 +1363,7 @@ TEST(NetUtilTest, GenerateFileName) {
     { // The filename encoding doesn't match the referrer charset, the system
       // charset, or UTF-8.
       // TODO(jshin): we need to handle this case.
+      __LINE__,
       "http://example.com/V%FDvojov%E1%20psychologie.doc",
       "",
       "utf-8",
@@ -1342,6 +1375,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     // Raw 8bit characters in C-D
     {
+      __LINE__,
       "http://www.example.com/images?id=3",
       "attachment; filename=caf\xc3\xa9.png",
       "iso-8859-1",
@@ -1351,6 +1385,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"caf\u00e9.png"
     },
     {
+      __LINE__,
       "http://www.example.com/images?id=3",
       "attachment; filename=caf\xe5.png",
       "windows-1253",
@@ -1360,6 +1395,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"caf\u03b5.png"
     },
     { // No 'filename' keyword in the disposition, use the URL
+      __LINE__,
       "http://www.evil.com/my_download.txt",
       "a_file_name.txt",
       "",
@@ -1369,6 +1405,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"my_download.txt"
     },
     { // Spaces in the disposition file name
+      __LINE__,
       "http://www.frontpagehacker.com/a_download.exe",
       "filename=My Downloaded File.exe",
       "",
@@ -1378,6 +1415,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"My Downloaded File.exe"
     },
     { // % encoded
+      __LINE__,
       "http://www.examples.com/",
       "attachment; "
       "filename=\"%EC%98%88%EC%88%A0%20%EC%98%88%EC%88%A0.jpg\"",
@@ -1388,6 +1426,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\uc608\uc220 \uc608\uc220.jpg"
     },
     { // name= parameter
+      __LINE__,
       "http://www.examples.com/q.cgi?id=abc",
       "attachment; name=abc de.pdf",
       "",
@@ -1397,6 +1436,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"abc de.pdf"
     },
     {
+      __LINE__,
       "http://www.example.com/path",
       "filename=\"=?EUC-JP?Q?=B7=DD=BD=D13=2Epng?=\"",
       "",
@@ -1407,6 +1447,7 @@ TEST(NetUtilTest, GenerateFileName) {
     },
     { // The following two have invalid CD headers and filenames come from the
       // URL.
+      __LINE__,
       "http://www.example.com/test%20123",
       "attachment; filename==?iiso88591?Q?caf=EG?=",
       "",
@@ -1416,6 +1457,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test 123" JPEG_EXT
     },
     {
+      __LINE__,
       "http://www.google.com/%EC%98%88%EC%88%A0%20%EC%98%88%EC%88%A0.jpg",
       "malformed_disposition",
       "",
@@ -1425,6 +1467,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"\uc608\uc220 \uc608\uc220.jpg"
     },
     { // Invalid C-D. No filename from URL. Falls back to 'download'.
+      __LINE__,
       "http://www.google.com/path1/path2/",
       "attachment; filename==?iso88591?Q?caf=E3?",
       "",
@@ -1441,6 +1484,7 @@ TEST(NetUtilTest, GenerateFileName) {
   const GenerateFilenameCase generation_tests[] = {
     // Dotfiles. Ensures preceeding period(s) stripped.
     {
+      __LINE__,
       "http://www.google.com/.test.html",
       "",
       "",
@@ -1450,6 +1494,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test.html"
     },
     {
+      __LINE__,
       "http://www.google.com/.test",
       "",
       "",
@@ -1459,6 +1504,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test"
     },
     {
+      __LINE__,
       "http://www.google.com/..test",
       "",
       "",
@@ -1468,42 +1514,47 @@ TEST(NetUtilTest, GenerateFileName) {
       L"test"
     },
     { // Disposition has relative paths, remove directory separators
+      __LINE__,
       "http://www.evil.com/my_download.txt",
       "filename=../../../../././../a_file_name.txt",
       "",
       "",
       "text/plain",
       L"download",
-      L"_.._.._.._._._.._a_file_name.txt"
+      L"-..-..-..-.-.-..-a_file_name.txt"
     },
     { // Disposition has parent directories, remove directory separators
+      __LINE__,
       "http://www.evil.com/my_download.txt",
       "filename=dir1/dir2/a_file_name.txt",
       "",
       "",
       "text/plain",
       L"download",
-      L"dir1_dir2_a_file_name.txt"
+      L"dir1-dir2-a_file_name.txt"
     },
     { // Disposition has relative paths, remove directory separators
+      __LINE__,
       "http://www.evil.com/my_download.txt",
       "filename=..\\..\\..\\..\\.\\.\\..\\a_file_name.txt",
       "",
       "",
       "text/plain",
       L"download",
-      L"_.._.._.._._._.._a_file_name.txt"
+      L"-..-..-..-.-.-..-a_file_name.txt"
     },
     { // Disposition has parent directories, remove directory separators
+      __LINE__,
       "http://www.evil.com/my_download.txt",
       "filename=dir1\\dir2\\a_file_name.txt",
       "",
       "",
       "text/plain",
       L"download",
-      L"dir1_dir2_a_file_name.txt"
+      L"dir1-dir2-a_file_name.txt"
     },
     { // No useful information in disposition or URL, use default
+      __LINE__,
       "http://www.truncated.com/path/",
       "",
       "",
@@ -1513,15 +1564,17 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download" TXT_EXT
     },
     { // Filename looks like HTML?
+      __LINE__,
       "http://www.evil.com/get/malware/here",
       "filename=\"<blink>Hello kitty</blink>\"",
       "",
       "",
       "text/plain",
       L"default",
-      L"-blink-Hello kitty-_blink-" TXT_EXT
+      L"-blink-Hello kitty--blink-" TXT_EXT
     },
     { // A normal avi should get .avi and not .avi.avi
+      __LINE__,
       "https://blah.google.com/misc/2.avi",
       "",
       "",
@@ -1531,6 +1584,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"2.avi"
     },
     { // Extension generation
+      __LINE__,
       "http://www.example.com/my-cat",
       "filename=my-cat",
       "",
@@ -1540,6 +1594,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"my-cat" JPEG_EXT
     },
     {
+      __LINE__,
       "http://www.example.com/my-cat",
       "filename=my-cat",
       "",
@@ -1549,6 +1604,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"my-cat.txt"
     },
     {
+      __LINE__,
       "http://www.example.com/my-cat",
       "filename=my-cat",
       "",
@@ -1558,6 +1614,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"my-cat" HTML_EXT
     },
     { // Unknown MIME type
+      __LINE__,
       "http://www.example.com/my-cat",
       "filename=my-cat",
       "",
@@ -1567,6 +1624,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"my-cat"
     },
     {
+      __LINE__,
       "http://www.example.com/my-cat.jpg",
       "filename=my-cat.jpg",
       "",
@@ -1578,6 +1636,7 @@ TEST(NetUtilTest, GenerateFileName) {
     // Windows specific tests
 #if defined(OS_WIN)
     {
+      __LINE__,
       "http://www.goodguy.com/evil.exe",
       "filename=evil.exe",
       "",
@@ -1587,6 +1646,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"evil.exe"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/ok.exe",
       "filename=ok.exe",
       "",
@@ -1596,6 +1656,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"ok.exe"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/evil.dll",
       "filename=evil.dll",
       "",
@@ -1605,6 +1666,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"evil.dll"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/evil.exe",
       "filename=evil",
       "",
@@ -1615,6 +1677,7 @@ TEST(NetUtilTest, GenerateFileName) {
     },
     // Test truncation of trailing dots and spaces
     {
+      __LINE__,
       "http://www.goodguy.com/evil.exe ",
       "filename=evil.exe ",
       "",
@@ -1624,6 +1687,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"evil.exe"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/evil.exe.",
       "filename=evil.exe.",
       "",
@@ -1633,6 +1697,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"evil.exe-"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/evil.exe.  .  .",
       "filename=evil.exe.  .  .",
       "",
@@ -1642,6 +1707,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"evil.exe-------"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/evil.",
       "filename=evil.",
       "",
@@ -1651,6 +1717,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"evil-"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/. . . . .",
       "filename=. . . . .",
       "",
@@ -1660,6 +1727,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "http://www.badguy.com/attachment?name=meh.exe%C2%A0",
       "attachment; filename=\"meh.exe\xC2\xA0\"",
       "",
@@ -1670,6 +1738,7 @@ TEST(NetUtilTest, GenerateFileName) {
     },
 #endif  // OS_WIN
     {
+      __LINE__,
       "http://www.goodguy.com/utils.js",
       "filename=utils.js",
       "",
@@ -1679,6 +1748,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"utils.js"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/contacts.js",
       "filename=contacts.js",
       "",
@@ -1688,6 +1758,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"contacts.js"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/utils.js",
       "filename=utils.js",
       "",
@@ -1697,6 +1768,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"utils.js"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/utils.js",
       "filename=utils.js",
       "",
@@ -1706,6 +1778,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"utils.js"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/utils.js",
       "filename=utils.js",
       "",
@@ -1715,15 +1788,17 @@ TEST(NetUtilTest, GenerateFileName) {
       L"utils.js"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/utils.js",
-     "filename=utils.js",
-     "",
-     "",
-     "application/ecmascript;version=4",
-     L"download",
-     L"utils.js"
+      "filename=utils.js",
+      "",
+      "",
+      "application/ecmascript;version=4",
+      L"download",
+      L"utils.js"
     },
     {
+      __LINE__,
       "http://www.goodguy.com/program.exe",
       "filename=program.exe",
       "",
@@ -1733,24 +1808,27 @@ TEST(NetUtilTest, GenerateFileName) {
       L"program.exe"
     },
     {
+      __LINE__,
       "http://www.evil.com/../foo.txt",
       "filename=../foo.txt",
       "",
       "",
       "text/plain",
       L"download",
-      L"_foo.txt"
+      L"-foo.txt"
     },
     {
+      __LINE__,
       "http://www.evil.com/..\\foo.txt",
       "filename=..\\foo.txt",
       "",
       "",
       "text/plain",
       L"download",
-      L"_foo.txt"
+      L"-foo.txt"
     },
     {
+      __LINE__,
       "http://www.evil.com/.hidden",
       "filename=.hidden",
       "",
@@ -1760,6 +1838,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"hidden" TXT_EXT
     },
     {
+      __LINE__,
       "http://www.evil.com/trailing.",
       "filename=trailing.",
       "",
@@ -1770,9 +1849,10 @@ TEST(NetUtilTest, GenerateFileName) {
       L"trailing-"
 #else
       L"trailing"
-#endif //OS_WIN
+#endif
     },
     {
+      __LINE__,
       "http://www.evil.com/trailing.",
       "filename=trailing.",
       "",
@@ -1783,9 +1863,10 @@ TEST(NetUtilTest, GenerateFileName) {
       L"trailing-" TXT_EXT
 #else
       L"trailing" TXT_EXT
-#endif //OS_WIN
+#endif
     },
     {
+      __LINE__,
       "http://www.evil.com/.",
       "filename=.",
       "",
@@ -1795,6 +1876,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "http://www.evil.com/..",
       "filename=..",
       "",
@@ -1804,6 +1886,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     {
+      __LINE__,
       "http://www.evil.com/...",
       "filename=...",
       "",
@@ -1813,6 +1896,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download"
     },
     { // Note that this one doesn't have "filename=" on it.
+      __LINE__,
       "http://www.evil.com/",
       "a_file_name.txt",
       "",
@@ -1822,6 +1906,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download" JPEG_EXT
     },
     {
+      __LINE__,
       "http://www.evil.com/",
       "filename=",
       "",
@@ -1831,6 +1916,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"download" JPEG_EXT
     },
     {
+      __LINE__,
       "http://www.example.com/simple",
       "filename=simple",
       "",
@@ -1841,6 +1927,7 @@ TEST(NetUtilTest, GenerateFileName) {
     },
     // Reserved words on Windows
     {
+      __LINE__,
       "http://www.goodguy.com/COM1",
       "filename=COM1",
       "",
@@ -1854,6 +1941,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.goodguy.com/COM4.txt",
       "filename=COM4.txt",
       "",
@@ -1867,6 +1955,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.goodguy.com/lpt1.TXT",
       "filename=lpt1.TXT",
       "",
@@ -1880,6 +1969,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.goodguy.com/clock$.txt",
       "filename=clock$.txt",
       "",
@@ -1893,6 +1983,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     { // Validation should also apply to sugested name
+      __LINE__,
       "http://www.goodguy.com/blah$.txt",
       "filename=clock$.txt",
       "",
@@ -1906,6 +1997,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.goodguy.com/mycom1.foo",
       "filename=mycom1.foo",
       "",
@@ -1915,6 +2007,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"mycom1.foo"
     },
     {
+      __LINE__,
       "http://www.badguy.com/Setup.exe.local",
       "filename=Setup.exe.local",
       "",
@@ -1928,6 +2021,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.badguy.com/Setup.exe.local",
       "filename=Setup.exe.local.local",
       "",
@@ -1941,6 +2035,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.badguy.com/Setup.exe.lnk",
       "filename=Setup.exe.lnk",
       "",
@@ -1954,6 +2049,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.badguy.com/Desktop.ini",
       "filename=Desktop.ini",
       "",
@@ -1967,6 +2063,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.badguy.com/Thumbs.db",
       "filename=Thumbs.db",
       "",
@@ -1980,6 +2077,7 @@ TEST(NetUtilTest, GenerateFileName) {
 #endif
     },
     {
+      __LINE__,
       "http://www.hotmail.com",
       "filename=source.jpg",
       "",
@@ -1989,6 +2087,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"source.jpg"
     },
     { // http://crbug.com/5772.
+      __LINE__,
       "http://www.example.com/foo.tar.gz",
       "",
       "",
@@ -1998,6 +2097,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"foo.tar.gz"
     },
     { // http://crbug.com/52250.
+      __LINE__,
       "http://www.example.com/foo.tgz",
       "",
       "",
@@ -2007,6 +2107,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"foo.tgz"
     },
     { // http://crbug.com/7337.
+      __LINE__,
       "http://maged.lordaeron.org/blank.reg",
       "",
       "",
@@ -2016,6 +2117,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"blank.reg"
     },
     {
+      __LINE__,
       "http://www.example.com/bar.tar",
       "",
       "",
@@ -2025,6 +2127,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"bar.tar"
     },
     {
+      __LINE__,
       "http://www.example.com/bar.bogus",
       "",
       "",
@@ -2034,15 +2137,17 @@ TEST(NetUtilTest, GenerateFileName) {
       L"bar.bogus"
     },
     { // http://crbug.com/20337
+      __LINE__,
       "http://www.example.com/.download.txt",
       "filename=.download.txt",
       "",
       "",
       "text/plain",
-      L"download",
+      L"-download",
       L"download.txt"
     },
     { // http://crbug.com/56855.
+      __LINE__,
       "http://www.example.com/bar.sh",
       "",
       "",
@@ -2052,6 +2157,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"bar.sh"
     },
     { // http://crbug.com/61571
+      __LINE__,
       "http://www.example.com/npdf.php?fn=foobar.pdf",
       "",
       "",
@@ -2061,6 +2167,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"npdf" TXT_EXT
     },
     { // Shouldn't overwrite C-D specified extension.
+      __LINE__,
       "http://www.example.com/npdf.php?fn=foobar.pdf",
       "filename=foobar.jpg",
       "",
@@ -2070,6 +2177,7 @@ TEST(NetUtilTest, GenerateFileName) {
       L"foobar.jpg"
     },
     { // http://crbug.com/87719
+      __LINE__,
       "http://www.example.com/image.aspx?id=blargh",
       "",
       "",
@@ -2080,6 +2188,7 @@ TEST(NetUtilTest, GenerateFileName) {
     },
 #if defined(OS_CHROMEOS)
     { // http://crosbug.com/26028
+      __LINE__,
       "http://www.example.com/fooa%cc%88.txt",
       "",
       "",
@@ -2092,15 +2201,15 @@ TEST(NetUtilTest, GenerateFileName) {
   };
 
   for (size_t i = 0; i < ARRAYSIZE_UNSAFE(selection_tests); ++i)
-    RunGenerateFileNameTestCase(&selection_tests[i], i, "selection");
+    RunGenerateFileNameTestCase(&selection_tests[i]);
 
   for (size_t i = 0; i < ARRAYSIZE_UNSAFE(generation_tests); ++i)
-    RunGenerateFileNameTestCase(&generation_tests[i], i, "generation");
+    RunGenerateFileNameTestCase(&generation_tests[i]);
 
   for (size_t i = 0; i < ARRAYSIZE_UNSAFE(generation_tests); ++i) {
     GenerateFilenameCase test_case = generation_tests[i];
     test_case.referrer_charset = "GBK";
-    RunGenerateFileNameTestCase(&test_case, i, "generation (referrer=GBK)");
+    RunGenerateFileNameTestCase(&test_case);
   }
 }
 
@@ -2517,7 +2626,7 @@ TEST(NetUtilTest, FormatUrl) {
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
     size_t prefix_len;
-    string16 formatted = FormatUrl(
+    base::string16 formatted = FormatUrl(
         GURL(tests[i].input), tests[i].languages, tests[i].format_types,
         tests[i].escape_rules, NULL, &prefix_len, NULL);
     EXPECT_EQ(WideToUTF16(tests[i].output), formatted) << tests[i].description;
@@ -2528,7 +2637,7 @@ TEST(NetUtilTest, FormatUrl) {
 TEST(NetUtilTest, FormatUrlParsed) {
   // No unescape case.
   url_parse::Parsed parsed;
-  string16 formatted = FormatUrl(
+  base::string16 formatted = FormatUrl(
       GURL("http://\xE3\x82\xB0:\xE3\x83\xBC@xn--qcka1pmc.jp:8080/"
            "%E3%82%B0/?q=%E3%82%B0#\xE3\x82\xB0"),
       "ja", kFormatUrlOmitNothing, UnescapeRule::NONE, &parsed, NULL,
@@ -2596,10 +2705,14 @@ TEST(NetUtilTest, FormatUrlParsed) {
       formatted.substr(parsed.ref.begin, parsed.ref.len));
 
   // View-source case.
-  formatted = FormatUrl(
-      GURL("view-source:http://user:passwd@host:81/path?query#ref"),
-      "", kFormatUrlOmitUsernamePassword, UnescapeRule::NORMAL, &parsed,
-      NULL, NULL);
+  formatted =
+      FormatUrl(GURL("view-source:http://user:passwd@host:81/path?query#ref"),
+                std::string(),
+                kFormatUrlOmitUsernamePassword,
+                UnescapeRule::NORMAL,
+                &parsed,
+                NULL,
+                NULL);
   EXPECT_EQ(WideToUTF16(L"view-source:http://host:81/path?query#ref"),
       formatted);
   EXPECT_EQ(WideToUTF16(L"view-source:http"),
@@ -2618,9 +2731,13 @@ TEST(NetUtilTest, FormatUrlParsed) {
       formatted.substr(parsed.ref.begin, parsed.ref.len));
 
   // omit http case.
-  formatted = FormatUrl(
-      GURL("http://host:8000/a?b=c#d"),
-      "", kFormatUrlOmitHTTP, UnescapeRule::NORMAL, &parsed, NULL, NULL);
+  formatted = FormatUrl(GURL("http://host:8000/a?b=c#d"),
+                        std::string(),
+                        kFormatUrlOmitHTTP,
+                        UnescapeRule::NORMAL,
+                        &parsed,
+                        NULL,
+                        NULL);
   EXPECT_EQ(WideToUTF16(L"host:8000/a?b=c#d"), formatted);
   EXPECT_FALSE(parsed.scheme.is_valid());
   EXPECT_FALSE(parsed.username.is_valid());
@@ -2637,9 +2754,13 @@ TEST(NetUtilTest, FormatUrlParsed) {
       formatted.substr(parsed.ref.begin, parsed.ref.len));
 
   // omit http starts with ftp case.
-  formatted = FormatUrl(
-      GURL("http://ftp.host:8000/a?b=c#d"),
-      "", kFormatUrlOmitHTTP, UnescapeRule::NORMAL, &parsed, NULL, NULL);
+  formatted = FormatUrl(GURL("http://ftp.host:8000/a?b=c#d"),
+                        std::string(),
+                        kFormatUrlOmitHTTP,
+                        UnescapeRule::NORMAL,
+                        &parsed,
+                        NULL,
+                        NULL);
   EXPECT_EQ(WideToUTF16(L"http://ftp.host:8000/a?b=c#d"), formatted);
   EXPECT_TRUE(parsed.scheme.is_valid());
   EXPECT_FALSE(parsed.username.is_valid());
@@ -2658,9 +2779,13 @@ TEST(NetUtilTest, FormatUrlParsed) {
       formatted.substr(parsed.ref.begin, parsed.ref.len));
 
   // omit http starts with 'f' case.
-  formatted = FormatUrl(
-      GURL("http://f/"),
-      "", kFormatUrlOmitHTTP, UnescapeRule::NORMAL, &parsed, NULL, NULL);
+  formatted = FormatUrl(GURL("http://f/"),
+                        std::string(),
+                        kFormatUrlOmitHTTP,
+                        UnescapeRule::NORMAL,
+                        &parsed,
+                        NULL,
+                        NULL);
   EXPECT_EQ(WideToUTF16(L"f/"), formatted);
   EXPECT_FALSE(parsed.scheme.is_valid());
   EXPECT_FALSE(parsed.username.is_valid());
@@ -2682,9 +2807,13 @@ TEST(NetUtilTest, FormatUrlRoundTripPathASCII) {
     GURL url(std::string("http://www.google.com/") +
              static_cast<char>(test_char));
     size_t prefix_len;
-    string16 formatted = FormatUrl(
-        url, "", kFormatUrlOmitUsernamePassword, UnescapeRule::NORMAL, NULL,
-        &prefix_len, NULL);
+    base::string16 formatted = FormatUrl(url,
+                                         std::string(),
+                                         kFormatUrlOmitUsernamePassword,
+                                         UnescapeRule::NORMAL,
+                                         NULL,
+                                         &prefix_len,
+                                         NULL);
     EXPECT_EQ(url.spec(), GURL(formatted).spec());
   }
 }
@@ -2699,9 +2828,13 @@ TEST(NetUtilTest, FormatUrlRoundTripPathEscaped) {
 
     GURL url(original_url);
     size_t prefix_len;
-    string16 formatted = FormatUrl(
-        url, "", kFormatUrlOmitUsernamePassword, UnescapeRule::NORMAL, NULL,
-        &prefix_len, NULL);
+    base::string16 formatted = FormatUrl(url,
+                                         std::string(),
+                                         kFormatUrlOmitUsernamePassword,
+                                         UnescapeRule::NORMAL,
+                                         NULL,
+                                         &prefix_len,
+                                         NULL);
     EXPECT_EQ(url.spec(), GURL(formatted).spec());
   }
 }
@@ -2713,9 +2846,13 @@ TEST(NetUtilTest, FormatUrlRoundTripQueryASCII) {
     GURL url(std::string("http://www.google.com/?") +
              static_cast<char>(test_char));
     size_t prefix_len;
-    string16 formatted = FormatUrl(
-        url, "", kFormatUrlOmitUsernamePassword, UnescapeRule::NORMAL, NULL,
-        &prefix_len, NULL);
+    base::string16 formatted = FormatUrl(url,
+                                         std::string(),
+                                         kFormatUrlOmitUsernamePassword,
+                                         UnescapeRule::NORMAL,
+                                         NULL,
+                                         &prefix_len,
+                                         NULL);
     EXPECT_EQ(url.spec(), GURL(formatted).spec());
   }
 }
@@ -2734,9 +2871,13 @@ TEST(NetUtilTest, FormatUrlRoundTripQueryEscaped) {
 
     GURL url(original_url);
     size_t prefix_len;
-    string16 formatted = FormatUrl(
-        url, "", kFormatUrlOmitUsernamePassword, UnescapeRule::NORMAL, NULL,
-        &prefix_len, NULL);
+    base::string16 formatted = FormatUrl(url,
+                                         std::string(),
+                                         kFormatUrlOmitUsernamePassword,
+                                         UnescapeRule::NORMAL,
+                                         NULL,
+                                         &prefix_len,
+                                         NULL);
 
     if (test_char &&
         strchr(kUnescapedCharacters, static_cast<char>(test_char))) {
@@ -2749,7 +2890,7 @@ TEST(NetUtilTest, FormatUrlRoundTripQueryEscaped) {
 
 TEST(NetUtilTest, FormatUrlWithOffsets) {
   const AdjustOffsetCase null_cases[] = {
-    {0, string16::npos},
+    {0, base::string16::npos},
   };
   CheckAdjustedOffsets(std::string(), "en", kFormatUrlOmitNothing,
       UnescapeRule::NORMAL, null_cases, arraysize(null_cases), NULL);
@@ -2764,9 +2905,9 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
     {22, 22},
     {23, 23},
     {25, 25},
-    {26, string16::npos},
-    {500000, string16::npos},
-    {string16::npos, string16::npos},
+    {26, base::string16::npos},
+    {500000, base::string16::npos},
+    {base::string16::npos, base::string16::npos},
   };
   const size_t basic_offsets[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
      14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
@@ -2776,11 +2917,11 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
 
   const AdjustOffsetCase omit_auth_cases_1[] = {
     {6, 6},
-    {7, string16::npos},
-    {8, string16::npos},
-    {10, string16::npos},
-    {12, string16::npos},
-    {14, string16::npos},
+    {7, base::string16::npos},
+    {8, base::string16::npos},
+    {10, base::string16::npos},
+    {12, base::string16::npos},
+    {14, base::string16::npos},
     {15, 7},
     {25, 17},
   };
@@ -2792,7 +2933,7 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
       arraysize(omit_auth_cases_1), omit_auth_offsets_1);
 
   const AdjustOffsetCase omit_auth_cases_2[] = {
-    {9, string16::npos},
+    {9, base::string16::npos},
     {11, 7},
   };
   const size_t omit_auth_offsets_2[] = {0, 1, 2, 3, 4, 5, 6, kNpos, kNpos,
@@ -2804,10 +2945,10 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
   // "http://foo\x30B0:\x30B0bar@www.google.com"
   const AdjustOffsetCase dont_omit_auth_cases[] = {
     {0, 0},
-    /*{3, string16::npos},
+    /*{3, base::string16::npos},
     {7, 0},
     {11, 4},
-    {12, string16::npos},
+    {12, base::string16::npos},
     {20, 5},
     {24, 9},*/
   };
@@ -2826,11 +2967,11 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
     {12, 12},
     {13, 13},
     {18, 18},
-    {19, string16::npos},
-    {20, string16::npos},
+    {19, base::string16::npos},
+    {20, base::string16::npos},
     {23, 19},
     {26, 22},
-    {string16::npos, string16::npos},
+    {base::string16::npos, base::string16::npos},
   };
   const size_t view_source_offsets[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
       12, 13, 14, 15, 16, 17, 18, kNpos, kNpos, kNpos, kNpos, 19, 20, 21, 22,
@@ -2841,9 +2982,9 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
 
   // "http://\x671d\x65e5\x3042\x3055\x3072.jp/foo/"
   const AdjustOffsetCase idn_hostname_cases_1[] = {
-    {8, string16::npos},
-    {16, string16::npos},
-    {24, string16::npos},
+    {8, base::string16::npos},
+    {16, base::string16::npos},
+    {24, base::string16::npos},
     {25, 12},
     {30, 17},
   };
@@ -2860,18 +3001,18 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
     {9, 9},
     {11, 11},
     {12, 12},
-    {13, string16::npos},
-    {23, string16::npos},
+    {13, base::string16::npos},
+    {23, base::string16::npos},
     {24, 14},
     {25, 15},
-    {26, string16::npos},
-    {32, string16::npos},
+    {26, base::string16::npos},
+    {32, base::string16::npos},
     {41, 19},
     {42, 20},
     {45, 23},
     {46, 24},
-    {47, string16::npos},
-    {string16::npos, string16::npos},
+    {47, base::string16::npos},
+    {base::string16::npos, base::string16::npos},
   };
   const size_t idn_hostname_offsets_2[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
       12, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, kNpos,
@@ -2885,15 +3026,15 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
   // "http://www.google.com/foo bar/\x30B0\x30FC\x30B0\x30EB"
   const AdjustOffsetCase unescape_cases[] = {
     {25, 25},
-    {26, string16::npos},
-    {27, string16::npos},
+    {26, base::string16::npos},
+    {27, base::string16::npos},
     {28, 26},
-    {35, string16::npos},
+    {35, base::string16::npos},
     {41, 31},
     {59, 33},
-    {60, string16::npos},
-    {67, string16::npos},
-    {68, string16::npos},
+    {60, base::string16::npos},
+    {67, base::string16::npos},
+    {68, base::string16::npos},
   };
   const size_t unescape_offsets[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
       13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, kNpos, kNpos, 26, 27,
@@ -2910,11 +3051,11 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
   const AdjustOffsetCase ref_cases[] = {
     {30, 30},
     {31, 31},
-    {32, string16::npos},
+    {32, base::string16::npos},
     {34, 32},
-    {35, string16::npos},
+    {35, base::string16::npos},
     {37, 33},
-    {38, string16::npos},
+    {38, base::string16::npos},
   };
   const size_t ref_offsets[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
       14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
@@ -2925,8 +3066,8 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
       arraysize(ref_cases), ref_offsets);
 
   const AdjustOffsetCase omit_http_cases[] = {
-    {0, string16::npos},
-    {3, string16::npos},
+    {0, base::string16::npos},
+    {3, base::string16::npos},
     {7, 0},
     {8, 1},
   };
@@ -2951,8 +3092,8 @@ TEST(NetUtilTest, FormatUrlWithOffsets) {
   const AdjustOffsetCase omit_all_cases[] = {
     {12, 0},
     {13, 1},
-    {0, string16::npos},
-    {3, string16::npos},
+    {0, base::string16::npos},
+    {3, base::string16::npos},
   };
   const size_t omit_all_offsets[] = {kNpos, kNpos, kNpos, kNpos, kNpos, kNpos,
       kNpos, kNpos, kNpos, kNpos, kNpos, kNpos, 0, 1, 2, 3, 4, 5, 6, kNpos};
@@ -3030,13 +3171,21 @@ TEST(NetUtilTest, GetHostOrSpecFromURL) {
             GetHostOrSpecFromURL(GURL("file:///tmp/test.html")));
 }
 
+TEST(NetUtilTest, GetAddressFamily) {
+  IPAddressNumber number;
+  EXPECT_TRUE(ParseIPLiteralToNumber("192.168.0.1", &number));
+  EXPECT_EQ(ADDRESS_FAMILY_IPV4, GetAddressFamily(number));
+  EXPECT_TRUE(ParseIPLiteralToNumber("1:abcd::3:4:ff", &number));
+  EXPECT_EQ(ADDRESS_FAMILY_IPV6, GetAddressFamily(number));
+}
+
 // Test that invalid IP literals fail to parse.
 TEST(NetUtilTest, ParseIPLiteralToNumber_FailParse) {
   IPAddressNumber number;
 
   EXPECT_FALSE(ParseIPLiteralToNumber("bad value", &number));
   EXPECT_FALSE(ParseIPLiteralToNumber("bad:value", &number));
-  EXPECT_FALSE(ParseIPLiteralToNumber("", &number));
+  EXPECT_FALSE(ParseIPLiteralToNumber(std::string(), &number));
   EXPECT_FALSE(ParseIPLiteralToNumber("192.168.0.1:30", &number));
   EXPECT_FALSE(ParseIPLiteralToNumber("  192.168.0.1  ", &number));
   EXPECT_FALSE(ParseIPLiteralToNumber("[::1]", &number));
@@ -3267,6 +3416,88 @@ TEST(NetUtilTest, GetNetworkList) {
       }
     }
     EXPECT_FALSE(all_zeroes);
+  }
+}
+
+static const base::FilePath::CharType* kSafePortableBasenames[] = {
+  FILE_PATH_LITERAL("a"),
+  FILE_PATH_LITERAL("a.txt"),
+  FILE_PATH_LITERAL("a b.txt"),
+  FILE_PATH_LITERAL("a-b.txt"),
+  FILE_PATH_LITERAL("My Computer"),
+  FILE_PATH_LITERAL(" Computer"),
+};
+
+static const base::FilePath::CharType* kUnsafePortableBasenames[] = {
+  FILE_PATH_LITERAL(""),
+  FILE_PATH_LITERAL("."),
+  FILE_PATH_LITERAL(".."),
+  FILE_PATH_LITERAL("..."),
+  FILE_PATH_LITERAL("con"),
+  FILE_PATH_LITERAL("con.zip"),
+  FILE_PATH_LITERAL("NUL"),
+  FILE_PATH_LITERAL("NUL.zip"),
+  FILE_PATH_LITERAL(".a"),
+  FILE_PATH_LITERAL("a."),
+  FILE_PATH_LITERAL("a\"a"),
+  FILE_PATH_LITERAL("a<a"),
+  FILE_PATH_LITERAL("a>a"),
+  FILE_PATH_LITERAL("a?a"),
+  FILE_PATH_LITERAL("a/"),
+  FILE_PATH_LITERAL("a\\"),
+  FILE_PATH_LITERAL("a "),
+  FILE_PATH_LITERAL("a . ."),
+  FILE_PATH_LITERAL("My Computer.{a}"),
+  FILE_PATH_LITERAL("My Computer.{20D04FE0-3AEA-1069-A2D8-08002B30309D}"),
+#if !defined(OS_WIN)
+  FILE_PATH_LITERAL("a\\a"),
+#endif
+};
+
+static const base::FilePath::CharType* kSafePortableRelativePaths[] = {
+  FILE_PATH_LITERAL("a/a"),
+#if defined(OS_WIN)
+  FILE_PATH_LITERAL("a\\a"),
+#endif
+};
+
+TEST(NetUtilTest, IsSafePortableBasename) {
+  for (size_t i = 0 ; i < arraysize(kSafePortableBasenames); ++i) {
+    EXPECT_TRUE(IsSafePortableBasename(base::FilePath(
+        kSafePortableBasenames[i]))) << kSafePortableBasenames[i];
+  }
+  for (size_t i = 0 ; i < arraysize(kUnsafePortableBasenames); ++i) {
+    EXPECT_FALSE(IsSafePortableBasename(base::FilePath(
+        kUnsafePortableBasenames[i]))) << kUnsafePortableBasenames[i];
+  }
+  for (size_t i = 0 ; i < arraysize(kSafePortableRelativePaths); ++i) {
+    EXPECT_FALSE(IsSafePortableBasename(base::FilePath(
+        kSafePortableRelativePaths[i]))) << kSafePortableRelativePaths[i];
+  }
+}
+
+TEST(NetUtilTest, IsSafePortableRelativePath) {
+  base::FilePath safe_dirname(FILE_PATH_LITERAL("a"));
+  for (size_t i = 0 ; i < arraysize(kSafePortableBasenames); ++i) {
+    EXPECT_TRUE(IsSafePortableRelativePath(base::FilePath(
+        kSafePortableBasenames[i]))) << kSafePortableBasenames[i];
+    EXPECT_TRUE(IsSafePortableRelativePath(safe_dirname.Append(base::FilePath(
+        kSafePortableBasenames[i])))) << kSafePortableBasenames[i];
+  }
+  for (size_t i = 0 ; i < arraysize(kSafePortableRelativePaths); ++i) {
+    EXPECT_TRUE(IsSafePortableRelativePath(base::FilePath(
+        kSafePortableRelativePaths[i]))) << kSafePortableRelativePaths[i];
+    EXPECT_TRUE(IsSafePortableRelativePath(safe_dirname.Append(base::FilePath(
+        kSafePortableRelativePaths[i])))) << kSafePortableRelativePaths[i];
+  }
+  for (size_t i = 0 ; i < arraysize(kUnsafePortableBasenames); ++i) {
+    EXPECT_FALSE(IsSafePortableRelativePath(base::FilePath(
+        kUnsafePortableBasenames[i]))) << kUnsafePortableBasenames[i];
+    if (!base::FilePath::StringType(kUnsafePortableBasenames[i]).empty()) {
+      EXPECT_FALSE(IsSafePortableRelativePath(safe_dirname.Append(
+          base::FilePath(kUnsafePortableBasenames[i]))))
+        << kUnsafePortableBasenames[i];
+    }
   }
 }
 

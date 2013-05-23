@@ -45,8 +45,9 @@ var HSTSView = (function() {
     g_browser.addHSTSObserver(this);
   }
 
-  // ID for special HTML element in category_tabs.html
-  HSTSView.TAB_HANDLE_ID = 'tab-handle-hsts';
+  HSTSView.TAB_ID = 'tab-handle-hsts';
+  HSTSView.TAB_NAME = 'HSTS';
+  HSTSView.TAB_HASH = '#hsts';
 
   // IDs for special HTML elements in hsts_view.html
   HSTSView.MAIN_BOX_ID = 'hsts-view-tab-content';
@@ -111,23 +112,64 @@ var HSTSView = (function() {
       this.queryOutputDiv_.innerHTML = '';
 
       var s = addNode(this.queryOutputDiv_, 'span');
-      s.innerHTML = '<b>Found</b>: ';
+      s.innerHTML = '<b>Found</b>: mode: ';
 
-      var propertyNamesToDisplay = ['HSTS', 'Public_Key_Pins_Good',
-                                    'Public_Key_Pins_Bad'];
+      var t = addNode(this.queryOutputDiv_, 'tt');
+      t.textContent = modeToString(result.mode);
 
-      for (var i = 0; i < propertyNamesToDisplay.length; ++i) {
-        var propName = propertyNamesToDisplay[i];
-        var prop = result[propName];
-        if (prop != undefined) {
-          addTextNode(this.queryOutputDiv_, ' ' + propName + ':');
-          var t = addNode(this.queryOutputDiv_, 'tt');
-          t.textContent = prop;
-        }
-      }
+      addTextNode(this.queryOutputDiv_, ' include_subdomains:');
+
+      t = addNode(this.queryOutputDiv_, 'tt');
+      t.textContent = result.subdomains;
+
+      addTextNode(this.queryOutputDiv_, ' domain:');
+
+      t = addNode(this.queryOutputDiv_, 'tt');
+      t.textContent = result.domain;
+
+      addTextNode(this.queryOutputDiv_, ' pubkey_hashes:');
+
+      t = addNode(this.queryOutputDiv_, 'tt');
+
+      // |public_key_hashes| is an old synonym for what is now
+      // |preloaded_spki_hashes|, which in turn is a legacy synonym for
+      // |static_spki_hashes|. Look for all three, and also for
+      // |dynamic_spki_hashes|.
+      if (typeof result.public_key_hashes === 'undefined')
+        result.public_key_hashes = '';
+      if (typeof result.preloaded_spki_hashes === 'undefined')
+        result.preloaded_spki_hashes = '';
+      if (typeof result.static_spki_hashes === 'undefined')
+        result.static_spki_hashes = '';
+      if (typeof result.dynamic_spki_hashes === 'undefined')
+        result.dynamic_spki_hashes = '';
+
+      var hashes = [];
+      if (result.public_key_hashes)
+        hashes.push(result.public_key_hashes);
+      if (result.preloaded_spki_hashes)
+        hashes.push(result.preloaded_spki_hashes);
+      if (result.static_spki_hashes)
+        hashes.push(result.static_spki_hashes);
+      if (result.dynamic_spki_hashes)
+        hashes.push(result.dynamic_spki_hashes);
+
+      t.textContent = hashes.join(',');
       yellowFade(this.queryOutputDiv_);
     }
   };
+
+  function modeToString(m) {
+    // These numbers must match those in
+    // TransportSecurityState::DomainState::UpgradeMode.
+    if (m == 0) {
+      return 'STRICT';
+    } else if (m == 1) {
+      return 'OPPORTUNISTIC';
+    } else {
+      return 'UNKNOWN';
+    }
+  }
 
   function yellowFade(element) {
     element.style.webkitTransitionProperty = 'background-color';

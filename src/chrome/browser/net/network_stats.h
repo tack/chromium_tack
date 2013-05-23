@@ -17,10 +17,10 @@
 #include "net/base/address_list.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
-#include "net/base/host_resolver.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/test_data_stream.h"
+#include "net/dns/host_resolver.h"
 #include "net/proxy/proxy_info.h"
 #include "net/socket/socket.h"
 
@@ -83,9 +83,9 @@ class NetworkStats {
   };
 
   // |HistogramPortSelector| enumerates list of ports that are used for network
-  // connectivity tests (for UDP). Currently we are testing port 6121 only.
+  // connectivity tests (for UDP). Currently we are testing port 443 only.
   enum HistogramPortSelector {
-    PORT_6121 = 0,    // SPDY
+    PORT_443 = 0,    // HTTPS
     HISTOGRAM_PORT_MAX,
   };
 

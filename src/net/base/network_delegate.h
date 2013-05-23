@@ -84,7 +84,7 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
   void NotifyRawBytesRead(const URLRequest& request, int bytes_read);
   void NotifyCompleted(URLRequest* request, bool started);
   void NotifyURLRequestDestroyed(URLRequest* request);
-  void NotifyPACScriptError(int line_number, const string16& error);
+  void NotifyPACScriptError(int line_number, const base::string16& error);
   AuthRequiredResponse NotifyAuthRequired(URLRequest* request,
                                           const AuthChallengeInfo& auth_info,
                                           const AuthCallback& callback,
@@ -97,6 +97,8 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
   bool CanAccessFile(const URLRequest& request,
                      const base::FilePath& path) const;
   bool CanThrottleRequest(const URLRequest& request) const;
+  bool CanEnablePrivacyMode(const GURL& url,
+                            const GURL& first_party_for_cookies) const;
 
   int NotifyBeforeSocketStreamConnect(SocketStream* socket,
                                       const CompletionCallback& callback);
@@ -175,7 +177,8 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
   virtual void OnURLRequestDestroyed(URLRequest* request) = 0;
 
   // Corresponds to ProxyResolverJSBindings::OnError.
-  virtual void OnPACScriptError(int line_number, const string16& error) = 0;
+  virtual void OnPACScriptError(int line_number,
+                                const base::string16& error) = 0;
 
   // Called when a request receives an authentication challenge
   // specified by |auth_info|, and is unable to respond using cached
@@ -213,7 +216,6 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
                               const std::string& cookie_line,
                               CookieOptions* options) = 0;
 
-
   // Called when a file access is attempted to allow the network delegate to
   // allow or block access to the given file path.  Returns true if access is
   // allowed.
@@ -224,6 +226,13 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
   // URLRequestThrottlerManager believes the server servicing the
   // request is overloaded or down.
   virtual bool OnCanThrottleRequest(const URLRequest& request) const = 0;
+
+  // Returns true if the given |url| has to be requested over connection that
+  // is not tracked by the server. Usually is false, unless user privacy
+  // settings block cookies from being get or set.
+  virtual bool OnCanEnablePrivacyMode(
+      const GURL& url,
+      const GURL& first_party_for_cookies) const;
 
   // Called before a SocketStream tries to connect.
   virtual int OnBeforeSocketStreamConnect(

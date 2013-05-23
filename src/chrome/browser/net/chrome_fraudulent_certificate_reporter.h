@@ -32,7 +32,8 @@ class ChromeFraudulentCertificateReporter
 
   // net::FraudulentCertificateReporter
   virtual void SendReport(const std::string& hostname,
-                          const net::SSLInfo& ssl_info) OVERRIDE;
+                          const net::SSLInfo& ssl_info,
+                          bool sni_available) OVERRIDE;
 
   // net::URLRequest::Delegate
   virtual void OnResponseStarted(net::URLRequest* request) OVERRIDE;

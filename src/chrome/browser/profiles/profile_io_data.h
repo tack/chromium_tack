@@ -13,12 +13,13 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/prefs/public/pref_member.h"
+#include "base/prefs/pref_member.h"
 #include "base/synchronization/lock.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_url_request_context.h"
 #include "chrome/browser/profiles/storage_partition_descriptor.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_network_session.h"
@@ -42,8 +43,11 @@ class ResourcePrefetchPredictorObserver;
 }
 
 namespace net {
+class CertTrustAnchorProvider;
+class CertVerifier;
 class CookieStore;
 class FraudulentCertificateReporter;
+class FtpTransactionFactory;
 class HttpServerProperties;
 class HttpTransactionFactory;
 class ServerBoundCertService;
@@ -77,23 +81,20 @@ class ProfileIOData {
   // net::URLRequest.
   static bool IsHandledURL(const GURL& url);
 
+  // Utility to install additional WebUI handlers into the |job_factory|.
+  // Ownership of the handlers is transfered from |protocol_handlers|
+  // to the |job_factory|.
+  static void InstallProtocolHandlers(
+      net::URLRequestJobFactoryImpl* job_factory,
+      content::ProtocolHandlerMap* protocol_handlers);
+
   // Called by Profile.
   content::ResourceContext* GetResourceContext() const;
 
   // Initializes the ProfileIOData object and primes the RequestContext
   // generation. Must be called prior to any of the Get*() methods other than
   // GetResouceContext or GetMetricsEnabledStateOnIOThread.
-  void Init(
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          blob_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          file_system_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          developer_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_devtools_protocol_handler) const;
+  void Init(content::ProtocolHandlerMap* protocol_handlers) const;
 
   ChromeURLRequestContext* GetMainRequestContext() const;
   ChromeURLRequestContext* GetMediaRequestContext() const;
@@ -103,16 +104,7 @@ class ProfileIOData {
       const StoragePartitionDescriptor& partition_descriptor,
       scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
           protocol_handler_interceptor,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          blob_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          file_system_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          developer_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_devtools_protocol_handler) const;
+      content::ProtocolHandlerMap* protocol_handlers) const;
   ChromeURLRequestContext* GetIsolatedMediaRequestContext(
       ChromeURLRequestContext* app_context,
       const StoragePartitionDescriptor& partition_descriptor) const;
@@ -279,6 +271,12 @@ class ProfileIOData {
     scoped_refptr<const ManagedModeURLFilter> managed_mode_url_filter;
 #endif
 
+#if defined(OS_CHROMEOS)
+    // This is used to build the CertVerifier on the IO thread, and is a shared
+    // provider used by all profiles for now.
+    net::CertTrustAnchorProvider* trust_anchor_provider;
+#endif
+
     // The profile this struct was populated from. It's passed as a void* to
     // ensure it's not accidently used on the IO thread. Before using it on the
     // UI thread, call ProfileManager::IsValidProfile to ensure it's alive.
@@ -297,8 +295,7 @@ class ProfileIOData {
       scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
           protocol_handler_interceptor,
       net::NetworkDelegate* network_delegate,
-      net::FtpTransactionFactory* ftp_transaction_factory,
-      net::FtpAuthCache* ftp_auth_cache) const;
+      net::FtpTransactionFactory* ftp_transaction_factory) const;
 
   // Called when the profile is destroyed.
   void ShutdownOnUIThread();
@@ -386,16 +383,7 @@ class ProfileIOData {
   // should use the static helper functions above to implement this.
   virtual void InitializeInternal(
       ProfileParams* profile_params,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          blob_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          file_system_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          developer_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_devtools_protocol_handler) const = 0;
+      content::ProtocolHandlerMap* protocol_handlers) const = 0;
 
   // Initializes the RequestContext for extensions.
   virtual void InitializeExtensionsRequestContext(
@@ -407,16 +395,7 @@ class ProfileIOData {
       const StoragePartitionDescriptor& details,
       scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
           protocol_handler_interceptor,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          blob_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          file_system_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          developer_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_protocol_handler,
-      scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-          chrome_devtools_protocol_handler) const = 0;
+      content::ProtocolHandlerMap* protocol_handlers) const = 0;
 
   // Does an on-demand initialization of a media RequestContext for the given
   // isolated app.
@@ -434,16 +413,7 @@ class ProfileIOData {
           const StoragePartitionDescriptor& partition_descriptor,
           scoped_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
               protocol_handler_interceptor,
-          scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-              blob_protocol_handler,
-          scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-              file_system_protocol_handler,
-          scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-              developer_protocol_handler,
-          scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-              chrome_protocol_handler,
-          scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
-              chrome_devtools_protocol_handler) const = 0;
+          content::ProtocolHandlerMap* protocol_handlers) const = 0;
   virtual ChromeURLRequestContext*
       AcquireIsolatedMediaRequestContext(
           ChromeURLRequestContext* app_context,
@@ -519,6 +489,9 @@ class ProfileIOData {
   mutable scoped_ptr<net::TransportSecurityState> transport_security_state_;
   mutable scoped_ptr<net::HttpServerProperties>
       http_server_properties_;
+#if defined(OS_CHROMEOS)
+  mutable scoped_ptr<net::CertVerifier> cert_verifier_;
+#endif
 
 #if defined(ENABLE_NOTIFICATIONS)
   mutable DesktopNotificationService* notification_service_;

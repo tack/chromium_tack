@@ -15,10 +15,10 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/load_timing_info_test_util.h"
-#include "net/base/mock_host_resolver.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
 #include "net/base/test_completion_callback.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_histograms.h"
@@ -125,10 +125,6 @@ class MockClientSocket : public StreamSocket {
   virtual void SetOmniboxSpeculation() OVERRIDE {}
   virtual bool WasEverUsed() const OVERRIDE { return false; }
   virtual bool UsingTCPFastOpen() const OVERRIDE { return false; }
-  virtual int64 NumBytesRead() const OVERRIDE { return -1; }
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE {
-    return base::TimeDelta::FromMicroseconds(-1);
-  }
   virtual bool WasNpnNegotiated() const OVERRIDE {
     return false;
   }
@@ -191,10 +187,6 @@ class MockFailingClientSocket : public StreamSocket {
   virtual void SetOmniboxSpeculation() OVERRIDE {}
   virtual bool WasEverUsed() const OVERRIDE { return false; }
   virtual bool UsingTCPFastOpen() const OVERRIDE { return false; }
-  virtual int64 NumBytesRead() const OVERRIDE { return -1; }
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE {
-    return base::TimeDelta::FromMicroseconds(-1);
-  }
   virtual bool WasNpnNegotiated() const OVERRIDE {
     return false;
   }
@@ -235,7 +227,7 @@ class MockPendingClientSocket : public StreamSocket {
       bool should_stall,
       base::TimeDelta delay,
       net::NetLog* net_log)
-      : ALLOW_THIS_IN_INITIALIZER_LIST(weak_factory_(this)),
+      : weak_factory_(this),
         should_connect_(should_connect),
         should_stall_(should_stall),
         delay_(delay),
@@ -282,10 +274,6 @@ class MockPendingClientSocket : public StreamSocket {
   virtual void SetOmniboxSpeculation() OVERRIDE {}
   virtual bool WasEverUsed() const OVERRIDE { return false; }
   virtual bool UsingTCPFastOpen() const OVERRIDE { return false; }
-  virtual int64 NumBytesRead() const OVERRIDE { return -1; }
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE {
-    return base::TimeDelta::FromMicroseconds(-1);
-  }
   virtual bool WasNpnNegotiated() const OVERRIDE {
     return false;
   }
@@ -841,9 +829,8 @@ class RequestSocketCallback : public TestCompletionCallbackBase {
       : handle_(handle),
         pool_(pool),
         within_callback_(false),
-        ALLOW_THIS_IN_INITIALIZER_LIST(callback_(
-            base::Bind(&RequestSocketCallback::OnComplete,
-                       base::Unretained(this)))) {
+        callback_(base::Bind(&RequestSocketCallback::OnComplete,
+                             base::Unretained(this))) {
   }
 
   virtual ~RequestSocketCallback() {}
@@ -1222,8 +1209,8 @@ TEST_F(TransportClientSocketPoolTest, IPv6FallbackSocketIPv4FinishesFirst) {
   client_socket_factory_.set_client_socket_types(case_types, 2);
 
   // Resolve an AddressList with a IPv6 address first and then a IPv4 address.
-  host_resolver_->rules()->AddIPLiteralRule(
-      "*", "2:abcd::3:4:ff,2.2.2.2", "");
+  host_resolver_->rules()
+      ->AddIPLiteralRule("*", "2:abcd::3:4:ff,2.2.2.2", std::string());
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
@@ -1267,8 +1254,8 @@ TEST_F(TransportClientSocketPoolTest, IPv6FallbackSocketIPv6FinishesFirst) {
       TransportConnectJob::kIPv6FallbackTimerInMs + 50));
 
   // Resolve an AddressList with a IPv6 address first and then a IPv4 address.
-  host_resolver_->rules()->AddIPLiteralRule(
-      "*", "2:abcd::3:4:ff,2.2.2.2", "");
+  host_resolver_->rules()
+      ->AddIPLiteralRule("*", "2:abcd::3:4:ff,2.2.2.2", std::string());
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
@@ -1301,8 +1288,8 @@ TEST_F(TransportClientSocketPoolTest, IPv6NoIPv4AddressesToFallbackTo) {
       MockClientSocketFactory::MOCK_DELAYED_CLIENT_SOCKET);
 
   // Resolve an AddressList with only IPv6 addresses.
-  host_resolver_->rules()->AddIPLiteralRule(
-      "*", "2:abcd::3:4:ff,3:abcd::3:4:ff", "");
+  host_resolver_->rules()
+      ->AddIPLiteralRule("*", "2:abcd::3:4:ff,3:abcd::3:4:ff", std::string());
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
@@ -1335,8 +1322,7 @@ TEST_F(TransportClientSocketPoolTest, IPv4HasNoFallback) {
       MockClientSocketFactory::MOCK_DELAYED_CLIENT_SOCKET);
 
   // Resolve an AddressList with only IPv4 addresses.
-  host_resolver_->rules()->AddIPLiteralRule(
-      "*", "1.1.1.1", "");
+  host_resolver_->rules()->AddIPLiteralRule("*", "1.1.1.1", std::string());
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;

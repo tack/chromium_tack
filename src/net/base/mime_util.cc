@@ -13,8 +13,8 @@
 #include "base/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/string_split.h"
 #include "base/string_util.h"
+#include "base/strings/string_split.h"
 #include "base/utf_string_conversions.h"
 
 using std::string;
@@ -143,8 +143,8 @@ static const MimeInfo secondary_mappings[] = {
   { "application/gzip", "gz" },
   { "application/pdf", "pdf" },
   { "application/postscript", "ps,eps,ai" },
-  { "application/x-javascript", "js" },
-  { "application/x-font-woff", "woff" },
+  { "application/javascript", "js" },
+  { "application/font-woff", "woff" },
   { "image/bmp", "bmp" },
   { "image/x-icon", "ico" },
   { "image/vnd.microsoft.icon", "ico" },
@@ -381,6 +381,8 @@ static const char* const unsupported_text_types[] = {
   "text/csv",
   "text/tab-separated-values",
   "text/tsv",
+  "text/ofx",                           // http://crbug.com/162238
+  "text/vnd.sun.j2me.app-descriptor"    // http://crbug.com/176450
 };
 
 //  Mozilla 1.8 and WinIE 7 both accept text/javascript and text/ecmascript.
@@ -965,7 +967,7 @@ const std::string GetIANAMediaType(const std::string& mime_type) {
       return kIanaMediaTypes[i].name;
     }
   }
-  return "";
+  return std::string();
 }
 
 CertificateMimeType GetCertificateMimeTypeForMimeType(
@@ -983,6 +985,31 @@ bool IsSupportedCertificateMimeType(const std::string& mime_type) {
   CertificateMimeType file_type =
       GetCertificateMimeTypeForMimeType(mime_type);
   return file_type != CERTIFICATE_MIME_TYPE_UNKNOWN;
+}
+
+void AddMultipartValueForUpload(const std::string& value_name,
+                                const std::string& value,
+                                const std::string& mime_boundary,
+                                const std::string& content_type,
+                                std::string* post_data) {
+  DCHECK(post_data);
+  // First line is the boundary.
+  post_data->append("--" + mime_boundary + "\r\n");
+  // Next line is the Content-disposition.
+  post_data->append("Content-Disposition: form-data; name=\"" +
+                    value_name + "\"\r\n");
+  if (!content_type.empty()) {
+    // If Content-type is specified, the next line is that.
+    post_data->append("Content-Type: " + content_type + "\r\n");
+  }
+  // Leave an empty line and append the value.
+  post_data->append("\r\n" + value + "\r\n");
+}
+
+void AddMultipartFinalDelimiterForUpload(const std::string& mime_boundary,
+                                         std::string* post_data) {
+  DCHECK(post_data);
+  post_data->append("--" + mime_boundary + "--\r\n");
 }
 
 }  // namespace net

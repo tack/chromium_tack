@@ -9,9 +9,9 @@
 #include "base/time.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/load_timing_info_test_util.h"
-#include "net/base/mock_host_resolver.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_histograms.h"
@@ -66,8 +66,8 @@ class SOCKSClientSocketPoolTest : public testing::Test {
 
    private:
     scoped_ptr<StaticSocketDataProvider> data_;
-    scoped_array<MockWrite> writes_;
-    scoped_array<MockRead> reads_;
+    scoped_ptr<MockWrite[]> writes_;
+    scoped_ptr<MockRead[]> reads_;
   };
 
   SOCKSClientSocketPoolTest()

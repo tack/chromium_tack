@@ -311,13 +311,26 @@ struct fixup_case {
   {"[::]:180/path", "", "http://[::]:180/path"},
   // TODO(pmarks): Maybe we should parse bare IPv6 literals someday.
   {"::1", "", "::1"},
+  // Semicolon as scheme separator for standard schemes.
+  {"http;//www.google.com/", "", "http://www.google.com/"},
+  {"about;chrome", "", "chrome://chrome/"},
+  // Semicolon left as-is for non-standard schemes.
+  {"whatsup;//fool", "", "whatsup://fool"},
+  // Semicolon left as-is in URL itself.
+  {"http://host/port?query;moar", "", "http://host/port?query;moar"},
+  // Fewer slashes than expected.
+  {"http;www.google.com/", "", "http://www.google.com/"},
+  {"http;/www.google.com/", "", "http://www.google.com/"},
+  // Semicolon at start.
+  {";http://www.google.com/", "", "http://%3Bhttp//www.google.com/"},
 };
 
 TEST(URLFixerUpperTest, FixupURL) {
   for (size_t i = 0; i < arraysize(fixup_cases); ++i) {
     fixup_case value = fixup_cases[i];
     EXPECT_EQ(value.output, URLFixerUpper::FixupURL(value.input,
-        value.desired_tld).possibly_invalid_spec());
+        value.desired_tld).possibly_invalid_spec())
+        << "input: " << value.input;
   }
 
   // Check the TLD-appending functionality
@@ -455,7 +468,8 @@ TEST(URLFixerUpperTest, FixupRelativeFile) {
       FILE_PATH_LITERAL("url_fixer_upper_existing_file.txt"));
   ASSERT_TRUE(PathService::Get(chrome::DIR_APP, &dir));
   ASSERT_TRUE(MakeTempFile(dir, file_part, &full_path));
-  ASSERT_TRUE(file_util::AbsolutePath(&full_path));
+  full_path = base::MakeAbsoluteFilePath(full_path);
+  ASSERT_FALSE(full_path.empty());
 
   // make sure we pass through good URLs
   for (size_t i = 0; i < arraysize(fixup_cases); ++i) {
@@ -493,7 +507,8 @@ TEST(URLFixerUpperTest, FixupRelativeFile) {
   base::FilePath new_dir = dir.Append(sub_dir);
   file_util::CreateDirectory(new_dir);
   ASSERT_TRUE(MakeTempFile(new_dir, sub_file, &full_path));
-  ASSERT_TRUE(file_util::AbsolutePath(&full_path));
+  full_path = base::MakeAbsoluteFilePath(full_path);
+  ASSERT_FALSE(full_path.empty());
 
   // test file in the subdir
   base::FilePath relative_file = sub_dir.Append(sub_file);

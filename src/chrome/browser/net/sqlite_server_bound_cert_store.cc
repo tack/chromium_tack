@@ -18,27 +18,33 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/diagnostics/sqlite_diagnostics.h"
-#include "chrome/browser/net/clear_on_exit_policy.h"
 #include "content/public/browser/browser_thread.h"
-#include "net/base/ssl_client_cert_type.h"
-#include "net/base/x509_certificate.h"
+#include "googleurl/src/gurl.h"
+#include "net/cert/x509_certificate.h"
+#include "net/cookies/cookie_util.h"
+#include "net/ssl/ssl_client_cert_type.h"
+#include "sql/error_delegate_util.h"
 #include "sql/meta_table.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
+#include "third_party/sqlite/sqlite3.h"
+#include "webkit/quota/special_storage_policy.h"
 
 using content::BrowserThread;
 
 // This class is designed to be shared between any calling threads and the
-// database thread.  It batches operations and commits them on a timer.
+// database thread. It batches operations and commits them on a timer.
 class SQLiteServerBoundCertStore::Backend
     : public base::RefCountedThreadSafe<SQLiteServerBoundCertStore::Backend> {
  public:
-  Backend(const base::FilePath& path, ClearOnExitPolicy* clear_on_exit_policy)
+  Backend(const base::FilePath& path,
+          quota::SpecialStoragePolicy* special_storage_policy)
       : path_(path),
         db_(NULL),
         num_pending_(0),
         force_keep_session_state_(false),
-        clear_on_exit_policy_(clear_on_exit_policy) {
+        special_storage_policy_(special_storage_policy),
+        corruption_detected_(false) {
   }
 
   // Creates or loads the SQLite database.
@@ -52,9 +58,6 @@ class SQLiteServerBoundCertStore::Backend
   void DeleteServerBoundCert(
       const net::DefaultServerBoundCertStore::ServerBoundCert& cert);
 
-  // Commit pending operations as soon as possible.
-  void Flush(const base::Closure& completion_task);
-
   // Commit any pending operations and close the database.  This must be called
   // before the object is destructed.
   void Close();
@@ -67,6 +70,28 @@ class SQLiteServerBoundCertStore::Backend
       std::vector<net::DefaultServerBoundCertStore::ServerBoundCert*>* certs);
 
   friend class base::RefCountedThreadSafe<SQLiteServerBoundCertStore::Backend>;
+
+  class KillDatabaseErrorDelegate : public sql::ErrorDelegate {
+   public:
+    explicit KillDatabaseErrorDelegate(Backend* backend);
+
+    virtual ~KillDatabaseErrorDelegate() {}
+
+    // ErrorDelegate implementation.
+    virtual int OnError(int error,
+                        sql::Connection* connection,
+                        sql::Statement* stmt) OVERRIDE;
+
+   private:
+    // Do not increment the count on Backend, as that would create a circular
+    // reference (Backend -> Connection -> ErrorDelegate -> Backend).
+    Backend* backend_;
+
+    // True if the delegate has previously attempted to kill the database.
+    bool attempted_to_kill_database_;
+
+    DISALLOW_COPY_AND_ASSIGN(KillDatabaseErrorDelegate);
+  };
 
   // You should call Close() before destructing this object.
   ~Backend() {
@@ -100,7 +125,7 @@ class SQLiteServerBoundCertStore::Backend
   };
 
  private:
-  // Batch a server bound cert operation (add or delete)
+  // Batch a server bound cert operation (add or delete).
   void BatchOperation(
       PendingOperation::OperationType op,
       const net::DefaultServerBoundCertStore::ServerBoundCert& cert);
@@ -110,6 +135,10 @@ class SQLiteServerBoundCertStore::Backend
   void InternalBackgroundClose();
 
   void DeleteCertificatesOnShutdown();
+
+  void KillDatabase();
+
+  void ScheduleKillDatabase();
 
   base::FilePath path_;
   scoped_ptr<sql::Connection> db_;
@@ -126,10 +155,32 @@ class SQLiteServerBoundCertStore::Backend
   // Cache of origins we have certificates stored for.
   std::set<std::string> cert_origins_;
 
-  scoped_refptr<ClearOnExitPolicy> clear_on_exit_policy_;
+  scoped_refptr<quota::SpecialStoragePolicy> special_storage_policy_;
+
+  // Indicates if the kill-database callback has been scheduled.
+  bool corruption_detected_;
 
   DISALLOW_COPY_AND_ASSIGN(Backend);
 };
+
+SQLiteServerBoundCertStore::Backend::KillDatabaseErrorDelegate::
+KillDatabaseErrorDelegate(Backend* backend)
+    : backend_(backend),
+      attempted_to_kill_database_(false) {
+}
+
+int SQLiteServerBoundCertStore::Backend::KillDatabaseErrorDelegate::OnError(
+    int error, sql::Connection* connection, sql::Statement* stmt) {
+  // Do not attempt to kill database more than once. If the first time failed,
+  // it is unlikely that a second time will be successful.
+  if (!attempted_to_kill_database_ && sql::IsErrorCatastrophic(error)) {
+    attempted_to_kill_database_ = true;
+
+    backend_->ScheduleKillDatabase();
+  }
+
+  return error;
+}
 
 // Version number of the database.
 static const int kCurrentVersionNumber = 4;
@@ -202,14 +253,22 @@ void SQLiteServerBoundCertStore::Backend::LoadOnDBThread(
     UMA_HISTOGRAM_COUNTS("DomainBoundCerts.DBSizeInKB", db_size / 1024 );
 
   db_.reset(new sql::Connection);
+  db_->set_histogram_tag("DomainBoundCerts");
+  db_->set_error_delegate(new KillDatabaseErrorDelegate(this));
+
   if (!db_->Open(path_)) {
     NOTREACHED() << "Unable to open cert DB.";
+    if (corruption_detected_)
+      KillDatabase();
     db_.reset();
     return;
   }
 
   if (!EnsureDatabaseVersion() || !InitTable(db_.get())) {
     NOTREACHED() << "Unable to open cert DB.";
+    if (corruption_detected_)
+      KillDatabase();
+    meta_table_.Reset();
     db_.reset();
     return;
   }
@@ -221,6 +280,9 @@ void SQLiteServerBoundCertStore::Backend::LoadOnDBThread(
       "SELECT origin, private_key, cert, cert_type, expiration_time, "
       "creation_time FROM origin_bound_certs"));
   if (!smt.is_valid()) {
+    if (corruption_detected_)
+      KillDatabase();
+    meta_table_.Reset();
     db_.reset();
     return;
   }
@@ -378,6 +440,28 @@ bool SQLiteServerBoundCertStore::Backend::EnsureDatabaseVersion() {
   return true;
 }
 
+void SQLiteServerBoundCertStore::Backend::ScheduleKillDatabase() {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::DB));
+
+  corruption_detected_ = true;
+
+  BrowserThread::PostTask(BrowserThread::DB, FROM_HERE,
+                          base::Bind(&Backend::KillDatabase, this));
+}
+
+void SQLiteServerBoundCertStore::Backend::KillDatabase() {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::DB));
+
+  if (db_) {
+    // This Backend will now be in-memory only. In a future run the database
+    // will be recreated. Hopefully things go better then!
+    bool success = db_->RazeAndClose();
+    UMA_HISTOGRAM_BOOLEAN("DomainBoundCerts.KillDatabaseResult", success);
+    meta_table_.Reset();
+    db_.reset();
+  }
+}
+
 void SQLiteServerBoundCertStore::Backend::AddServerBoundCert(
     const net::DefaultServerBoundCertStore::ServerBoundCert& cert) {
   BatchOperation(PendingOperation::CERT_ADD, cert);
@@ -486,19 +570,6 @@ void SQLiteServerBoundCertStore::Backend::Commit() {
   transaction.Commit();
 }
 
-void SQLiteServerBoundCertStore::Backend::Flush(
-    const base::Closure& completion_task) {
-  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::DB));
-  BrowserThread::PostTask(
-      BrowserThread::DB, FROM_HERE, base::Bind(&Backend::Commit, this));
-  if (!completion_task.is_null()) {
-    // We want the completion task to run immediately after Commit() returns.
-    // Posting it from here means there is less chance of another task getting
-    // onto the message queue first, than if we posted it from Commit() itself.
-    BrowserThread::PostTask(BrowserThread::DB, FROM_HERE, completion_task);
-  }
-}
-
 // Fire off a close message to the background thread. We could still have a
 // pending commit timer that will be holding a reference on us, but if/when
 // this fires we will already have been cleaned up and it will be ignored.
@@ -515,8 +586,9 @@ void SQLiteServerBoundCertStore::Backend::InternalBackgroundClose() {
   // Commit any pending operations
   Commit();
 
-  if (!force_keep_session_state_ && clear_on_exit_policy_.get() &&
-      clear_on_exit_policy_->HasClearOnExitOrigins()) {
+  if (!force_keep_session_state_ &&
+      special_storage_policy_.get() &&
+      special_storage_policy_->HasSessionOnlyOrigins()) {
     DeleteCertificatesOnShutdown();
   }
 
@@ -530,6 +602,9 @@ void SQLiteServerBoundCertStore::Backend::DeleteCertificatesOnShutdown() {
     return;
 
   if (cert_origins_.empty())
+    return;
+
+  if (!special_storage_policy_.get())
     return;
 
   sql::Statement del_smt(db_->GetCachedStatement(
@@ -547,7 +622,8 @@ void SQLiteServerBoundCertStore::Backend::DeleteCertificatesOnShutdown() {
 
   for (std::set<std::string>::iterator it = cert_origins_.begin();
        it != cert_origins_.end(); ++it) {
-    if (!clear_on_exit_policy_->ShouldClearOriginOnExit(*it, true))
+    const GURL url(net::cookie_util::CookieOriginToURL(*it, true));
+    if (!url.is_valid() || !special_storage_policy_->IsStorageSessionOnly(url))
       continue;
     del_smt.Reset(true);
     del_smt.BindString(0, *it);
@@ -566,8 +642,8 @@ void SQLiteServerBoundCertStore::Backend::SetForceKeepSessionState() {
 
 SQLiteServerBoundCertStore::SQLiteServerBoundCertStore(
     const base::FilePath& path,
-    ClearOnExitPolicy* clear_on_exit_policy)
-    : backend_(new Backend(path, clear_on_exit_policy)) {
+    quota::SpecialStoragePolicy* special_storage_policy)
+    : backend_(new Backend(path, special_storage_policy)) {
 }
 
 void SQLiteServerBoundCertStore::Load(
@@ -587,10 +663,6 @@ void SQLiteServerBoundCertStore::DeleteServerBoundCert(
 
 void SQLiteServerBoundCertStore::SetForceKeepSessionState() {
   backend_->SetForceKeepSessionState();
-}
-
-void SQLiteServerBoundCertStore::Flush(const base::Closure& completion_task) {
-  backend_->Flush(completion_task);
 }
 
 SQLiteServerBoundCertStore::~SQLiteServerBoundCertStore() {

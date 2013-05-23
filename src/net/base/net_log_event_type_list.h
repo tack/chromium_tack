@@ -731,6 +731,14 @@ EVENT_TYPE(URL_REQUEST_BLOCKED_ON_DELEGATE)
 EVENT_TYPE(URL_REQUEST_JOB_BYTES_READ)
 EVENT_TYPE(URL_REQUEST_JOB_FILTERED_BYTES_READ)
 
+// This event is sent when the priority of a net::URLRequest is
+// changed after it has started. The parameters attached to this event
+// are:
+//   {
+//     "priority": <Numerical value of the priority (higher is more important)>,
+//   }
+EVENT_TYPE(URL_REQUEST_SET_PRIORITY)
+
 // ------------------------------------------------------------------------
 // HttpCache
 // ------------------------------------------------------------------------
@@ -967,6 +975,12 @@ EVENT_TYPE(HTTP_TRANSACTION_RESTART_AFTER_ERROR)
 //   }
 EVENT_TYPE(SPDY_SESSION)
 
+// The SpdySession has been initilized with a socket.
+//   {
+//     "source_dependency":  <Source identifier for the underlying socket>,
+//   }
+EVENT_TYPE(SPDY_SESSION_INITIALIZED)
+
 // This event is sent for a SPDY SYN_STREAM.
 // The following parameters are attached:
 //   {
@@ -1020,6 +1034,15 @@ EVENT_TYPE(SPDY_SESSION_SYN_REPLY)
 //     "settings": <The list of setting id, flags and value>,
 //   }
 EVENT_TYPE(SPDY_SESSION_SEND_SETTINGS)
+
+// Receipt of a SPDY SETTINGS frame is received.
+// The following parameters are attached:
+//   {
+//     "host": <The host-port string>,
+//     "clear_persisted": <Boolean indicating whether to clear all persisted
+//                         settings data for the given host>,
+//   }
+EVENT_TYPE(SPDY_SESSION_RECV_SETTINGS)
 
 // Receipt of a SPDY SETTING frame.
 // The following parameters are attached:
@@ -1117,11 +1140,11 @@ EVENT_TYPE(SPDY_SESSION_SEND_DATA)
 //   }
 EVENT_TYPE(SPDY_SESSION_RECV_DATA)
 
-// Logs that a stream is stalled on the session send window being closed.
-EVENT_TYPE(SPDY_SESSION_STREAM_STALLED_ON_SESSION_SEND_WINDOW)
+// A stream is stalled by the session send window being closed.
+EVENT_TYPE(SPDY_SESSION_STREAM_STALLED_BY_SESSION_SEND_WINDOW)
 
-// Logs that a stream is stalled on its send window being closed.
-EVENT_TYPE(SPDY_SESSION_STREAM_STALLED_ON_STREAM_SEND_WINDOW)
+// A stream is stalled by its send window being closed.
+EVENT_TYPE(SPDY_SESSION_STREAM_STALLED_BY_STREAM_SEND_WINDOW)
 
 // Session is closing
 //   {
@@ -1134,11 +1157,16 @@ EVENT_TYPE(SPDY_SESSION_CLOSE)
 // the maximum number of concurrent streams.
 EVENT_TYPE(SPDY_SESSION_STALLED_MAX_STREAMS)
 
-// Received a negative value for initial window size in SETTINGS frame.
+// Received a value for initial window size in SETTINGS frame with
+// flow control turned off.
+EVENT_TYPE(SPDY_SESSION_INITIAL_WINDOW_SIZE_NO_FLOW_CONTROL)
+
+// Received an out-of-range value for initial window size in SETTINGS
+// frame.
 //   {
 //     "initial_window_size"  : <The initial window size>,
 //   }
-EVENT_TYPE(SPDY_SESSION_NEGATIVE_INITIAL_WINDOW_SIZE)
+EVENT_TYPE(SPDY_SESSION_INITIAL_WINDOW_SIZE_OUT_OF_RANGE)
 
 // Updating streams send window size by the delta window size.
 //   {
@@ -1188,8 +1216,11 @@ EVENT_TYPE(SPDY_SESSION_POOL_REMOVE_SESSION)
 // The begin and end of a SPDY STREAM.
 EVENT_TYPE(SPDY_STREAM)
 
-// Logs that a stream attached to a pushed stream.
+// A stream is attached to a pushed stream.
 EVENT_TYPE(SPDY_STREAM_ADOPTED_PUSH_STREAM)
+
+// A stream is unstalled by flow control.
+EVENT_TYPE(SPDY_STREAM_FLOW_CONTROL_UNSTALLED)
 
 // This event indicates that the send window has been updated for a stream.
 //   {

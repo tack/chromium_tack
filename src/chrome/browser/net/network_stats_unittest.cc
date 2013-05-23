@@ -6,11 +6,11 @@
 #include "base/message_loop.h"
 #include "base/stringprintf.h"
 #include "chrome/browser/net/network_stats.h"
-#include "net/base/host_resolver.h"
-#include "net/base/mock_host_resolver.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
-#include "net/test/test_server.h"
+#include "net/dns/host_resolver.h"
+#include "net/dns/mock_host_resolver.h"
+#include "net/test/spawned_test_server/spawned_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -30,8 +30,8 @@ class NetworkStatsTest : public PlatformTest {
 class NetworkStatsTestUDP : public NetworkStatsTest {
  public:
   NetworkStatsTestUDP()
-      : test_server_(net::TestServer::TYPE_UDP_ECHO,
-                     net::TestServer::kLocalhost,
+      : test_server_(net::SpawnedTestServer::TYPE_UDP_ECHO,
+                     net::SpawnedTestServer::kLocalhost,
                      base::FilePath(FILE_PATH_LITERAL("net/data"))) {
   }
 
@@ -57,7 +57,7 @@ class NetworkStatsTestUDP : public NetworkStatsTest {
     EXPECT_EQ(0, rv);
   }
 
-  net::TestServer test_server_;
+  net::SpawnedTestServer test_server_;
 };
 
 TEST_F(NetworkStatsTestUDP, UDPEcho100BytesHasProxy) {

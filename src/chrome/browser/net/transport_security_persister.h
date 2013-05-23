@@ -38,7 +38,7 @@
 #include "base/files/file_path.h"
 #include "base/files/important_file_writer.h"
 #include "base/memory/weak_ptr.h"
-#include "net/base/transport_security_state.h"
+#include "net/http/transport_security_state.h"
 
 // Reads and updates on-disk TransportSecurity state.
 // Must be created, used and destroyed only on the IO thread.
@@ -84,6 +84,11 @@ class TransportSecurityPersister
   // trivially reveal a user's browsing history to an attacker reading the
   // serialized state on disk.
   virtual bool SerializeData(std::string* data) OVERRIDE;
+
+  // Parses an array of JSON-encoded TransportSecurityState::DomainState
+  // entries. For use in loading entries defined on the command line
+  // (switches::kHstsHosts).
+  bool DeserializeFromCommandLine(const std::string& serialized);
 
   // Clears any existing non-static entries, and then re-populates
   // |transport_security_state_|.

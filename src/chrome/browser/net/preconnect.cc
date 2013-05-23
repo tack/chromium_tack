@@ -9,11 +9,11 @@
 #include "base/metrics/histogram.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/net_log.h"
-#include "net/base/ssl_config_service.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_stream_factory.h"
 #include "net/http/http_transaction_factory.h"
+#include "net/ssl/ssl_config_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 
@@ -23,6 +23,7 @@ namespace chrome_browser_net {
 
 void PreconnectOnUIThread(
     const GURL& url,
+    const GURL& first_party_for_cookies,
     UrlInfo::ResolutionMotivation motivation,
     int count,
     net::URLRequestContextGetter* getter) {
@@ -30,14 +31,15 @@ void PreconnectOnUIThread(
   BrowserThread::PostTask(
       BrowserThread::IO,
       FROM_HERE,
-      base::Bind(&PreconnectOnIOThread, url, motivation, count,
-                 make_scoped_refptr(getter)));
+      base::Bind(&PreconnectOnIOThread, url, first_party_for_cookies,
+                 motivation, count, make_scoped_refptr(getter)));
   return;
 }
 
 
 void PreconnectOnIOThread(
     const GURL& url,
+    const GURL& first_party_for_cookies,
     UrlInfo::ResolutionMotivation motivation,
     int count,
     net::URLRequestContextGetter* getter) {
@@ -60,6 +62,11 @@ void PreconnectOnIOThread(
   request_info.method = "GET";
   request_info.extra_headers.SetHeader(net::HttpRequestHeaders::kUserAgent,
                                        context->GetUserAgent(url));
+
+  net::NetworkDelegate* delegate = context->network_delegate();
+  if (delegate->CanEnablePrivacyMode(url, first_party_for_cookies))
+    request_info.privacy_mode = net::kPrivacyModeEnabled;
+
   // It almost doesn't matter whether we use net::LOWEST or net::HIGHEST
   // priority here, as we won't make a request, and will surrender the created
   // socket to the pool as soon as we can.  However, we would like to mark the
@@ -71,7 +78,7 @@ void PreconnectOnIOThread(
   // as speculative, and better detect stats (if it gets used).
   // TODO(jar): histogram to see how often we accidentally use a previously-
   // unused socket, when a previously used socket was available.
-  request_info.priority = net::HIGHEST;
+  net::RequestPriority priority = net::HIGHEST;
 
   // Translate the motivation from UrlRequest motivations to HttpRequest
   // motivations.
@@ -102,8 +109,8 @@ void PreconnectOnIOThread(
   ssl_config.verify_ev_cert = true;
 
   net::HttpStreamFactory* http_stream_factory = session->http_stream_factory();
-  http_stream_factory->PreconnectStreams(count, request_info, ssl_config,
-                                         ssl_config);
+  http_stream_factory->PreconnectStreams(count, request_info, priority,
+                                         ssl_config, ssl_config);
 }
 
 }  // namespace chrome_browser_net

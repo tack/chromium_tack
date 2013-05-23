@@ -12,10 +12,10 @@
 #include "base/time.h"
 #include "chrome/browser/net/cert_logger.pb.h"
 #include "net/base/load_flags.h"
-#include "net/base/ssl_info.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
-#include "net/base/x509_certificate.h"
+#include "net/cert/x509_certificate.h"
+#include "net/ssl/ssl_info.h"
 #include "net/url_request/url_request_context.h"
 
 namespace chrome_browser_net {
@@ -65,9 +65,14 @@ net::URLRequest* ChromeFraudulentCertificateReporter::CreateURLRequest(
 
 void ChromeFraudulentCertificateReporter::SendReport(
     const std::string& hostname,
-    const net::SSLInfo& ssl_info) {
+    const net::SSLInfo& ssl_info,
+    bool sni_available) {
   // We do silent/automatic reporting ONLY for Google properties. For other
   // domains (when we start supporting that), we will ask for user permission.
+  if (!net::TransportSecurityState::IsGooglePinnedProperty(hostname,
+                                                           sni_available)) {
+    return;
+  }
 
   std::string report = BuildReport(hostname, ssl_info);
 

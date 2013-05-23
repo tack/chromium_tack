@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -119,16 +118,14 @@ class MockClientSocket : public StreamSocket {
   explicit MockClientSocket(net::NetLog* net_log)
       : connected_(false),
         net_log_(BoundNetLog::Make(net_log, net::NetLog::SOURCE_SOCKET)),
-        was_used_to_convey_data_(false),
-        num_bytes_read_(0) {
+        was_used_to_convey_data_(false) {
   }
 
   // Socket implementation.
   virtual int Read(
       IOBuffer* /* buf */, int len,
       const CompletionCallback& /* callback */) OVERRIDE {
-    num_bytes_read_ += len;
-    return len;
+    return ERR_UNEXPECTED;
   }
 
   virtual int Write(
@@ -165,15 +162,9 @@ class MockClientSocket : public StreamSocket {
   virtual void SetSubresourceSpeculation() OVERRIDE {}
   virtual void SetOmniboxSpeculation() OVERRIDE {}
   virtual bool WasEverUsed() const OVERRIDE {
-    return was_used_to_convey_data_ || num_bytes_read_ > 0;
+    return was_used_to_convey_data_;
   }
   virtual bool UsingTCPFastOpen() const OVERRIDE { return false; }
-  virtual int64 NumBytesRead() const OVERRIDE { return num_bytes_read_; }
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE {
-    static const base::TimeDelta kDummyConnectTimeMicros =
-        base::TimeDelta::FromMicroseconds(10);
-    return kDummyConnectTimeMicros;  // Dummy value.
-  }
   virtual bool WasNpnNegotiated() const OVERRIDE {
     return false;
   }
@@ -188,7 +179,6 @@ class MockClientSocket : public StreamSocket {
   bool connected_;
   BoundNetLog net_log_;
   bool was_used_to_convey_data_;
-  int num_bytes_read_;
 
   DISALLOW_COPY_AND_ASSIGN(MockClientSocket);
 };
@@ -269,7 +259,7 @@ class TestConnectJob : public ConnectJob {
                    BoundNetLog::Make(net_log, NetLog::SOURCE_CONNECT_JOB)),
         job_type_(job_type),
         client_socket_factory_(client_socket_factory),
-        ALLOW_THIS_IN_INITIALIZER_LIST(weak_factory_(this)),
+        weak_factory_(this),
         load_state_(LOAD_STATE_IDLE),
         store_additional_error_state_(false) {}
 
@@ -284,7 +274,7 @@ class TestConnectJob : public ConnectJob {
       // Set all of the additional error state fields in some way.
       handle->set_is_ssl_error(true);
       HttpResponseInfo info;
-      info.headers = new HttpResponseHeaders("");
+      info.headers = new HttpResponseHeaders(std::string());
       handle->set_ssl_error_response_info(info);
     }
   }
@@ -745,71 +735,6 @@ class ClientSocketPoolBaseTest : public testing::Test {
   ClientSocketPoolTest test_base_;
 };
 
-TEST_F(ClientSocketPoolBaseTest, AssignIdleSocketToGroup_WarmestSocket) {
-  CreatePool(4, 4);
-  net::SetSocketReusePolicy(0);
-
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-
-  std::map<int, StreamSocket*> sockets_;
-  for (size_t i = 0; i < test_base_.requests_size(); i++) {
-    TestSocketRequest* req = test_base_.request(i);
-    StreamSocket* s = req->handle()->socket();
-    MockClientSocket* sock = static_cast<MockClientSocket*>(s);
-    CHECK(sock);
-    sockets_[i] = sock;
-    sock->Read(NULL, 1024 - i, CompletionCallback());
-  }
-
-  ReleaseAllConnections(ClientSocketPoolTest::KEEP_ALIVE);
-
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  TestSocketRequest* req = test_base_.request(test_base_.requests_size() - 1);
-
-  // First socket is warmest.
-  EXPECT_EQ(sockets_[0], req->handle()->socket());
-
-  // Test that NumBytes are as expected.
-  EXPECT_EQ(1024, sockets_[0]->NumBytesRead());
-  EXPECT_EQ(1023, sockets_[1]->NumBytesRead());
-  EXPECT_EQ(1022, sockets_[2]->NumBytesRead());
-  EXPECT_EQ(1021, sockets_[3]->NumBytesRead());
-
-  ReleaseAllConnections(ClientSocketPoolTest::NO_KEEP_ALIVE);
-}
-
-TEST_F(ClientSocketPoolBaseTest, AssignIdleSocketToGroup_LastAccessedSocket) {
-  CreatePool(4, 4);
-  net::SetSocketReusePolicy(2);
-
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-
-  std::map<int, StreamSocket*> sockets_;
-  for (size_t i = 0; i < test_base_.requests_size(); i++) {
-    TestSocketRequest* req = test_base_.request(i);
-    StreamSocket* s = req->handle()->socket();
-    MockClientSocket* sock = static_cast<MockClientSocket*>(s);
-    CHECK(sock);
-    sockets_[i] = sock;
-    sock->Read(NULL, 1024 - i, CompletionCallback());
-  }
-
-  ReleaseAllConnections(ClientSocketPoolTest::KEEP_ALIVE);
-
-  EXPECT_EQ(OK, StartRequest("a", kDefaultPriority));
-  TestSocketRequest* req = test_base_.request(test_base_.requests_size() - 1);
-
-  // Last socket is most recently accessed.
-  EXPECT_EQ(sockets_[3], req->handle()->socket());
-  ReleaseAllConnections(ClientSocketPoolTest::NO_KEEP_ALIVE);
-}
-
 // Even though a timeout is specified, it doesn't time out on a synchronous
 // completion.
 TEST_F(ClientSocketPoolBaseTest, ConnectJob_NoTimeoutOnSynchronousCompletion) {
@@ -921,7 +846,7 @@ TEST_F(ClientSocketPoolBaseTest, InitConnectionFailure) {
   // Set the additional error state members to ensure that they get cleared.
   handle.set_is_ssl_error(true);
   HttpResponseInfo info;
-  info.headers = new HttpResponseHeaders("");
+  info.headers = new HttpResponseHeaders(std::string());
   handle.set_ssl_error_response_info(info);
   EXPECT_EQ(ERR_CONNECTION_FAILED,
             handle.Init("a",
@@ -1516,9 +1441,8 @@ class RequestSocketCallback : public TestCompletionCallbackBase {
         within_callback_(false),
         test_connect_job_factory_(test_connect_job_factory),
         next_job_type_(next_job_type),
-        ALLOW_THIS_IN_INITIALIZER_LIST(callback_(
-            base::Bind(&RequestSocketCallback::OnComplete,
-                       base::Unretained(this)))) {
+        callback_(base::Bind(&RequestSocketCallback::OnComplete,
+                             base::Unretained(this))) {
   }
 
   virtual ~RequestSocketCallback() {}
@@ -1795,7 +1719,7 @@ TEST_F(ClientSocketPoolBaseTest,
   // Set the additional error state members to ensure that they get cleared.
   handle.set_is_ssl_error(true);
   HttpResponseInfo info;
-  info.headers = new HttpResponseHeaders("");
+  info.headers = new HttpResponseHeaders(std::string());
   handle.set_ssl_error_response_info(info);
   EXPECT_EQ(ERR_IO_PENDING, handle.Init("a",
                                         params_,
@@ -2483,9 +2407,8 @@ class TestReleasingSocketRequest : public TestCompletionCallbackBase {
       : pool_(pool),
         expected_result_(expected_result),
         reset_releasing_handle_(reset_releasing_handle),
-        ALLOW_THIS_IN_INITIALIZER_LIST(callback_(
-            base::Bind(&TestReleasingSocketRequest::OnComplete,
-                       base::Unretained(this)))) {
+        callback_(base::Bind(&TestReleasingSocketRequest::OnComplete,
+                             base::Unretained(this))) {
   }
 
   virtual ~TestReleasingSocketRequest() {}
@@ -2608,9 +2531,8 @@ class ConnectWithinCallback : public TestCompletionCallbackBase {
       : group_name_(group_name),
         params_(params),
         pool_(pool),
-        ALLOW_THIS_IN_INITIALIZER_LIST(callback_(
-            base::Bind(&ConnectWithinCallback::OnComplete,
-                       base::Unretained(this)))) {
+        callback_(base::Bind(&ConnectWithinCallback::OnComplete,
+                             base::Unretained(this))) {
   }
 
   virtual ~ConnectWithinCallback() {}
@@ -3636,6 +3558,290 @@ TEST_F(ClientSocketPoolBaseTest, PreconnectWithBackupJob) {
   EXPECT_EQ(0, pool_->IdleSocketCountInGroup("a"));
   EXPECT_EQ(1, pool_->NumActiveSocketsInGroup("a"));
 }
+
+class MockLayeredPool : public LayeredPool {
+ public:
+  MockLayeredPool(TestClientSocketPool* pool,
+                  const std::string& group_name)
+      : pool_(pool),
+        params_(new TestSocketParams),
+        group_name_(group_name),
+        can_release_connection_(true) {
+    pool_->AddLayeredPool(this);
+  }
+
+  ~MockLayeredPool() {
+    pool_->RemoveLayeredPool(this);
+  }
+
+  int RequestSocket(TestClientSocketPool* pool) {
+    return handle_.Init(group_name_, params_, kDefaultPriority,
+                        callback_.callback(), pool, BoundNetLog());
+  }
+
+  int RequestSocketWithoutLimits(TestClientSocketPool* pool) {
+    params_->set_ignore_limits(true);
+    return handle_.Init(group_name_, params_, kDefaultPriority,
+                        callback_.callback(), pool, BoundNetLog());
+  }
+
+  bool ReleaseOneConnection() {
+    if (!handle_.is_initialized() || !can_release_connection_) {
+      return false;
+    }
+    handle_.socket()->Disconnect();
+    handle_.Reset();
+    return true;
+  }
+
+  void set_can_release_connection(bool can_release_connection) {
+    can_release_connection_ = can_release_connection;
+  }
+
+  MOCK_METHOD0(CloseOneIdleConnection, bool());
+
+ private:
+  TestClientSocketPool* const pool_;
+  scoped_refptr<TestSocketParams> params_;
+  ClientSocketHandle handle_;
+  TestCompletionCallback callback_;
+  const std::string group_name_;
+  bool can_release_connection_;
+};
+
+TEST_F(ClientSocketPoolBaseTest, FailToCloseIdleSocketsNotHeldByLayeredPool) {
+  CreatePool(kDefaultMaxSockets, kDefaultMaxSocketsPerGroup);
+  connect_job_factory_->set_job_type(TestConnectJob::kMockJob);
+
+  MockLayeredPool mock_layered_pool(pool_.get(), "foo");
+  EXPECT_EQ(OK, mock_layered_pool.RequestSocket(pool_.get()));
+  EXPECT_CALL(mock_layered_pool, CloseOneIdleConnection())
+      .WillOnce(Return(false));
+  EXPECT_FALSE(pool_->CloseOneIdleConnectionInLayeredPool());
+}
+
+TEST_F(ClientSocketPoolBaseTest, ForciblyCloseIdleSocketsHeldByLayeredPool) {
+  CreatePool(kDefaultMaxSockets, kDefaultMaxSocketsPerGroup);
+  connect_job_factory_->set_job_type(TestConnectJob::kMockJob);
+
+  MockLayeredPool mock_layered_pool(pool_.get(), "foo");
+  EXPECT_EQ(OK, mock_layered_pool.RequestSocket(pool_.get()));
+  EXPECT_CALL(mock_layered_pool, CloseOneIdleConnection())
+      .WillOnce(Invoke(&mock_layered_pool,
+                       &MockLayeredPool::ReleaseOneConnection));
+  EXPECT_TRUE(pool_->CloseOneIdleConnectionInLayeredPool());
+}
+
+// Tests the basic case of closing an idle socket in a higher layered pool when
+// a new request is issued and the lower layer pool is stalled.
+TEST_F(ClientSocketPoolBaseTest, CloseIdleSocketsHeldByLayeredPoolWhenNeeded) {
+  CreatePool(1, 1);
+  connect_job_factory_->set_job_type(TestConnectJob::kMockJob);
+
+  MockLayeredPool mock_layered_pool(pool_.get(), "foo");
+  EXPECT_EQ(OK, mock_layered_pool.RequestSocket(pool_.get()));
+  EXPECT_CALL(mock_layered_pool, CloseOneIdleConnection())
+      .WillOnce(Invoke(&mock_layered_pool,
+                       &MockLayeredPool::ReleaseOneConnection));
+  ClientSocketHandle handle;
+  TestCompletionCallback callback;
+  EXPECT_EQ(ERR_IO_PENDING, handle.Init("a",
+                                        params_,
+                                        kDefaultPriority,
+                                        callback.callback(),
+                                        pool_.get(),
+                                        BoundNetLog()));
+  EXPECT_EQ(OK, callback.WaitForResult());
+}
+
+// Same as above, but the idle socket is in the same group as the stalled
+// socket, and closes the only other request in its group when closing requests
+// in higher layered pools.  This generally shouldn't happen, but it may be
+// possible if a higher level pool issues a request and the request is
+// subsequently cancelled.  Even if it's not possible, best not to crash.
+TEST_F(ClientSocketPoolBaseTest,
+       CloseIdleSocketsHeldByLayeredPoolWhenNeededSameGroup) {
+  CreatePool(2, 2);
+  connect_job_factory_->set_job_type(TestConnectJob::kMockJob);
+
+  // Need a socket in another group for the pool to be stalled (If a group
+  // has the maximum number of connections already, it's not stalled).
+  ClientSocketHandle handle1;
+  TestCompletionCallback callback1;
+  EXPECT_EQ(OK, handle1.Init("group1",
+                             params_,
+                             kDefaultPriority,
+                             callback1.callback(),
+                             pool_.get(),
+                             BoundNetLog()));
+
+  MockLayeredPool mock_layered_pool(pool_.get(), "group2");
+  EXPECT_EQ(OK, mock_layered_pool.RequestSocket(pool_.get()));
+  EXPECT_CALL(mock_layered_pool, CloseOneIdleConnection())
+      .WillOnce(Invoke(&mock_layered_pool,
+                       &MockLayeredPool::ReleaseOneConnection));
+  ClientSocketHandle handle;
+  TestCompletionCallback callback2;
+  EXPECT_EQ(ERR_IO_PENDING, handle.Init("group2",
+                                        params_,
+                                        kDefaultPriority,
+                                        callback2.callback(),
+                                        pool_.get(),
+                                        BoundNetLog()));
+  EXPECT_EQ(OK, callback2.WaitForResult());
+}
+
+// Tests the case when an idle socket can be closed when a new request is
+// issued, and the new request belongs to a group that was previously stalled.
+TEST_F(ClientSocketPoolBaseTest,
+       CloseIdleSocketsHeldByLayeredPoolInSameGroupWhenNeeded) {
+  CreatePool(2, 2);
+  std::list<TestConnectJob::JobType> job_types;
+  job_types.push_back(TestConnectJob::kMockJob);
+  job_types.push_back(TestConnectJob::kMockJob);
+  job_types.push_back(TestConnectJob::kMockJob);
+  job_types.push_back(TestConnectJob::kMockJob);
+  connect_job_factory_->set_job_types(&job_types);
+
+  ClientSocketHandle handle1;
+  TestCompletionCallback callback1;
+  EXPECT_EQ(OK, handle1.Init("group1",
+                             params_,
+                             kDefaultPriority,
+                             callback1.callback(),
+                             pool_.get(),
+                             BoundNetLog()));
+
+  MockLayeredPool mock_layered_pool(pool_.get(), "group2");
+  EXPECT_EQ(OK, mock_layered_pool.RequestSocket(pool_.get()));
+  EXPECT_CALL(mock_layered_pool, CloseOneIdleConnection())
+      .WillRepeatedly(Invoke(&mock_layered_pool,
+                             &MockLayeredPool::ReleaseOneConnection));
+  mock_layered_pool.set_can_release_connection(false);
+
+  // The third request is made when the socket pool is in a stalled state.
+  ClientSocketHandle handle3;
+  TestCompletionCallback callback3;
+  EXPECT_EQ(ERR_IO_PENDING, handle3.Init("group3",
+                                         params_,
+                                         kDefaultPriority,
+                                         callback3.callback(),
+                                         pool_.get(),
+                                         BoundNetLog()));
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(callback3.have_result());
+
+  // The fourth request is made when the pool is no longer stalled.  The third
+  // request should be serviced first, since it was issued first and has the
+  // same priority.
+  mock_layered_pool.set_can_release_connection(true);
+  ClientSocketHandle handle4;
+  TestCompletionCallback callback4;
+  EXPECT_EQ(ERR_IO_PENDING, handle4.Init("group3",
+                                         params_,
+                                         kDefaultPriority,
+                                         callback4.callback(),
+                                         pool_.get(),
+                                         BoundNetLog()));
+  EXPECT_EQ(OK, callback3.WaitForResult());
+  EXPECT_FALSE(callback4.have_result());
+
+  // Closing a handle should free up another socket slot.
+  handle1.Reset();
+  EXPECT_EQ(OK, callback4.WaitForResult());
+}
+
+// Tests the case when an idle socket can be closed when a new request is
+// issued, and the new request belongs to a group that was previously stalled.
+//
+// The two differences from the above test are that the stalled requests are not
+// in the same group as the layered pool's request, and the the fourth request
+// has a higher priority than the third one, so gets a socket first.
+TEST_F(ClientSocketPoolBaseTest,
+       CloseIdleSocketsHeldByLayeredPoolInSameGroupWhenNeeded2) {
+  CreatePool(2, 2);
+  std::list<TestConnectJob::JobType> job_types;
+  job_types.push_back(TestConnectJob::kMockJob);
+  job_types.push_back(TestConnectJob::kMockJob);
+  job_types.push_back(TestConnectJob::kMockJob);
+  job_types.push_back(TestConnectJob::kMockJob);
+  connect_job_factory_->set_job_types(&job_types);
+
+  ClientSocketHandle handle1;
+  TestCompletionCallback callback1;
+  EXPECT_EQ(OK, handle1.Init("group1",
+                             params_,
+                             kDefaultPriority,
+                             callback1.callback(),
+                             pool_.get(),
+                             BoundNetLog()));
+
+  MockLayeredPool mock_layered_pool(pool_.get(), "group2");
+  EXPECT_EQ(OK, mock_layered_pool.RequestSocket(pool_.get()));
+  EXPECT_CALL(mock_layered_pool, CloseOneIdleConnection())
+      .WillRepeatedly(Invoke(&mock_layered_pool,
+                             &MockLayeredPool::ReleaseOneConnection));
+  mock_layered_pool.set_can_release_connection(false);
+
+  // The third request is made when the socket pool is in a stalled state.
+  ClientSocketHandle handle3;
+  TestCompletionCallback callback3;
+  EXPECT_EQ(ERR_IO_PENDING, handle3.Init("group3",
+                                         params_,
+                                         MEDIUM,
+                                         callback3.callback(),
+                                         pool_.get(),
+                                         BoundNetLog()));
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(callback3.have_result());
+
+  // The fourth request is made when the pool is no longer stalled.  This
+  // request has a higher priority than the third request, so is serviced first.
+  mock_layered_pool.set_can_release_connection(true);
+  ClientSocketHandle handle4;
+  TestCompletionCallback callback4;
+  EXPECT_EQ(ERR_IO_PENDING, handle4.Init("group3",
+                                         params_,
+                                         HIGHEST,
+                                         callback4.callback(),
+                                         pool_.get(),
+                                         BoundNetLog()));
+  EXPECT_EQ(OK, callback4.WaitForResult());
+  EXPECT_FALSE(callback3.have_result());
+
+  // Closing a handle should free up another socket slot.
+  handle1.Reset();
+  EXPECT_EQ(OK, callback3.WaitForResult());
+}
+
+TEST_F(ClientSocketPoolBaseTest,
+       CloseMultipleIdleSocketsHeldByLayeredPoolWhenNeeded) {
+  CreatePool(1, 1);
+  connect_job_factory_->set_job_type(TestConnectJob::kMockJob);
+
+  MockLayeredPool mock_layered_pool1(pool_.get(), "foo");
+  EXPECT_EQ(OK, mock_layered_pool1.RequestSocket(pool_.get()));
+  EXPECT_CALL(mock_layered_pool1, CloseOneIdleConnection())
+      .WillRepeatedly(Invoke(&mock_layered_pool1,
+                             &MockLayeredPool::ReleaseOneConnection));
+  MockLayeredPool mock_layered_pool2(pool_.get(), "bar");
+  EXPECT_EQ(OK, mock_layered_pool2.RequestSocketWithoutLimits(pool_.get()));
+  EXPECT_CALL(mock_layered_pool2, CloseOneIdleConnection())
+      .WillRepeatedly(Invoke(&mock_layered_pool2,
+                             &MockLayeredPool::ReleaseOneConnection));
+  ClientSocketHandle handle;
+  TestCompletionCallback callback;
+  EXPECT_EQ(ERR_IO_PENDING, handle.Init("a",
+                                        params_,
+                                        kDefaultPriority,
+                                        callback.callback(),
+                                        pool_.get(),
+                                        BoundNetLog()));
+  EXPECT_EQ(OK, callback.WaitForResult());
+}
+
 
 }  // namespace
 

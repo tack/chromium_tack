@@ -15,14 +15,12 @@
 #include "base/utf_string_conversions.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
-#include "net/base/cert_verifier.h"
-#include "net/base/host_resolver.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
-#include "net/base/ssl_config_service_defaults.h"
+#include "net/cert/cert_verifier.h"
 #include "net/cookies/cookie_monster.h"
-#include "net/ftp/ftp_network_layer.h"
+#include "net/dns/host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
@@ -32,6 +30,7 @@
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
 #include "net/proxy/proxy_service_v8.h"
+#include "net/ssl/ssl_config_service_defaults.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_storage.h"
@@ -54,8 +53,8 @@ class ExperimentURLRequestContext : public net::URLRequestContext {
 #if !defined(OS_IOS)
         proxy_request_context_(proxy_request_context),
 #endif
-        ALLOW_THIS_IN_INITIALIZER_LIST(storage_(this)),
-        ALLOW_THIS_IN_INITIALIZER_LIST(weak_factory_(this)) {}
+        storage_(this),
+        weak_factory_(this) {}
 
   virtual ~ExperimentURLRequestContext() {}
 
@@ -109,10 +108,6 @@ class ExperimentURLRequestContext : public net::URLRequestContext {
     // The rest of the dependencies are standard, and don't depend on the
     // experiment being run.
     storage_.set_cert_verifier(net::CertVerifier::CreateDefault());
-#if !defined(DISABLE_FTP_SUPPORT)
-    storage_.set_ftp_transaction_factory(
-        new net::FtpNetworkLayer(host_resolver()));
-#endif
     storage_.set_ssl_config_service(new net::SSLConfigServiceDefaults);
     storage_.set_http_auth_handler_factory(
         net::HttpAuthHandlerFactory::CreateDefault(host_resolver()));
@@ -307,7 +302,7 @@ class ConnectionTester::TestRunner : public net::URLRequest::Delegate {
   TestRunner(ConnectionTester* tester, net::NetLog* net_log)
       : tester_(tester),
         net_log_(net_log),
-        ALLOW_THIS_IN_INITIALIZER_LIST(weak_factory_(this)) {}
+        weak_factory_(this) {}
 
   // Finish running |experiment| once a ProxyConfigService has been created.
   // In the case of a FirefoxProxyConfigService, this will be called back

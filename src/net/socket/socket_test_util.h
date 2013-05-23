@@ -21,7 +21,6 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_log.h"
-#include "net/base/ssl_config_service.h"
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_auth_controller.h"
 #include "net/http/http_proxy_client_socket_pool.h"
@@ -31,6 +30,7 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/ssl_client_socket_pool.h"
 #include "net/socket/transport_client_socket_pool.h"
+#include "net/ssl/ssl_config_service.h"
 #include "net/udp/datagram_client_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -453,6 +453,30 @@ class DeterministicMockTCPClientSocket;
 class DeterministicSocketData
     : public StaticSocketDataProvider {
  public:
+  // The Delegate is an abstract interface which handles the communication from
+  // the DeterministicSocketData to the Deterministic MockSocket.  The
+  // MockSockets directly store a pointer to the DeterministicSocketData,
+  // whereas the DeterministicSocketData only stores a pointer to the
+  // abstract Delegate interface.
+  class Delegate {
+   public:
+    // Returns true if there is currently a write pending. That is to say, if
+    // an asynchronous write has been started but the callback has not been
+    // invoked.
+    virtual bool WritePending() const = 0;
+    // Returns true if there is currently a read pending. That is to say, if
+    // an asynchronous read has been started but the callback has not been
+    // invoked.
+    virtual bool ReadPending() const = 0;
+    // Called to complete an asynchronous write to execute the write callback.
+    virtual void CompleteWrite() = 0;
+    // Called to complete an asynchronous read to execute the read callback.
+    virtual int CompleteRead() = 0;
+
+   protected:
+    virtual ~Delegate() {}
+  };
+
   // |reads| the list of MockRead completions.
   // |writes| the list of MockWrite completions.
   DeterministicSocketData(MockRead* reads, size_t reads_count,
@@ -475,8 +499,8 @@ class DeterministicSocketData
   MockRead& current_read() { return current_read_; }
   MockWrite& current_write() { return current_write_; }
   int sequence_number() const { return sequence_number_; }
-  void set_socket(base::WeakPtr<DeterministicMockTCPClientSocket> socket) {
-    socket_ = socket;
+  void set_delegate(base::WeakPtr<Delegate> delegate) {
+    delegate_ = delegate;
   }
 
   // StaticSocketDataProvider:
@@ -506,7 +530,7 @@ class DeterministicSocketData
   MockWrite current_write_;
   int stopping_sequence_number_;
   bool stopped_;
-  base::WeakPtr<DeterministicMockTCPClientSocket> socket_;
+  base::WeakPtr<Delegate> delegate_;
   bool print_debug_;
   bool is_running_;
 };
@@ -528,6 +552,8 @@ class SocketDataProviderArray {
     DCHECK(data_provider);
     data_providers_.push_back(data_provider);
   }
+
+  size_t next_index() { return next_index_; }
 
   void ResetNextIndex() {
     next_index_ = 0;
@@ -665,8 +691,6 @@ class MockTCPClientSocket : public MockClientSocket, public AsyncSocket {
   virtual int GetPeerAddress(IPEndPoint* address) const OVERRIDE;
   virtual bool WasEverUsed() const OVERRIDE;
   virtual bool UsingTCPFastOpen() const OVERRIDE;
-  virtual int64 NumBytesRead() const OVERRIDE;
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
   virtual bool WasNpnNegotiated() const OVERRIDE;
   virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
 
@@ -680,7 +704,6 @@ class MockTCPClientSocket : public MockClientSocket, public AsyncSocket {
 
   SocketDataProvider* data_;
   int read_offset_;
-  int num_bytes_read_;
   MockRead read_data_;
   bool need_read_data_;
 
@@ -696,14 +719,17 @@ class MockTCPClientSocket : public MockClientSocket, public AsyncSocket {
   bool was_used_to_convey_data_;
 };
 
-class DeterministicMockTCPClientSocket
-    : public MockClientSocket,
-      public AsyncSocket,
-      public base::SupportsWeakPtr<DeterministicMockTCPClientSocket> {
+// DeterministicSocketHelper is a helper class that can be used
+// to simulate net::Socket::Read() and net::Socket::Write()
+// using deterministic |data|.
+// Note: This is provided as a common helper class because
+// of the inheritance hierarchy of DeterministicMock[UDP,TCP]ClientSocket and a
+// desire not to introduce an additional common base class.
+class DeterministicSocketHelper {
  public:
-  DeterministicMockTCPClientSocket(net::NetLog* net_log,
-                                   DeterministicSocketData* data);
-  virtual ~DeterministicMockTCPClientSocket();
+  DeterministicSocketHelper(net::NetLog* net_log,
+                            DeterministicSocketData* data);
+  virtual ~DeterministicSocketHelper();
 
   bool write_pending() const { return write_pending_; }
   bool read_pending() const { return read_pending_; }
@@ -711,27 +737,18 @@ class DeterministicMockTCPClientSocket
   void CompleteWrite();
   int CompleteRead();
 
-  // Socket implementation.
-  // Socket:
-  virtual int Write(IOBuffer* buf, int buf_len,
-                    const CompletionCallback& callback) OVERRIDE;
-  virtual int Read(IOBuffer* buf, int buf_len,
-                   const CompletionCallback& callback) OVERRIDE;
+  int Write(IOBuffer* buf, int buf_len,
+            const CompletionCallback& callback);
+  int Read(IOBuffer* buf, int buf_len,
+           const CompletionCallback& callback);
 
-  // StreamSocket implementation.
-  virtual int Connect(const CompletionCallback& callback) OVERRIDE;
-  virtual void Disconnect() OVERRIDE;
-  virtual bool IsConnected() const OVERRIDE;
-  virtual bool IsConnectedAndIdle() const OVERRIDE;
-  virtual bool WasEverUsed() const OVERRIDE;
-  virtual bool UsingTCPFastOpen() const OVERRIDE;
-  virtual int64 NumBytesRead() const OVERRIDE;
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
-  virtual bool WasNpnNegotiated() const OVERRIDE;
-  virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
+  const BoundNetLog& net_log() const { return net_log_; }
 
-  // AsyncSocket:
-  virtual void OnReadComplete(const MockRead& data) OVERRIDE;
+  bool was_used_to_convey_data() const { return was_used_to_convey_data_; }
+
+  bool peer_closed_connection() const { return peer_closed_connection_; }
+
+  DeterministicSocketData* data() const { return data_; }
 
  private:
   bool write_pending_;
@@ -746,6 +763,91 @@ class DeterministicMockTCPClientSocket
   CompletionCallback read_callback_;
   DeterministicSocketData* data_;
   bool was_used_to_convey_data_;
+  bool peer_closed_connection_;
+  BoundNetLog net_log_;
+};
+
+// Mock UDP socket to be used in conjunction with DeterministicSocketData.
+class DeterministicMockUDPClientSocket
+    : public DatagramClientSocket,
+      public AsyncSocket,
+      public DeterministicSocketData::Delegate,
+      public base::SupportsWeakPtr<DeterministicMockUDPClientSocket> {
+ public:
+  DeterministicMockUDPClientSocket(net::NetLog* net_log,
+                                   DeterministicSocketData* data);
+  virtual ~DeterministicMockUDPClientSocket();
+
+  // DeterministicSocketData::Delegate:
+  virtual bool WritePending() const OVERRIDE;
+  virtual bool ReadPending() const OVERRIDE;
+  virtual void CompleteWrite() OVERRIDE;
+  virtual int CompleteRead() OVERRIDE;
+
+  // Socket implementation.
+  virtual int Read(IOBuffer* buf, int buf_len,
+                   const CompletionCallback& callback) OVERRIDE;
+  virtual int Write(IOBuffer* buf, int buf_len,
+                    const CompletionCallback& callback) OVERRIDE;
+  virtual bool SetReceiveBufferSize(int32 size) OVERRIDE;
+  virtual bool SetSendBufferSize(int32 size) OVERRIDE;
+
+  // DatagramSocket implementation.
+  virtual void Close() OVERRIDE;
+  virtual int GetPeerAddress(IPEndPoint* address) const OVERRIDE;
+  virtual int GetLocalAddress(IPEndPoint* address) const OVERRIDE;
+  virtual const BoundNetLog& NetLog() const OVERRIDE;
+
+  // DatagramClientSocket implementation.
+  virtual int Connect(const IPEndPoint& address) OVERRIDE;
+
+  // AsyncSocket implementation.
+  virtual void OnReadComplete(const MockRead& data) OVERRIDE;
+
+ private:
+  bool connected_;
+  IPEndPoint peer_address_;
+  DeterministicSocketHelper helper_;
+};
+
+// Mock TCP socket to be used in conjunction with DeterministicSocketData.
+class DeterministicMockTCPClientSocket
+    : public MockClientSocket,
+      public AsyncSocket,
+      public DeterministicSocketData::Delegate,
+      public base::SupportsWeakPtr<DeterministicMockTCPClientSocket> {
+ public:
+  DeterministicMockTCPClientSocket(net::NetLog* net_log,
+                                   DeterministicSocketData* data);
+  virtual ~DeterministicMockTCPClientSocket();
+
+  // DeterministicSocketData::Delegate:
+  virtual bool WritePending() const OVERRIDE;
+  virtual bool ReadPending() const OVERRIDE;
+  virtual void CompleteWrite() OVERRIDE;
+  virtual int CompleteRead() OVERRIDE;
+
+  // Socket:
+  virtual int Write(IOBuffer* buf, int buf_len,
+                    const CompletionCallback& callback) OVERRIDE;
+  virtual int Read(IOBuffer* buf, int buf_len,
+                   const CompletionCallback& callback) OVERRIDE;
+
+  // StreamSocket:
+  virtual int Connect(const CompletionCallback& callback) OVERRIDE;
+  virtual void Disconnect() OVERRIDE;
+  virtual bool IsConnected() const OVERRIDE;
+  virtual bool IsConnectedAndIdle() const OVERRIDE;
+  virtual bool WasEverUsed() const OVERRIDE;
+  virtual bool UsingTCPFastOpen() const OVERRIDE;
+  virtual bool WasNpnNegotiated() const OVERRIDE;
+  virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
+
+  // AsyncSocket:
+  virtual void OnReadComplete(const MockRead& data) OVERRIDE;
+
+ private:
+  DeterministicSocketHelper helper_;
 };
 
 class MockSSLClientSocket : public MockClientSocket, public AsyncSocket {
@@ -769,9 +871,7 @@ class MockSSLClientSocket : public MockClientSocket, public AsyncSocket {
   virtual bool IsConnected() const OVERRIDE;
   virtual bool WasEverUsed() const OVERRIDE;
   virtual bool UsingTCPFastOpen() const OVERRIDE;
-  virtual int64 NumBytesRead() const OVERRIDE;
   virtual int GetPeerAddress(IPEndPoint* address) const OVERRIDE;
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
   virtual bool WasNpnNegotiated() const OVERRIDE;
   virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;
 
@@ -1009,6 +1109,9 @@ class DeterministicMockClientSocketFactory : public ClientSocketFactory {
   std::vector<DeterministicMockTCPClientSocket*>& tcp_client_sockets() {
     return tcp_client_sockets_;
   }
+  std::vector<DeterministicMockUDPClientSocket*>& udp_client_sockets() {
+    return udp_client_sockets_;
+  }
 
   // ClientSocketFactory
   virtual DatagramClientSocket* CreateDatagramClientSocket(
@@ -1033,6 +1136,7 @@ class DeterministicMockClientSocketFactory : public ClientSocketFactory {
 
   // Store pointers to handed out sockets in case the test wants to get them.
   std::vector<DeterministicMockTCPClientSocket*> tcp_client_sockets_;
+  std::vector<DeterministicMockUDPClientSocket*> udp_client_sockets_;
   std::vector<MockSSLClientSocket*> ssl_client_sockets_;
 };
 

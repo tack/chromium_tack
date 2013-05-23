@@ -78,7 +78,7 @@ void NetworkDelegate::NotifyURLRequestDestroyed(URLRequest* request) {
 }
 
 void NetworkDelegate::NotifyPACScriptError(int line_number,
-                                           const string16& error) {
+                                           const base::string16& error) {
   DCHECK(CalledOnValidThread());
   OnPACScriptError(line_number, error);
 }
@@ -99,9 +99,9 @@ bool NetworkDelegate::CanGetCookies(const URLRequest& request,
   return OnCanGetCookies(request, cookie_list);
 }
 
-  bool NetworkDelegate::CanSetCookie(const URLRequest& request,
-                                     const std::string& cookie_line,
-                                     CookieOptions* options) {
+bool NetworkDelegate::CanSetCookie(const URLRequest& request,
+                                   const std::string& cookie_line,
+                                   CookieOptions* options) {
   DCHECK(CalledOnValidThread());
   DCHECK(!(request.load_flags() & net::LOAD_DO_NOT_SAVE_COOKIES));
   return OnCanSetCookie(request, cookie_line, options);
@@ -116,6 +116,20 @@ bool NetworkDelegate::CanAccessFile(const URLRequest& request,
 bool NetworkDelegate::CanThrottleRequest(const URLRequest& request) const {
   DCHECK(CalledOnValidThread());
   return OnCanThrottleRequest(request);
+}
+
+bool NetworkDelegate::CanEnablePrivacyMode(
+    const GURL& url,
+    const GURL& first_party_for_cookies) const {
+  DCHECK(CalledOnValidThread());
+  return OnCanEnablePrivacyMode(url, first_party_for_cookies);
+}
+
+bool NetworkDelegate::OnCanEnablePrivacyMode(
+    const GURL& url,
+    const GURL& first_party_for_cookies) const {
+  // Default implementation disables privacy mode.
+  return false;
 }
 
 int NetworkDelegate::NotifyBeforeSocketStreamConnect(

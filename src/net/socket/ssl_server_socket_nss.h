@@ -15,8 +15,8 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/net_log.h"
 #include "net/base/nss_memio.h"
-#include "net/base/ssl_config_service.h"
 #include "net/socket/ssl_server_socket.h"
+#include "net/ssl/ssl_config_service.h"
 
 namespace net {
 
@@ -61,8 +61,6 @@ class SSLServerSocketNSS : public SSLServerSocket {
   virtual void SetOmniboxSpeculation() OVERRIDE;
   virtual bool WasEverUsed() const OVERRIDE;
   virtual bool UsingTCPFastOpen() const OVERRIDE;
-  virtual int64 NumBytesRead() const OVERRIDE;
-  virtual base::TimeDelta GetConnectTimeMicros() const OVERRIDE;
   virtual bool WasNpnNegotiated() const OVERRIDE;
   virtual NextProto GetNegotiatedProtocol() const OVERRIDE;
   virtual bool GetSSLInfo(SSLInfo* ssl_info) OVERRIDE;

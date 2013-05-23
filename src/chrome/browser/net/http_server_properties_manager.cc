@@ -1,6 +1,7 @@
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 #include "chrome/browser/net/http_server_properties_manager.h"
 
 #include "base/bind.h"
@@ -92,9 +93,10 @@ void HttpServerPropertiesManager::ShutdownOnUIThread() {
 
 // static
 void HttpServerPropertiesManager::RegisterUserPrefs(
-    PrefRegistrySyncable* prefs) {
-  prefs->RegisterDictionaryPref(prefs::kHttpServerProperties,
-                                PrefRegistrySyncable::UNSYNCABLE_PREF);
+    user_prefs::PrefRegistrySyncable* prefs) {
+  prefs->RegisterDictionaryPref(
+      prefs::kHttpServerProperties,
+      user_prefs::PrefRegistrySyncable::UNSYNCABLE_PREF);
 }
 
 // This is required for conformance with the HttpServerProperties interface.
@@ -180,9 +182,16 @@ bool HttpServerPropertiesManager::SetSpdySetting(
   return persist;
 }
 
-void HttpServerPropertiesManager::ClearSpdySettings() {
+void HttpServerPropertiesManager::ClearSpdySettings(
+    const net::HostPortPair& host_port_pair) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-  http_server_properties_impl_->ClearSpdySettings();
+  http_server_properties_impl_->ClearSpdySettings(host_port_pair);
+  ScheduleUpdatePrefsOnIO();
+}
+
+void HttpServerPropertiesManager::ClearAllSpdySettings() {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  http_server_properties_impl_->ClearAllSpdySettings();
   ScheduleUpdatePrefsOnIO();
 }
 
@@ -281,11 +290,10 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnUI() {
   scoped_ptr<net::AlternateProtocolMap> alternate_protocol_map(
       new net::AlternateProtocolMap);
 
-  for (base::DictionaryValue::key_iterator it = servers_dict->begin_keys();
-       it != servers_dict->end_keys();
-       ++it) {
+  for (base::DictionaryValue::Iterator it(*servers_dict); !it.IsAtEnd();
+       it.Advance()) {
     // Get server's host/pair.
-    const std::string& server_str = *it;
+    const std::string& server_str = it.key();
     net::HostPortPair server = net::HostPortPair::FromString(server_str);
     if (server.host().empty()) {
       DVLOG(1) << "Malformed http_server_properties for server: " << server_str;
@@ -294,8 +302,7 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnUI() {
     }
 
     const base::DictionaryValue* server_pref_dict = NULL;
-    if (!servers_dict->GetDictionaryWithoutPathExpansion(
-        server_str, &server_pref_dict)) {
+    if (!it.value().GetAsDictionary(&server_pref_dict)) {
       DVLOG(1) << "Malformed http_server_properties server: " << server_str;
       detected_corrupted_prefs = true;
       continue;
@@ -315,10 +322,9 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnUI() {
       if (server_pref_dict->GetDictionaryWithoutPathExpansion(
           "settings", &spdy_settings_dict)) {
         net::SettingsMap settings_map;
-        for (base::DictionaryValue::key_iterator dict_it =
-             spdy_settings_dict->begin_keys();
-             dict_it != spdy_settings_dict->end_keys(); ++dict_it) {
-          const std::string& id_str = *dict_it;
+        for (base::DictionaryValue::Iterator dict_it(*spdy_settings_dict);
+             !dict_it.IsAtEnd(); dict_it.Advance()) {
+          const std::string& id_str = dict_it.key();
           int id = 0;
           if (!base::StringToInt(id_str, &id)) {
             DVLOG(1) << "Malformed id in SpdySettings for server: " <<
@@ -327,8 +333,7 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnUI() {
             continue;
           }
           int value = 0;
-          if (!spdy_settings_dict->GetIntegerWithoutPathExpansion(id_str,
-                                                                  &value)) {
+          if (!dict_it.value().GetAsInteger(&value)) {
             DVLOG(1) << "Malformed value in SpdySettings for server: " <<
                 server_str;
             NOTREACHED();

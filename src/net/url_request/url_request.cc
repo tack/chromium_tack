@@ -12,6 +12,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop.h"
+#include "base/metrics/histogram.h"
 #include "base/metrics/stats_counters.h"
 #include "base/stl_util.h"
 #include "base/synchronization/lock.h"
@@ -23,10 +24,10 @@
 #include "net/base/net_log.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_delegate.h"
-#include "net/base/ssl_cert_request_info.h"
 #include "net/base/upload_data_stream.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
+#include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_error_job.h"
 #include "net/url_request/url_request_job.h"
@@ -73,6 +74,68 @@ bool g_url_requests_started = false;
 
 // True if cookies are accepted by default.
 bool g_default_can_use_cookies = true;
+
+// When the URLRequest first assempts load timing information, it has the times
+// at which each event occurred.  The API requires the time which the request
+// was blocked on each phase.  This function handles the conversion.
+//
+// In the case of reusing a SPDY session or HTTP pipeline, old proxy results may
+// have been reused, so proxy resolution times may be before the request was
+// started.
+//
+// Due to preconnect and late binding, it is also possible for the connection
+// attempt to start before a request has been started, or proxy resolution
+// completed.
+//
+// This functions fixes both those cases.
+void ConvertRealLoadTimesToBlockingTimes(
+    net::LoadTimingInfo* load_timing_info) {
+  DCHECK(!load_timing_info->request_start.is_null());
+
+  // Earliest time possible for the request to be blocking on connect events.
+  base::TimeTicks block_on_connect = load_timing_info->request_start;
+
+  if (!load_timing_info->proxy_resolve_start.is_null()) {
+    DCHECK(!load_timing_info->proxy_resolve_end.is_null());
+
+    // Make sure the proxy times are after request start.
+    if (load_timing_info->proxy_resolve_start < load_timing_info->request_start)
+      load_timing_info->proxy_resolve_start = load_timing_info->request_start;
+    if (load_timing_info->proxy_resolve_end < load_timing_info->request_start)
+      load_timing_info->proxy_resolve_end = load_timing_info->request_start;
+
+    // Connect times must also be after the proxy times.
+    block_on_connect = load_timing_info->proxy_resolve_end;
+  }
+
+  // Make sure connection times are after start and proxy times.
+
+  net::LoadTimingInfo::ConnectTiming* connect_timing =
+      &load_timing_info->connect_timing;
+  if (!connect_timing->dns_start.is_null()) {
+    DCHECK(!connect_timing->dns_end.is_null());
+    if (connect_timing->dns_start < block_on_connect)
+      connect_timing->dns_start = block_on_connect;
+    if (connect_timing->dns_end < block_on_connect)
+      connect_timing->dns_end = block_on_connect;
+  }
+
+  if (!connect_timing->connect_start.is_null()) {
+    DCHECK(!connect_timing->connect_end.is_null());
+    if (connect_timing->connect_start < block_on_connect)
+      connect_timing->connect_start = block_on_connect;
+    if (connect_timing->connect_end < block_on_connect)
+      connect_timing->connect_end = block_on_connect;
+  }
+
+  if (!connect_timing->ssl_start.is_null()) {
+    DCHECK(!connect_timing->ssl_end.is_null());
+    if (connect_timing->ssl_start < block_on_connect)
+      connect_timing->ssl_start = block_on_connect;
+    if (connect_timing->ssl_end < block_on_connect)
+      connect_timing->ssl_end = block_on_connect;
+  }
+}
 
 }  // namespace
 
@@ -151,12 +214,11 @@ URLRequest::URLRequest(const GURL& url,
       is_pending_(false),
       is_redirecting_(false),
       redirect_limit_(kMaxRedirects),
-      priority_(LOWEST),
+      priority_(DEFAULT_PRIORITY),
       identifier_(GenerateURLRequestIdentifier()),
       blocked_on_delegate_(false),
-      ALLOW_THIS_IN_INITIALIZER_LIST(before_request_callback_(
-          base::Bind(&URLRequest::BeforeRequestComplete,
-                     base::Unretained(this)))),
+      before_request_callback_(base::Bind(&URLRequest::BeforeRequestComplete,
+                                          base::Unretained(this))),
       has_notified_completion_(false),
       received_response_content_length_(0),
       creation_time_(base::TimeTicks::Now()) {
@@ -190,12 +252,11 @@ URLRequest::URLRequest(const GURL& url,
       is_pending_(false),
       is_redirecting_(false),
       redirect_limit_(kMaxRedirects),
-      priority_(LOWEST),
+      priority_(DEFAULT_PRIORITY),
       identifier_(GenerateURLRequestIdentifier()),
       blocked_on_delegate_(false),
-      ALLOW_THIS_IN_INITIALIZER_LIST(before_request_callback_(
-          base::Bind(&URLRequest::BeforeRequestComplete,
-                     base::Unretained(this)))),
+      before_request_callback_(base::Bind(&URLRequest::BeforeRequestComplete,
+                                          base::Unretained(this))),
       has_notified_completion_(false),
       received_response_content_length_(0),
       creation_time_(base::TimeTicks::Now()) {
@@ -316,13 +377,12 @@ void URLRequest::SetExtraRequestHeaders(
 }
 
 LoadStateWithParam URLRequest::GetLoadState() const {
-  // Only return LOAD_STATE_WAITING_FOR_DELEGATE if there's a load state param.
-  if (blocked_on_delegate_ && !load_state_param_.empty()) {
+  if (blocked_on_delegate_) {
     return LoadStateWithParam(LOAD_STATE_WAITING_FOR_DELEGATE,
                               load_state_param_);
   }
   return LoadStateWithParam(job_ ? job_->GetLoadState() : LOAD_STATE_IDLE,
-                            string16());
+                            base::string16());
 }
 
 UploadProgress URLRequest::GetUploadProgress() const {
@@ -426,23 +486,23 @@ void URLRequest::set_method(const std::string& method) {
   method_ = method;
 }
 
-void URLRequest::set_referrer(const std::string& referrer) {
+void URLRequest::SetReferrer(const std::string& referrer) {
   DCHECK(!is_pending_);
   referrer_ = referrer;
-}
-
-GURL URLRequest::GetSanitizedReferrer() const {
-  GURL ret(referrer());
-
-  // Ensure that we do not send username and password fields in the referrer.
-  if (ret.has_username() || ret.has_password()) {
+  // Ensure that we do not send URL fragment, username and password
+  // fields in the referrer.
+  GURL referrer_url(referrer);
+  UMA_HISTOGRAM_BOOLEAN("Net.URLRequest_SetReferrer_IsEmptyOrValid",
+                        referrer_url.is_empty() || referrer_url.is_valid());
+  if (referrer_url.is_valid() && (referrer_url.has_ref() ||
+      referrer_url.has_username() ||  referrer_url.has_password())) {
     GURL::Replacements referrer_mods;
+    referrer_mods.ClearRef();
     referrer_mods.ClearUsername();
     referrer_mods.ClearPassword();
-    ret = ret.ReplaceComponents(referrer_mods);
+    referrer_url = referrer_url.ReplaceComponents(referrer_mods);
+    referrer_ = referrer_url.spec();
   }
-
-  return ret;
 }
 
 void URLRequest::set_referrer_policy(ReferrerPolicy referrer_policy) {
@@ -526,6 +586,7 @@ void URLRequest::StartJob(URLRequestJob* job) {
 
   job_ = job;
   job_->SetExtraRequestHeaders(extra_request_headers_);
+  job_->SetPriority(priority_);
 
   if (upload_data_stream_.get())
     job_->SetUpload(upload_data_stream_.get());
@@ -828,6 +889,20 @@ int64 URLRequest::GetExpectedContentSize() const {
   return expected_content_size;
 }
 
+void URLRequest::SetPriority(RequestPriority priority) {
+  DCHECK_GE(priority, MINIMUM_PRIORITY);
+  DCHECK_LT(priority, NUM_PRIORITIES);
+  if (priority_ == priority)
+    return;
+
+  priority_ = priority;
+  if (job_) {
+    net_log_.AddEvent(NetLog::TYPE_URL_REQUEST_SET_PRIORITY,
+                      NetLog::IntegerCallback("priority", priority_));
+    job_->SetPriority(priority_);
+  }
+}
+
 bool URLRequest::GetHSTSRedirect(GURL* redirect_url) const {
   const GURL& url = this->url();
   if (!url.SchemeIs("http"))
@@ -935,6 +1010,14 @@ bool URLRequest::CanSetCookie(const std::string& cookie_line,
   return g_default_can_use_cookies;
 }
 
+bool URLRequest::CanEnablePrivacyMode() const {
+  if (network_delegate_) {
+    return network_delegate_->CanEnablePrivacyMode(url(),
+                                                   first_party_for_cookies_);
+  }
+  return !g_default_can_use_cookies;
+}
+
 
 void URLRequest::NotifyReadCompleted(int bytes_read) {
   // Notify in case the entire URL Request has been finished.
@@ -958,8 +1041,21 @@ void URLRequest::OnHeadersComplete() {
   // Cache load timing information now, as information will be lost once the
   // socket is closed and the ClientSocketHandle is Reset, which will happen
   // once the body is complete.  The start times should already be populated.
-  if (job_)
+  if (job_) {
+    // Keep a copy of the two times the URLRequest sets.
+    base::TimeTicks request_start = load_timing_info_.request_start;
+    base::Time request_start_time = load_timing_info_.request_start_time;
+
+    // Clear load times.  Shouldn't be neded, but gives the GetLoadTimingInfo a
+    // consistent place to start from.
+    load_timing_info_ = LoadTimingInfo();
     job_->GetLoadTimingInfo(&load_timing_info_);
+
+    load_timing_info_.request_start = request_start;
+    load_timing_info_.request_start_time = request_start_time;
+
+    ConvertRealLoadTimesToBlockingTimes(&load_timing_info_);
+  }
 }
 
 void URLRequest::NotifyRequestCompleted() {

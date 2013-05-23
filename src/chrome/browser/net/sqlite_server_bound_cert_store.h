@@ -8,27 +8,28 @@
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
-#include "net/base/default_server_bound_cert_store.h"
-
-class ClearOnExitPolicy;
+#include "net/ssl/default_server_bound_cert_store.h"
 
 namespace base {
 class FilePath;
+}
+
+namespace quota {
+class SpecialStoragePolicy;
 }
 
 // Implements the net::DefaultServerBoundCertStore::PersistentStore interface
 // in terms of a SQLite database. For documentation about the actual member
 // functions consult the documentation of the parent class
 // |net::DefaultServerBoundCertStore::PersistentCertStore|.
-// If provided, a |ClearOnExitPolicy| is consulted when the SQLite database is
-// closed to decide which certificates to keep.
+// If provided, a |SpecialStoragePolicy| is consulted when the SQLite database
+// is closed to decide which certificates to keep.
 class SQLiteServerBoundCertStore
     : public net::DefaultServerBoundCertStore::PersistentStore {
  public:
-  // If non-NULL, SQLiteServerBoundCertStore will keep a scoped_refptr to the
-  // |clear_on_exit_policy| throughout its lifetime.
-  SQLiteServerBoundCertStore(const base::FilePath& path,
-                             ClearOnExitPolicy* clear_on_exit_policy);
+  SQLiteServerBoundCertStore(
+      const base::FilePath& path,
+      quota::SpecialStoragePolicy* special_storage_policy);
 
   // net::DefaultServerBoundCertStore::PersistentStore:
   virtual void Load(const LoadedCallback& loaded_callback) OVERRIDE;
@@ -37,7 +38,6 @@ class SQLiteServerBoundCertStore
   virtual void DeleteServerBoundCert(
       const net::DefaultServerBoundCertStore::ServerBoundCert& cert) OVERRIDE;
   virtual void SetForceKeepSessionState() OVERRIDE;
-  virtual void Flush(const base::Closure& completion_task) OVERRIDE;
 
  protected:
   virtual ~SQLiteServerBoundCertStore();

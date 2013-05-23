@@ -87,6 +87,13 @@ NET_ERROR(BLOCKED_BY_CLIENT, -20)
 // The network changed.
 NET_ERROR(NETWORK_CHANGED, -21)
 
+// The request was blocked by the URL blacklist configured by the domain
+// administrator.
+NET_ERROR(BLOCKED_BY_ADMINISTRATOR, -22)
+
+// The socket is already connected.
+NET_ERROR(SOCKET_IS_CONNECTED, -23)
+
 // A connection was closed (corresponding to a TCP FIN).
 NET_ERROR(CONNECTION_CLOSED, -100)
 
@@ -269,7 +276,7 @@ NET_ERROR(SSL_HANDSHAKE_NOT_COMPLETED, -148)
 NET_ERROR(SSL_BAD_PEER_PUBLIC_KEY, -149)
 
 // The certificate didn't match the built-in public key pins for the host name.
-// The pins are set in net/base/transport_security_state.cc and require that
+// The pins are set in net/http/transport_security_state.cc and require that
 // one of a set of public keys exist on the path from the leaf to the root.
 NET_ERROR(SSL_PINNED_KEY_NOT_IN_CERT_CHAIN, -150)
 
@@ -461,7 +468,7 @@ NET_ERROR(INVALID_SPDY_STREAM, -335)
 // There are no supported proxies in the provided list.
 NET_ERROR(NO_SUPPORTED_PROXIES, -336)
 
-// There is a SPDY protocol framing error.
+// There is a SPDY protocol error.
 NET_ERROR(SPDY_PROTOCOL_ERROR, -337)
 
 // Credentials could not be established during HTTP Authentication.
@@ -552,6 +559,17 @@ NET_ERROR(CACHE_CREATE_FAILURE, -405)
 // tells the transaction to restart the entry-creation logic because the state
 // of the cache has changed.
 NET_ERROR(CACHE_RACE, -406)
+
+// The cache was unable to read a checksum record on an entry. This can be
+// returned from attempts to read from the cache. It is an internal error,
+// returned by the SimpleCache backend, but not by any URLRequest methods
+// or members.
+NET_ERROR(CACHE_CHECKSUM_READ_FAILURE, -407)
+
+// The cache found an entry with an invalid checksum. This can be returned from
+// attempts to read from the cache. It is an internal error, returned by the
+// SimpleCache backend, but not by any URLRequest methods or members.
+NET_ERROR(CACHE_CHECKSUM_MISMATCH, -408)
 
 // The server's response was insecure (e.g. there was a cert error).
 NET_ERROR(INSECURE_RESPONSE, -501)

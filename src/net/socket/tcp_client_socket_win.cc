@@ -269,8 +269,8 @@ TCPClientSocketWin::Core::Core(
       disable_overlapped_reads_(g_disable_overlapped_reads),
       non_blocking_reads_initialized_(false),
       socket_(socket),
-      ALLOW_THIS_IN_INITIALIZER_LIST(reader_(this)),
-      ALLOW_THIS_IN_INITIALIZER_LIST(writer_(this)),
+      reader_(this),
+      writer_(this),
       slow_start_throttle_(kInitialSlowStartThrottle) {
   memset(&read_overlapped_, 0, sizeof(read_overlapped_));
   memset(&write_overlapped_, 0, sizeof(write_overlapped_));
@@ -343,8 +343,7 @@ TCPClientSocketWin::TCPClientSocketWin(const AddressList& addresses,
       next_connect_state_(CONNECT_STATE_NONE),
       connect_os_error_(0),
       net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_SOCKET)),
-      previously_disconnected_(false),
-      num_bytes_read_(0) {
+      previously_disconnected_(false) {
   net_log_.BeginEvent(NetLog::TYPE_SOCKET_ALIVE,
                       source.ToEventParametersCallback());
   EnsureWinsockInit();
@@ -501,7 +500,6 @@ int TCPClientSocketWin::DoConnect() {
   SockaddrStorage storage;
   if (!endpoint.ToSockAddr(storage.addr, &storage.addr_len))
     return ERR_INVALID_ARGUMENT;
-  connect_start_time_ = base::TimeTicks::Now();
   if (!connect(socket_, storage.addr, storage.addr_len)) {
     // Connected without waiting!
     //
@@ -542,7 +540,6 @@ int TCPClientSocketWin::DoConnectComplete(int result) {
   }
 
   if (result == OK) {
-    connect_time_micros_ = base::TimeTicks::Now() - connect_start_time_;
     use_history_.set_was_ever_connected();
     return OK;  // Done!
   }
@@ -691,14 +688,6 @@ bool TCPClientSocketWin::WasEverUsed() const {
 bool TCPClientSocketWin::UsingTCPFastOpen() const {
   // Not supported on windows.
   return false;
-}
-
-int64 TCPClientSocketWin::NumBytesRead() const {
-  return num_bytes_read_;
-}
-
-base::TimeDelta TCPClientSocketWin::GetConnectTimeMicros() const {
-  return connect_time_micros_;
 }
 
 bool TCPClientSocketWin::WasNpnNegotiated() const {
@@ -854,7 +843,6 @@ int TCPClientSocketWin::DoRead(IOBuffer* buf, int buf_len,
       if (rv > 0) {
         use_history_.set_was_used_to_convey_data();
         read_bytes.Add(rv);
-        num_bytes_read_ += rv;
       }
       net_log_.AddByteTransferEvent(NetLog::TYPE_SOCKET_BYTES_RECEIVED, rv,
                                     buf->data());
@@ -879,7 +867,6 @@ int TCPClientSocketWin::DoRead(IOBuffer* buf, int buf_len,
         if (num > 0) {
           use_history_.set_was_used_to_convey_data();
           read_bytes.Add(num);
-          num_bytes_read_ += num;
         }
         net_log_.AddByteTransferEvent(NetLog::TYPE_SOCKET_BYTES_RECEIVED, num,
                                       buf->data());
@@ -957,13 +944,11 @@ void TCPClientSocketWin::DidCompleteRead() {
   DWORD num_bytes, flags;
   BOOL ok = WSAGetOverlappedResult(socket_, &core_->read_overlapped_,
                                    &num_bytes, FALSE, &flags);
-  WSAResetEvent(core_->read_overlapped_.hEvent);
   waiting_read_ = false;
   int rv;
   if (ok) {
     base::StatsCounter read_bytes("tcp.read_bytes");
     read_bytes.Add(num_bytes);
-    num_bytes_read_ += num_bytes;
     if (num_bytes > 0)
       use_history_.set_was_used_to_convey_data();
     net_log_.AddByteTransferEvent(NetLog::TYPE_SOCKET_BYTES_RECEIVED,
@@ -975,6 +960,7 @@ void TCPClientSocketWin::DidCompleteRead() {
     net_log_.AddEvent(NetLog::TYPE_SOCKET_READ_ERROR,
                       CreateNetLogSocketErrorCallback(rv, os_error));
   }
+  WSAResetEvent(core_->read_overlapped_.hEvent);
   core_->read_iobuffer_ = NULL;
   core_->read_buffer_length_ = 0;
   DoReadCallback(rv);
@@ -1025,22 +1011,29 @@ void TCPClientSocketWin::DidSignalRead() {
   if (rv == SOCKET_ERROR) {
     os_error = WSAGetLastError();
     rv = MapSystemError(os_error);
-  } else if (network_events.lNetworkEvents & FD_READ) {
+  } else if (network_events.lNetworkEvents) {
+    DCHECK_EQ(network_events.lNetworkEvents & ~(FD_READ | FD_CLOSE), 0);
+    // If network_events.lNetworkEvents is FD_CLOSE and
+    // network_events.iErrorCode[FD_CLOSE_BIT] is 0, it is a graceful
+    // connection closure. It is tempting to directly set rv to 0 in
+    // this case, but the MSDN pages for WSAEventSelect and
+    // WSAAsyncSelect recommend we still call DoRead():
+    //   FD_CLOSE should only be posted after all data is read from a
+    //   socket, but an application should check for remaining data upon
+    //   receipt of FD_CLOSE to avoid any possibility of losing data.
+    //
+    // If network_events.iErrorCode[FD_READ_BIT] or
+    // network_events.iErrorCode[FD_CLOSE_BIT] is nonzero, still call
+    // DoRead() because recv() reports a more accurate error code
+    // (WSAECONNRESET vs. WSAECONNABORTED) when the connection was
+    // reset.
     rv = DoRead(core_->read_iobuffer_, core_->read_buffer_length_,
                 read_callback_);
     if (rv == ERR_IO_PENDING)
       return;
-  } else if (network_events.lNetworkEvents & FD_CLOSE) {
-    if (network_events.iErrorCode[FD_CLOSE_BIT]) {
-      rv = MapSystemError(network_events.iErrorCode[FD_CLOSE_BIT]);
-      net_log_.AddEvent(NetLog::TYPE_SOCKET_READ_ERROR,
-                        CreateNetLogSocketErrorCallback(rv, os_error));
-    } else {
-      rv = 0;
-    }
   } else {
-    // This should not happen but I have seen cases where we will get
-    // signaled but the network events flags are all clear (0).
+    // This may happen because Read() may succeed synchronously and
+    // consume all the received data without resetting the event object.
     core_->WatchForRead();
     return;
   }

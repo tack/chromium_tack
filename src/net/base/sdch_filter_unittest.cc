@@ -110,7 +110,7 @@ static bool FilterTestData(const std::string& source,
   CHECK_GT(input_block_length, 0u);
   Filter::FilterStatus status(Filter::FILTER_NEED_MORE_DATA);
   size_t source_index = 0;
-  scoped_array<char> output_buffer(new char[output_buffer_length]);
+  scoped_ptr<char[]> output_buffer(new char[output_buffer_length]);
   size_t input_amount = std::min(input_block_length,
       static_cast<size_t>(filter->stream_buffer_size()));
 
@@ -774,7 +774,7 @@ static std::string gzip_compress(const std::string &input) {
 
   // Assume we can compress into similar buffer (add 100 bytes to be sure).
   size_t gzip_compressed_length = zlib_stream.avail_in + 100;
-  scoped_array<char> gzip_compressed(new char[gzip_compressed_length]);
+  scoped_ptr<char[]> gzip_compressed(new char[gzip_compressed_length]);
   zlib_stream.next_out = bit_cast<Bytef*>(gzip_compressed.get());
   zlib_stream.avail_out = gzip_compressed_length;
 
@@ -1346,7 +1346,7 @@ TEST_F(SdchFilterTest, PathMatch) {
   // Make sure less that sufficient prefix match is false.
   EXPECT_FALSE(PathMatch("/sear", "/search"));
   EXPECT_FALSE(PathMatch("/", "/search"));
-  EXPECT_FALSE(PathMatch("", "/search"));
+  EXPECT_FALSE(PathMatch(std::string(), "/search"));
 
   // Add examples with several levels of direcories in the restriction.
   EXPECT_FALSE(PathMatch("/search/something", "search/s"));

@@ -27,7 +27,7 @@ BufferedWriteStreamSocket::BufferedWriteStreamSocket(
     : wrapped_socket_(socket_to_wrap),
       io_buffer_(new GrowableIOBuffer()),
       backup_buffer_(new GrowableIOBuffer()),
-      ALLOW_THIS_IN_INITIALIZER_LIST(weak_factory_(this)),
+      weak_factory_(this),
       callback_pending_(false),
       wrapped_write_in_progress_(false),
       error_(0) {
@@ -109,14 +109,6 @@ bool BufferedWriteStreamSocket::WasEverUsed() const {
 
 bool BufferedWriteStreamSocket::UsingTCPFastOpen() const {
   return wrapped_socket_->UsingTCPFastOpen();
-}
-
-int64 BufferedWriteStreamSocket::NumBytesRead() const {
-  return wrapped_socket_->NumBytesRead();
-}
-
-base::TimeDelta BufferedWriteStreamSocket::GetConnectTimeMicros() const {
-  return wrapped_socket_->GetConnectTimeMicros();
 }
 
 bool BufferedWriteStreamSocket::WasNpnNegotiated() const {

@@ -64,7 +64,7 @@ Value* NetLogStringCallback(const char* name,
 }
 
 Value* NetLogString16Callback(const char* name,
-                              const string16* value,
+                              const base::string16* value,
                               NetLog::LogLevel /* log_level */) {
   DictionaryValue* event_params = new DictionaryValue();
   event_params->SetString(name, *value);
@@ -296,7 +296,7 @@ NetLog::ParametersCallback NetLog::StringCallback(const char* name,
 
 // static
 NetLog::ParametersCallback NetLog::StringCallback(const char* name,
-                                                  const string16* value) {
+                                                  const base::string16* value) {
   DCHECK(value);
   return base::Bind(&NetLogString16Callback, name, value);
 }
@@ -322,8 +322,11 @@ void NetLog::AddEntry(EventType type,
                       const Source& source,
                       EventPhase phase,
                       const NetLog::ParametersCallback* parameters_callback) {
+  LogLevel log_level = GetLogLevel();
+  if (log_level == LOG_NONE)
+    return;
   Entry entry(type, source, phase, base::TimeTicks::Now(),
-              parameters_callback, GetLogLevel());
+              parameters_callback, log_level);
   OnAddEntry(entry);
 }
 

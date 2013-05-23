@@ -33,23 +33,23 @@
 #include "chrome/common/net/predictor_common.h"
 #include "net/base/host_port_pair.h"
 
-namespace base {
-class ListValue;
-}
+class IOThread;
+class PrefService;
+class Profile;
 
 namespace base {
+class ListValue;
 class WaitableEvent;
 }
 
 namespace net {
 class HostResolver;
 class URLRequestContextGetter;
-}  // namespace net
+}
 
-class IOThread;
-class PrefService;
+namespace user_prefs {
 class PrefRegistrySyncable;
-class Profile;
+}
 
 namespace chrome_browser_net {
 
@@ -102,7 +102,7 @@ class Predictor {
   static Predictor* CreatePredictor(bool preconnect_enabled,
                                     bool simple_shutdown);
 
-  static void RegisterUserPrefs(PrefRegistrySyncable* registry);
+  static void RegisterUserPrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // ------------- Start UI thread methods.
 
@@ -117,7 +117,8 @@ class Predictor {
   void AnticipateOmniboxUrl(const GURL& url, bool preconnectable);
 
   // Preconnect a URL and all of its subresource domains.
-  void PreconnectUrlAndSubresources(const GURL& url);
+  void PreconnectUrlAndSubresources(const GURL& url,
+                                    const GURL& first_party_for_cookies);
 
   static UrlList GetPredictedUrlListAtStartup(PrefService* user_prefs,
                                               PrefService* local_state);
@@ -228,7 +229,8 @@ class Predictor {
   // more-embedded resources on a page).  This method will actually post a task
   // to do the actual work, so as not to jump ahead of the frame navigation that
   // instigated this activity.
-  void PredictFrameSubresources(const GURL& url);
+  void PredictFrameSubresources(const GURL& url,
+                                const GURL& first_party_for_cookies);
 
   // Put URL in canonical form, including a scheme, host, and port.
   // Returns GURL::EmptyGURL() if the scheme is not http/https or if the url
@@ -383,7 +385,8 @@ class Predictor {
   // Perform actual resolution or preconnection to subresources now.  This is
   // an internal worker method that is reached via a post task from
   // PredictFrameSubresources().
-  void PrepareFrameSubresources(const GURL& url);
+  void PrepareFrameSubresources(const GURL& url,
+                                const GURL& first_party_for_cookies);
 
   // Access method for use by async lookup request to pass resolution result.
   void OnLookupFinished(LookupRequest* request, const GURL& url, bool found);
