@@ -279,7 +279,7 @@ static base::HistogramBase* UMASnifferHistogramGet(const char* name,
                                                    int array_size) {
   base::HistogramBase* counter =
       base::LinearHistogram::FactoryGet(name, 1, array_size - 1, array_size,
-      base::HistogramBase::kUmaTargetedHistogramFlag);
+          base::HistogramBase::kUmaTargetedHistogramFlag);
   return counter;
 }
 
@@ -315,9 +315,9 @@ static bool MagicMaskCmp(const char* magic_entry,
 
 static bool MatchMagicNumber(const char* content,
                              size_t size,
-                             const MagicNumber* magic_entry,
+                             const MagicNumber& magic_entry,
                              std::string* result) {
-  const size_t len = magic_entry->magic_len;
+  const size_t len = magic_entry.magic_len;
 
   // Keep kBytesRequiredForMagic honest.
   DCHECK_LE(len, kBytesRequiredForMagic);
@@ -325,30 +325,28 @@ static bool MatchMagicNumber(const char* content,
   // To compare with magic strings, we need to compute strlen(content), but
   // content might not actually have a null terminator.  In that case, we
   // pretend the length is content_size.
-  const char* end =
-      static_cast<const char*>(memchr(content, '\0', size));
+  const char* end = static_cast<const char*>(memchr(content, '\0', size));
   const size_t content_strlen =
       (end != NULL) ? static_cast<size_t>(end - content) : size;
 
   bool match = false;
-  if (magic_entry->is_string) {
+  if (magic_entry.is_string) {
     if (content_strlen >= len) {
       // String comparisons are case-insensitive
-      match = (base::strncasecmp(magic_entry->magic, content, len) == 0);
+      match = (base::strncasecmp(magic_entry.magic, content, len) == 0);
     }
   } else {
     if (size >= len) {
-      if (!magic_entry->mask) {
-        match = MagicCmp(magic_entry->magic, content, len);
+      if (!magic_entry.mask) {
+        match = MagicCmp(magic_entry.magic, content, len);
       } else {
-        match = MagicMaskCmp(magic_entry->magic, content, len,
-                             magic_entry->mask);
+        match = MagicMaskCmp(magic_entry.magic, content, len, magic_entry.mask);
       }
     }
   }
 
   if (match) {
-    result->assign(magic_entry->mime_type);
+    result->assign(magic_entry.mime_type);
     return true;
   }
   return false;
@@ -359,7 +357,7 @@ static bool CheckForMagicNumbers(const char* content, size_t size,
                                  base::HistogramBase* counter,
                                  std::string* result) {
   for (size_t i = 0; i < magic_len; ++i) {
-    if (MatchMagicNumber(content, size, &(magic[i]), result)) {
+    if (MatchMagicNumber(content, size, magic[i], result)) {
       if (counter) counter->Add(static_cast<int>(i));
       return true;
     }
@@ -399,9 +397,10 @@ static bool SniffForHTML(const char* content,
       break;
   }
   static base::HistogramBase* counter(NULL);
-  if (!counter)
+  if (!counter) {
     counter = UMASnifferHistogramGet("mime_sniffer.kSniffableTags2",
                                      arraysize(kSniffableTags));
+  }
   // |pos| now points to first non-whitespace character (or at end).
   return CheckForMagicNumbers(pos, end - pos,
                               kSniffableTags, arraysize(kSniffableTags),
@@ -418,9 +417,10 @@ static bool SniffForMagicNumbers(const char* content,
 
   // Check our big table of Magic Numbers
   static base::HistogramBase* counter(NULL);
-  if (!counter)
+  if (!counter) {
     counter = UMASnifferHistogramGet("mime_sniffer.kMagicNumbers2",
                                      arraysize(kMagicNumbers));
+  }
   return CheckForMagicNumbers(content, size,
                               kMagicNumbers, arraysize(kMagicNumbers),
                               counter, result);
@@ -451,8 +451,7 @@ static bool SniffForOfficeDocs(const char* content,
       continue;
 
     const char* extension =
-        &url_path[url_path.length() -
-                  kOfficeExtensionTypes[i].extension_len];
+        &url_path[url_path.length() - kOfficeExtensionTypes[i].extension_len];
 
     if (0 == base::strncasecmp(extension, kOfficeExtensionTypes[i].extension,
                                kOfficeExtensionTypes[i].extension_len)) {
@@ -503,6 +502,56 @@ static bool SniffForOfficeDocs(const char* content,
   return false;
 }
 
+static bool IsOfficeType(const std::string& type_hint) {
+  return (type_hint == "application/msword" ||
+          type_hint == "application/vnd.ms-excel" ||
+          type_hint == "application/vnd.ms-powerpoint" ||
+          type_hint == "application/vnd.openxmlformats-officedocument."
+                       "wordprocessingml.document" ||
+          type_hint == "application/vnd.openxmlformats-officedocument."
+                       "spreadsheetml.sheet" ||
+          type_hint == "application/vnd.openxmlformats-officedocument."
+                       "presentationml.presentation" ||
+          type_hint == "application/vnd.ms-excel.sheet.macroenabled.12" ||
+          type_hint == "application/vnd.ms-word.document.macroenabled.12" ||
+          type_hint == "application/vnd.ms-powerpoint.presentation."
+                       "macroenabled.12" ||
+          type_hint == "application/mspowerpoint" ||
+          type_hint == "application/msexcel" ||
+          type_hint == "application/vnd.ms-word" ||
+          type_hint == "application/vnd.ms-word.document.12" ||
+          type_hint == "application/vnd.msword");
+}
+
+// This function checks for files that have a Microsoft Office MIME type
+// set, but are not actually Office files.
+//
+// If this is not actually an Office file, |*result| is set to
+// "unknown/unknown", otherwise it is not modified.
+//
+// Returns false if additional data is required to determine the file type, or
+// true if there is enough data to make a decision.
+static bool SniffForInvalidOfficeDocs(const char* content,
+                                      size_t size,
+                                      const GURL& url,
+                                      std::string* result) {
+  if (!TruncateSize(kBytesRequiredForOfficeMagic, &size))
+    return false;
+
+  // Check our table of magic numbers for Office file types.  If it does not
+  // match one, the MIME type was invalid.  Set it instead to a safe value.
+  std::string office_version;
+  if (!CheckForMagicNumbers(content, size,
+                            kOfficeMagicNumbers, arraysize(kOfficeMagicNumbers),
+                            NULL, &office_version)) {
+    *result = "unknown/unknown";
+  }
+
+  // We have enough information to determine if this was a Microsoft Office
+  // document or not, so sniffing is completed.
+  return true;
+}
+
 // Byte order marks
 static const MagicNumber kMagicXML[] = {
   // We want to be very conservative in interpreting text/xml content as
@@ -537,21 +586,22 @@ static bool SniffXML(const char* content,
   // and stop at the first "plain" tag, then make a decision on the mime-type
   // based on the name (or possibly attributes) of that tag.
   static base::HistogramBase* counter(NULL);
-  if (!counter)
+  if (!counter) {
     counter = UMASnifferHistogramGet("mime_sniffer.kMagicXML2",
                                      arraysize(kMagicXML));
+  }
   const int kMaxTagIterations = 5;
   for (int i = 0; i < kMaxTagIterations && pos < end; ++i) {
     pos = reinterpret_cast<const char*>(memchr(pos, '<', end - pos));
     if (!pos)
       return false;
 
-    if (base::strncasecmp(pos, "<?xml", sizeof("<?xml")-1) == 0) {
+    if (base::strncasecmp(pos, "<?xml", sizeof("<?xml") - 1) == 0) {
       // Skip XML declarations.
       ++pos;
       continue;
     } else if (base::strncasecmp(pos, "<!DOCTYPE",
-                                 sizeof("<!DOCTYPE")-1) == 0) {
+                                 sizeof("<!DOCTYPE") - 1) == 0) {
       // Skip DOCTYPE declarations.
       ++pos;
       continue;
@@ -622,9 +672,10 @@ static bool SniffBinary(const char* content,
 
   // First, we look for a BOM.
   static base::HistogramBase* counter(NULL);
-  if (!counter)
+  if (!counter) {
     counter = UMASnifferHistogramGet("mime_sniffer.kByteOrderMark2",
                                      arraysize(kByteOrderMark));
+  }
   std::string unused;
   if (CheckForMagicNumbers(content, size,
                            kByteOrderMark, arraysize(kByteOrderMark),
@@ -665,9 +716,10 @@ static bool IsUnknownMimeType(const std::string& mime_type) {
     "*/*",
   };
   static base::HistogramBase* counter(NULL);
-  if (!counter)
+  if (!counter) {
     counter = UMASnifferHistogramGet("mime_sniffer.kUnknownMimeTypes2",
                                      arraysize(kUnknownMimeTypes) + 1);
+  }
   for (size_t i = 0; i < arraysize(kUnknownMimeTypes); ++i) {
     if (mime_type == kUnknownMimeTypes[i]) {
       counter->Add(i);
@@ -731,9 +783,10 @@ static bool SniffCRX(const char* content,
 
 bool ShouldSniffMimeType(const GURL& url, const std::string& mime_type) {
   static base::HistogramBase* should_sniff_counter(NULL);
-  if (!should_sniff_counter)
+  if (!should_sniff_counter) {
     should_sniff_counter =
         UMASnifferHistogramGet("mime_sniffer.ShouldSniffMimeType2", 3);
+  }
   bool sniffable_scheme = url.is_empty() ||
                           url.SchemeIs("http") ||
                           url.SchemeIs("https") ||
@@ -756,11 +809,27 @@ bool ShouldSniffMimeType(const GURL& url, const std::string& mime_type) {
     // their more specific mime types.
     "text/xml",
     "application/xml",
+    // Check for false Microsoft Office MIME types.
+    "application/msword",
+    "application/vnd.ms-excel",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-excel.sheet.macroenabled.12",
+    "application/vnd.ms-word.document.macroenabled.12",
+    "application/vnd.ms-powerpoint.presentation.macroenabled.12",
+    "application/mspowerpoint",
+    "application/msexcel",
+    "application/vnd.ms-word",
+    "application/vnd.ms-word.document.12",
+    "application/vnd.msword",
   };
   static base::HistogramBase* counter(NULL);
-  if (!counter)
+  if (!counter) {
     counter = UMASnifferHistogramGet("mime_sniffer.kSniffableTypes2",
                                      arraysize(kSniffableTypes) + 1);
+  }
   for (size_t i = 0; i < arraysize(kSniffableTypes); ++i) {
     if (mime_type == kSniffableTypes[i]) {
       counter->Add(i);
@@ -795,6 +864,12 @@ bool SniffMimeType(const char* content,
   // By default, we'll return the type hint.
   // Each sniff routine may modify this if it has a better guess..
   result->assign(type_hint);
+
+  // If the file has a Microsoft Office MIME type, we should only check that it
+  // is a valid Office file.  Because this is the only reason we sniff files
+  // with a Microsoft Office MIME type, we can return early.
+  if (IsOfficeType(type_hint))
+    return SniffForInvalidOfficeDocs(content, content_size, url, result);
 
   // Cache information about the type_hint
   const bool hint_is_unknown_mime_type = IsUnknownMimeType(type_hint);
